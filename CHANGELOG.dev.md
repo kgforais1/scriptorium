@@ -15,6 +15,7 @@ Internal / developer-facing changes that do not belong in the public
 - Schema-bind / lockstep tests for Rust `BookMeta` (jsonschema 0.51.0); `cargo fmt` clean.
 
 ### Changed
+- GitHub owner is now `kgforais1/scriptorium`: local `origin` URL, `AGENTS.md` protect-remotes note, `SECURITY.md` advisory/profile links, and `src-tauri/Cargo.toml` `authors`.
 - CI **Dependency audit** job: run `cargo audit` directly (respects `src-tauri/.cargo/audit.toml`), drop `rustsec/audit-check` (Check API permission failures on `main`), remove `continue-on-error` / `pnpm audit || true` so the job is a real gate. Cache pinned `cargo-audit` 0.22.2 binary.
 - Removed unused seed-template `scaffolds/` trees (Next.js, Workers, Go, Rust CLI, Python). Scriptorium ships Tauri + Vite/React; example lockfiles only fed Dependabot/Trivy noise.
 - Link checker: normalize trailing-dot FQDN hostnames before `SKIP_HOSTS` / GitHub redirect checks (`ci/scripts/check_doc_links.py`).

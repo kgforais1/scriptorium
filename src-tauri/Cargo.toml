@@ -2,7 +2,7 @@
 name = "scriptorium"
 version = "0.1.0"
 description = "Scriptorium — Tauri-first app for scanned-page virtual books"
-authors = ["kgrizz-git"]
+authors = ["kgforais1"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
