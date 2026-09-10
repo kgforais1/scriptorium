@@ -47,7 +47,7 @@ Do not load everything. Start here, then open only what the task needs.
 4. **Verify, don't guess.** Prefer running tools and reading files over assuming.
 5. **Policy as code where it pays.** Encode durable rules as checks with clear remediation.
 6. **Temporary stays temporary.** Put scratch plans/research in `.context/` (gitignored).
-7. **Protect remotes.** Push only to this project's `origin` (`kgrizz-git/scriptorium`),
+7. **Protect remotes.** Push only to this project's `origin` (`kgforais1/scriptorium`),
    never to `project-seed-template`.
 8. **Clean up after completion.** Remove completed TODOs from the active queue (do not use
    `to_do.md` as history), log every meaningful completion once in the appropriate durable log,

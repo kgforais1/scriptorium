@@ -11,10 +11,10 @@ Please **do not** open a public issue for security reports.
 
 Prefer GitHub's private vulnerability reporting for this repository:
 
-1. Open [Security advisories](https://github.com/kgrizz-git/scriptorium/security/advisories/new)
+1. Open [Security advisories](https://github.com/kgforais1/scriptorium/security/advisories/new)
 2. Include steps to reproduce, impact, and affected commit or release if known
 
 If private reporting is unavailable, email the maintainer via the address on
-their [GitHub profile](https://github.com/kgrizz-git).
+their [GitHub profile](https://github.com/kgforais1).
 
 We aim to acknowledge reports within a few business days.
