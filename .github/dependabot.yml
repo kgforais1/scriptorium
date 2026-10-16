@@ -12,13 +12,10 @@ updates:
     labels:
       - "dependencies"
       - "python"
-    # Version updates skip semver-major bumps (take those by hand). This uses
-    # allow rather than ignore on purpose: ignore conditions also suppress
-    # security updates, so a fix released only in a new major would get no PR.
-    # allow.update-types filters version updates only.
-    allow:
+    ignore:
+      # Ignore major version updates for stability
       - dependency-name: "*"
-        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+        update-types: ["version-update:semver-major"]
 
   # Node.js dependencies
   - package-ecosystem: "npm"
@@ -32,13 +29,9 @@ updates:
     labels:
       - "dependencies"
       - "javascript"
-    # Version updates skip semver-major bumps (take those by hand). This uses
-    # allow rather than ignore on purpose: ignore conditions also suppress
-    # security updates, so a fix released only in a new major would get no PR.
-    # allow.update-types filters version updates only.
-    allow:
+    ignore:
       - dependency-name: "*"
-        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions (updates SHA-pinned uses: + version comments)
   - package-ecosystem: "github-actions"
@@ -56,9 +49,9 @@ updates:
       prefix: "ci"
       include: "scope"
 
-  # Rust (Tauri crate). Security updates for Cargo.lock need this entry.
-  - package-ecosystem: "cargo"
-    directory: "/src-tauri"
+  # Docker (if applicable)
+  - package-ecosystem: "docker"
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "thursday"
@@ -67,7 +60,4 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
-      - "rust"
-    allow:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+      - "docker"

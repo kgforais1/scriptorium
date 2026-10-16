@@ -6,8 +6,6 @@ Internal / developer-facing changes that do not belong in the public
 ## [Unreleased]
 
 ### Added
-- Security workflow jobs: `dependency-audit` re-runs ci.yml's `pnpm audit --prod` + `cargo audit` (and the cargo-audit exception-expiry check) weekly, so a new advisory fails a scheduled run on a quiet repo; `vulnerable-actions` runs zizmor's `known-vulnerable-actions` audit on PRs and weekly, since Dependabot alerts never cover SHA-pinned actions. About 1 Linux minute per zizmor run and 1–4 per weekly audit (cargo-audit binary is cached).
-- Dependabot `cargo` entry for `src-tauri/`, so Cargo.lock gets security-update PRs.
 - Public-repo docs: `SECURITY.md`; README no longer marks the project private. GitHub description/topics updated via `gh` (not in-tree).
 - Time-bound cargo-audit ignores: `src-tauri/.cargo/audit.toml` + `audit-exceptions.toml`, enforced by `ci/scripts/check_audit_exceptions.py` in the required **Policy** CI job (RUSTSEC-2024-0429 / glib via GTK expires 2026-11-27). Unit tests: `tests/test_check_audit_exceptions.py`, `tests/test_check_doc_links.py`. CLI `--audit`/`--exceptions` paths must resolve under `--root` (default cwd) to satisfy Sonar path-escape rule S8707. `--today` and exception `expires` accept only dashed `YYYY-MM-DD` (reject compact/week ISO forms accepted by Python 3.11+ `fromisoformat`).
 - Fixture-generator unit tests (`tests/test_generate_fixture_book.py`); Rust round-trip test that deserializes generator `meta.json` into `BookMeta`.
@@ -17,7 +15,6 @@ Internal / developer-facing changes that do not belong in the public
 - Schema-bind / lockstep tests for Rust `BookMeta` (jsonschema 0.51.0); `cargo fmt` clean.
 
 ### Changed
-- Dependabot: replaced the semver-major `ignore` rules with `allow` (minor/patch) so version updates still skip majors but security updates that need a major are no longer suppressed; removed the `docker` entry (no Dockerfile in the repo).
 - GitHub owner is now `kgforais1/scriptorium`: local `origin` URL, `AGENTS.md` protect-remotes note, `SECURITY.md` advisory/profile links, and `src-tauri/Cargo.toml` `authors`.
 - CI **Dependency audit** job: run `cargo audit` directly (respects `src-tauri/.cargo/audit.toml`), drop `rustsec/audit-check` (Check API permission failures on `main`), remove `continue-on-error` / `pnpm audit || true` so the job is a real gate. Cache pinned `cargo-audit` 0.22.2 binary.
 - Removed unused seed-template `scaffolds/` trees (Next.js, Workers, Go, Rust CLI, Python). Scriptorium ships Tauri + Vite/React; example lockfiles only fed Dependabot/Trivy noise.
