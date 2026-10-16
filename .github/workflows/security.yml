@@ -1,5 +1,6 @@
 # security.yml — slow-lane SAST and deep secret history scan.
-# Semgrep gates PRs; TruffleHog runs weekly (advisory).
+# Semgrep gates PRs; TruffleHog runs weekly (advisory); the dependency audit
+# re-runs weekly; known-vulnerable actions are checked on PRs and weekly.
 # Action refs are pinned to full commit SHAs; trailing comments keep Dependabot updates working.
 
 name: Security
@@ -49,3 +50,115 @@ jobs:
           base: ${{ github.event.repository.default_branch }}
           extra_args: --only-verified
         continue-on-error: true
+
+  # Weekly re-run of ci.yml's "Dependency audit" job. ci.yml only runs on push
+  # and PR, so on a quiet repository a newly published advisory against
+  # pnpm-lock.yaml or Cargo.lock would never turn CI red; a failing scheduled
+  # run here is the notification. Same scope and ignores as ci.yml (cargo
+  # audit reads src-tauri/.cargo/audit.toml), plus the exception-expiry check,
+  # so an expired time-bound ignore also fails the week it lapses. Skipped on
+  # PRs, where ci.yml already runs the same audit.
+  dependency-audit:
+    name: Dependency audit (weekly)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Cargo-audit exception expiry
+        run: python ci/scripts/check_audit_exceptions.py
+
+      - name: Install Rust toolchain
+        run: |
+          # Respects rust-toolchain.toml (pinned channel).
+          rustup show
+
+      - name: pnpm audit --prod
+        run: |
+          corepack enable && corepack prepare pnpm@11.17.0 --activate
+          pnpm audit --prod
+
+      # Same cache key as ci.yml, so a binary built there is reused here.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cargo-audit-bin
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-${{ runner.os }}-0.22.2
+
+      - name: Install cargo-audit
+        if: steps.cargo-audit-bin.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --locked --version 0.22.2
+
+      - name: cargo audit
+        working-directory: src-tauri
+        run: cargo audit
+
+  # Dependabot alerts are never raised for actions pinned by commit SHA (only
+  # for semver tags), and every action here is SHA-pinned, so check them
+  # against GitHub's advisory database. zizmor resolves each SHA to its release
+  # tag (a SHA with no tag cannot be checked, so keep pins on releases). Only
+  # the known-vulnerable-actions audit fails the job; other zizmor findings are
+  # out of scope for this check.
+  vulnerable-actions:
+    name: Known-vulnerable actions (zizmor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install zizmor
+        run: "pip install --only-binary=:all: zizmor==1.31.0"
+      - name: Check actions against GitHub security advisories
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Without a token zizmor silently skips its online audits (including
+          # known-vulnerable-actions) and would pass; fail closed instead.
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::GH_TOKEN is empty; zizmor would skip its online audits"
+            exit 1
+          fi
+          set +e
+          zizmor --format=json . > "$RUNNER_TEMP/zizmor.json"
+          rc=$?
+          set -e
+          # 0 = no findings, 10-14 = findings by severity; anything else
+          # (e.g. 1) means the audit itself failed, which must not pass.
+          if [ "$rc" -ne 0 ] && { [ "$rc" -lt 10 ] || [ "$rc" -gt 14 ]; }; then
+            echo "::error::zizmor failed (exit $rc)"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          findings = [
+              f for f in json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "zizmor.json")))
+              if f["ident"] == "known-vulnerable-actions" and not f.get("ignored")
+          ]
+          for f in findings:
+              loc = (f.get("locations") or [{}])[0]
+              key = loc.get("symbolic", {}).get("key", {})
+              path = key.get("Local", {}).get("verbatim_path", "?") if isinstance(key, dict) else "?"
+              line = loc.get("concrete", {}).get("location", {}).get("start_point", {}).get("row", 0) + 1
+              note = loc.get("symbolic", {}).get("annotation", "")
+              print(f"::error file={path},line={line}::{f['desc']}: {note}")
+          print(f"{len(findings)} known-vulnerable action reference(s)")
+          sys.exit(1 if findings else 0)
+          PY
