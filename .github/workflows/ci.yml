@@ -71,10 +71,25 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
 
-      - name: Shellcheck
+      - name: Shellcheck (hooks/scripts)
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         with:
-          scandir: "hooks/scripts scripts ci/scripts"
+          # `scandir` is a single path (`find "$INPUT_SCANDIR"`), so each
+          # directory needs its own step. A space-separated value silently
+          # matches nothing and the action still exits 0.
+          scandir: "hooks/scripts"
+          severity: warning
+
+      - name: Shellcheck (scripts)
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: "scripts"
+          severity: warning
+
+      - name: Shellcheck (ci/scripts)
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: "ci/scripts"
           severity: warning
 
       - name: Markdownlint (maintained docs)

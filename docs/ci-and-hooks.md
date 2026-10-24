@@ -53,12 +53,22 @@ After the first green `CI` run, set default-branch ruleset required checks to:
 The job in `.github/workflows/ci.yml` fails if either step fails: `pnpm audit --prod`, then
 `cargo audit` in `src-tauri`. Read the failing step name in the log before doing anything else.
 
-`cargo audit` (CI installs `cargo-audit` 0.22.2) fails this job only for a vulnerability in
-`src-tauri/Cargo.lock`. Unmaintained, unsound, notice, and yanked findings are warnings that
-exit 0 — this job passes no `--deny`. Do not suppress a warning to clear this check.
+`cargo audit` (CI installs `cargo-audit` 0.22.2) fails this job for a vulnerability in
+`src-tauri/Cargo.lock`. It also exits non-zero when the advisory database cannot be fetched
+or the audit command itself errors — read that error before changing a dependency.
+Unmaintained, unsound, notice, and yanked findings are warnings that exit 0 — this job
+passes no `--deny`. Do not suppress a warning to clear this check.
 
-If the failing step is `pnpm audit --prod`, the cargo steps below do not apply: bump the
-production package and re-run `pnpm audit --prod`. This repo has no pnpm ignore file.
+If the failing step is `pnpm audit --prod`, read the annotation before bumping anything.
+`ci/scripts/pnpm-audit.sh` retries registry-shaped `pnpm audit` output (default 3 attempts,
+`PNPM_AUDIT_ATTEMPTS` 1–5). Exhausted retries fail with `Audit did not run`. A corepack or
+missing-pnpm failure reports `Audit tooling unavailable` (missing `pnpm` exits 127).
+`corepack prepare` is retried as a registry download, not classified by output. Those
+annotations are infrastructure: re-run the job, do not bump a package, and do not read the
+run as a clean audit. A non-transient failure with no registry error reports
+`pnpm audit failed`; read the log above that annotation before changing a dependency. If the
+annotation is `Vulnerabilities found`, the cargo steps below do not apply: bump the production
+package and re-run `pnpm audit --prod`. This repo has no pnpm ignore file.
 
 Dependabot security updates are not a backstop until GitHub has imported the advisory. A
 compatible bump can still arrive as a version update after `cooldown.default-days`, on the

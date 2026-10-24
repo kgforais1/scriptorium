@@ -9,24 +9,46 @@
 #
 # Contract:
 #   exit 0        audit ran and found nothing
-#   exit <status> pnpm reported findings (no retry, status passed through)
-#   exit 1        registry/tooling stayed unreachable after every attempt
+#   exit <status> pnpm reported findings — classified first, never retried
+#   exit 127      pnpm missing from PATH after corepack
+#   exit 1        registry/tooling stayed unreachable, or the retry env is invalid
 #
 # Usage: bash ci/scripts/pnpm-audit.sh   (from the repo root)
-# Env:   PNPM_AUDIT_ATTEMPTS (default 3), PNPM_AUDIT_DELAY (default 15s, scaled by attempt)
+# Env:   PNPM_AUDIT_ATTEMPTS (default 3, integer 1–5, at most 3 digits)
+#        PNPM_AUDIT_DELAY    (default 15, integer seconds 0–120, scaled by attempt)
+#
+# corepack enable is local (shim setup) and is not retried. corepack prepare
+# downloads pnpm from the registry, so that step is retried.
 set -uo pipefail
 
 ATTEMPTS="${PNPM_AUDIT_ATTEMPTS:-3}"
 DELAY="${PNPM_AUDIT_DELAY:-15}"
 PNPM_VERSION="11.17.0"
 
-# Registry-shaped failures. Kept narrow on purpose: a match triggers a retry, so
-# these patterns must never appear in a report that lists found vulnerabilities.
-TRANSIENT_RE='ERR_PNPM|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|ENETUNREACH|socket hang up|TimeoutError|aborted due to timeout|error \(5[0-9][0-9]\)|error \(23\)'
+# Registry-shaped failures only. Do not use a bare ERR_PNPM prefix: pnpm uses
+# that prefix for non-transient errors too, including some audit failures.
+# Findings are detected separately and always win over this pattern.
+TRANSIENT_RE='ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|ENETUNREACH|socket hang up|TimeoutError|aborted due to timeout|error \(5[0-9][0-9]\)|error \(23\)|HTTP 503'
 
 fail() {
   printf '::error title=%s::%s\n' "$1" "$2" >&2
 }
+
+# At most 3 digits, then force base-10. A longer digit string wraps in 64-bit
+# arithmetic (2^64+k can look like a small k). Bash also evaluates expressions,
+# so a value like `1+$(cmd)` would otherwise run inside $((...)).
+if ! [[ "$ATTEMPTS" =~ ^[0-9]{1,3}$ && "$DELAY" =~ ^[0-9]{1,3}$ ]]; then
+  fail "Audit tooling unavailable" \
+    "PNPM_AUDIT_ATTEMPTS and PNPM_AUDIT_DELAY must be non-negative integers (at most 3 digits)"
+  exit 1
+fi
+ATTEMPTS=$((10#$ATTEMPTS))
+DELAY=$((10#$DELAY))
+if ((ATTEMPTS < 1 || ATTEMPTS > 5 || DELAY > 120)); then
+  fail "Audit tooling unavailable" \
+    "PNPM_AUDIT_ATTEMPTS must be 1-5 and PNPM_AUDIT_DELAY must be 0-120"
+  exit 1
+fi
 
 with_retries() {
   local what="$1"
@@ -46,8 +68,11 @@ with_retries() {
   return 1
 }
 
-# corepack fetches pnpm from the same registry that flaked.
-with_retries "corepack enable" corepack enable || exit 1
+# enable only links the local shim. prepare is the registry download.
+if ! corepack enable; then
+  fail "Audit tooling unavailable" "corepack enable failed"
+  exit 1
+fi
 with_retries "corepack prepare pnpm@$PNPM_VERSION" \
   corepack prepare "pnpm@$PNPM_VERSION" --activate || exit 1
 
@@ -65,8 +90,21 @@ for ((attempt = 1; attempt <= ATTEMPTS; attempt++)); do
 
   printf '%s\n' "$output" >&2
 
-  if ! grep -qiE "$TRANSIENT_RE" <<<"$output"; then
+  # Findings win over every other classification: a report that also mentions a
+  # 503 or a timeout is still a findings report, and must never be retried.
+  if grep -qiE 'vulnerabilit(y|ies) found' <<<"$output"; then
     fail "Vulnerabilities found" "pnpm audit reported findings; see log above"
+    exit "$status"
+  fi
+
+  # A missing binary is a broken toolchain, not a finding.
+  if ((status == 127)); then
+    fail "Audit tooling unavailable" "pnpm is not on PATH after corepack prepare"
+    exit 127
+  fi
+
+  if ! grep -qiE "$TRANSIENT_RE" <<<"$output"; then
+    fail "pnpm audit failed" "pnpm audit exited $status with no registry error; see log above"
     exit "$status"
   fi
 
