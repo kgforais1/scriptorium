@@ -83,9 +83,7 @@ jobs:
           rustup show
 
       - name: pnpm audit --prod
-        run: |
-          corepack enable && corepack prepare pnpm@11.17.0 --activate
-          pnpm audit --prod
+        run: bash ci/scripts/pnpm-audit.sh
 
       # Same cache key as ci.yml, so a binary built there is reused here.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

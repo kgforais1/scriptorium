@@ -74,7 +74,7 @@ jobs:
       - name: Shellcheck
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         with:
-          scandir: "hooks/scripts scripts"
+          scandir: "hooks/scripts scripts ci/scripts"
           severity: warning
 
       - name: Markdownlint (maintained docs)
@@ -250,9 +250,9 @@ jobs:
           rustup show
 
       - name: pnpm audit --prod
-        run: |
-          corepack enable && corepack prepare pnpm@11.17.0 --activate
-          pnpm audit --prod
+        # Registry 503s and client timeouts are retried inside the script, then it
+        # fails closed. A flake must read as infrastructure, never as a clean audit.
+        run: bash ci/scripts/pnpm-audit.sh
 
       # Cache the cargo-audit binary; compiling it from crates.io is ~3 minutes.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
