@@ -37,3 +37,8 @@ Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to
   [M1 plan follow-ups](plans/2026-08-23-m1-scan-viewer.md#follow-ups-from-m0-senior-reviews-2026-08-25)
 - **Later product (M2–M8)** — OCR, text/hybrid modes, library, hotspots, polish, web/IIIF →
   [roadmap](plans/2026-08-23-product-roadmap.md)
+- **cargo Dependabot cooldown** — keep cargo `cooldown.default-days: 7` (version updates only;
+  security updates ignore cooldown) and the weekly Thursday schedule. Daily
+  `schedule.interval` rejected 2026-10-24 as too noisy for version-update PRs. Revisit only if
+  another RustSec advisory turns `Dependency audit` red before a Dependabot security PR exists.
+  Manual path: [CI & hooks → when audit goes red](docs/ci-and-hooks.md#when-dependency-audit-goes-red)

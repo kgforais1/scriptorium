@@ -6,6 +6,7 @@ Internal / developer-facing changes that do not belong in the public
 ## [Unreleased]
 
 ### Added
+- Remediation runbook for a red `Dependency audit` ([`docs/ci-and-hooks.md`](docs/ci-and-hooks.md#when-dependency-audit-goes-red)): which step failed, that `cargo audit` fails on vulnerabilities only (warnings exit 0), the lockfile-vs-manifest-vs-suppress decision, and the GitHub advisory-database lag that kept Dependabot from opening a PR for RUSTSEC-2026-0382/0383 (`CVE-2026-111943`, absent as of 2026-10-24). Written after PR #49 cleared that 2-advisory red run by hand.
 - Security workflow jobs: `dependency-audit` re-runs ci.yml's `pnpm audit --prod` + `cargo audit` (and the cargo-audit exception-expiry check) weekly, so a new advisory fails a scheduled run on a quiet repo; `vulnerable-actions` runs zizmor's `known-vulnerable-actions` audit on PRs and weekly, since Dependabot alerts never cover SHA-pinned actions. About 1 Linux minute per zizmor run and 1–4 per weekly audit (cargo-audit binary is cached).
 - Dependabot `cargo` entry for `src-tauri/`, so Cargo.lock gets security-update PRs.
 - Public-repo docs: `SECURITY.md`; README no longer marks the project private. GitHub description/topics updated via `gh` (not in-tree).
