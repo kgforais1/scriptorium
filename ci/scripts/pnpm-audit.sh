@@ -18,12 +18,12 @@
 #        PNPM_AUDIT_DELAY    (default 15, integer seconds 0–120, scaled by attempt)
 #
 # corepack enable is local (shim setup) and is not retried. corepack prepare
-# downloads pnpm from the registry, so that step is retried.
+# downloads pnpm from the registry: only registry-shaped output is retried.
+# The pnpm version is package.json's packageManager field, not a second pin.
 set -uo pipefail
 
 ATTEMPTS="${PNPM_AUDIT_ATTEMPTS:-3}"
 DELAY="${PNPM_AUDIT_DELAY:-15}"
-PNPM_VERSION="11.17.0"
 
 # Registry-shaped failures only. Do not use a bare ERR_PNPM prefix: pnpm uses
 # that prefix for non-transient errors too, including some audit failures.
@@ -53,31 +53,60 @@ if ((ATTEMPTS < 1 || ATTEMPTS > 5 || DELAY > 120)); then
   exit 1
 fi
 
-with_retries() {
-  local what="$1"
-  shift
-  local attempt
-  for ((attempt = 1; attempt <= ATTEMPTS; attempt++)); do
-    if "$@"; then
-      return 0
-    fi
-    if ((attempt < ATTEMPTS)); then
-      printf '::warning title=Transient registry failure::%s failed (attempt %d/%d), retrying\n' \
-        "$what" "$attempt" "$ATTEMPTS" >&2
-      sleep $((attempt * DELAY))
-    fi
-  done
-  fail "Audit tooling unavailable" "$what failed $ATTEMPTS times"
-  return 1
-}
+# One version source. Accept an optional corepack integrity suffix
+# (pnpm@11.17.0+sha512...) and pass only the version to corepack prepare.
+if [[ ! -f package.json ]]; then
+  fail "pnpm setup failed" "package.json is missing; cannot read packageManager"
+  exit 1
+fi
+package_manager_line=$(grep -E \
+  '^[[:space:]]*"packageManager"[[:space:]]*:[[:space:]]*"pnpm@[^"]+"[[:space:]]*,?[[:space:]]*$' \
+  package.json || true)
+if [[ -z "$package_manager_line" ]]; then
+  fail "pnpm setup failed" 'package.json packageManager must be "pnpm@<version>"'
+  exit 1
+fi
+PNPM_VERSION=$(printf '%s\n' "$package_manager_line" | sed -E 's/.*"pnpm@([^"+]+).*/\1/')
+if ! [[ "$PNPM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+)*$ ]]; then
+  fail "pnpm setup failed" "package.json packageManager version is not a pnpm version"
+  exit 1
+fi
 
-# enable only links the local shim. prepare is the registry download.
+# enable only links the local shim. It is not a registry call.
 if ! corepack enable; then
   fail "Audit tooling unavailable" "corepack enable failed"
   exit 1
 fi
-with_retries "corepack prepare pnpm@$PNPM_VERSION" \
-  corepack prepare "pnpm@$PNPM_VERSION" --activate || exit 1
+
+# prepare is the registry download. A permanent failure (bad flag, unknown
+# version, local corepack error) is not a flake and must not be retried.
+prepared=0
+for ((attempt = 1; attempt <= ATTEMPTS; attempt++)); do
+  prepare_output=""
+  status=0
+  prepare_output=$(corepack prepare "pnpm@$PNPM_VERSION" --activate 2>&1) || status=$?
+  if ((status == 0)); then
+    printf '%s\n' "$prepare_output"
+    prepared=1
+    break
+  fi
+  printf '%s\n' "$prepare_output" >&2
+  if ! grep -qiE "$TRANSIENT_RE" <<<"$prepare_output"; then
+    fail "pnpm setup failed" \
+      "corepack prepare failed and the output is not a registry error; see log above"
+    exit "$status"
+  fi
+  if ((attempt < ATTEMPTS)); then
+    printf '::warning title=Transient registry failure::corepack prepare hit the registry (attempt %d/%d), retrying\n' \
+      "$attempt" "$ATTEMPTS" >&2
+    sleep $((attempt * DELAY))
+  fi
+done
+if ((prepared == 0)); then
+  fail "Audit tooling unavailable" \
+    "corepack prepare could not reach the registry after $ATTEMPTS attempts"
+  exit 1
+fi
 
 # pnpm exits non-zero both for "vulnerabilities found" and for a registry error,
 # so classify by output instead of by exit code.

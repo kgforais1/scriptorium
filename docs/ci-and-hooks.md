@@ -1,6 +1,6 @@
 # Scriptorium — CI & hooks
 
-Last reviewed: 2026-10-24
+Last reviewed: 2026-10-25
 
 ## Recommendation (what runs where)
 
@@ -18,9 +18,9 @@ Last reviewed: 2026-10-24
 | **Audit (pnpm + cargo)** | — | — | ✅ required (`Dependency audit`; informational findings pass, audit and tooling failures fail closed) | ✅ weekly re-run (`Dependency audit (weekly)`) |
 | **Tests + coverage** | — | — | ✅ pytest-cov (report; gate later) | — |
 | **SAST** | — | — | — | ✅ Semgrep on PR (whole repo; templates/scratch in `.semgrepignore`) |
-| **CodeQL** | — | — | — | later — [M0.5](../plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri-scaffold--when-app-code-exists) |
+| **CodeQL** | — | — | — | ✅ already required: GitHub default setup, ruleset code scanning (not a job in `security.yml`) |
 
-**Later (M0.5):** Vitest coverage gates, TS eslint pre-push, CodeQL/Dependabot. **Rust fmt/clippy/test belong in M0**, not M0.5 — see foundation plan.
+**Later (M0.5):** Vitest coverage gates, TS eslint pre-push, Dependabot. CodeQL is already the ruleset code-scanning requirement above, not an M0.5 follow-up. **Rust fmt/clippy/test belong in M0**, not M0.5 — see foundation plan.
 
 ## Quick start
 
@@ -44,7 +44,7 @@ After the first green `CI` run, set default-branch ruleset required checks to:
 - `Rust (src-tauri)` — **required from M0** once `src-tauri/` exists (`cargo fmt` / `clippy` / `test` / `check`; exact job name must match `ci.yml`)
 - `Type check (TypeScript)` — `pnpm install` + `tsc --noEmit`
 - `Dependency audit` — `pnpm audit --prod` + `cargo audit` (uses `src-tauri/.cargo/audit.toml`). Informational findings pass. The job fails closed on a vulnerability and when the audit did not complete: an advisory-database fetch failure, a command error, or exhausted registry retries.
-- `CodeQL` — GitHub **default setup** (`dynamic/github-code-scanning/codeql`), not a workflow file in this repo; already a ruleset-required check
+- `CodeQL` — GitHub **default setup** (`dynamic/github-code-scanning/codeql`). Already required by the branch ruleset as code scanning (alert threshold errors; security alerts high or higher), not a status-check context and not a workflow file
 
 `Dependency audit` replaced the old `Audit (advisory)` job (`rustsec/audit-check` + `continue-on-error`), which failed spuriously on `main` for missing `checks: write` while still going green on PRs.
 
@@ -60,15 +60,22 @@ Unmaintained, unsound, notice, and yanked findings are warnings that exit 0 — 
 passes no `--deny`. Do not suppress a warning to clear this check.
 
 If the failing step is `pnpm audit --prod`, read the annotation before bumping anything.
-`ci/scripts/pnpm-audit.sh` retries registry-shaped `pnpm audit` output (default 3 attempts,
-`PNPM_AUDIT_ATTEMPTS` 1–5). Exhausted retries fail with `Audit did not run`. A corepack or
-missing-pnpm failure reports `Audit tooling unavailable` (missing `pnpm` exits 127).
-`corepack prepare` is retried as a registry download, not classified by output. Those
-annotations are infrastructure: re-run the job, do not bump a package, and do not read the
-run as a clean audit. A non-transient failure with no registry error reports
+`ci/scripts/pnpm-audit.sh` installs the pnpm version from `package.json` `packageManager`
+and retries only registry-shaped output (default 3 attempts, `PNPM_AUDIT_ATTEMPTS` 1–5).
+Exhausted `pnpm audit` retries fail with `Audit did not run`. A failed `corepack enable`
+or a missing `pnpm` reports `Audit tooling unavailable` (missing `pnpm` exits 127).
+`corepack prepare` retries only when its output is a registry error; after those retries
+it reports `Audit tooling unavailable`. A permanent prepare or `packageManager` failure
+reports `pnpm setup failed` — read that log and fix the toolchain, and do not rerun the
+job as if it were a registry flake. `Audit did not run` and an exhausted registry
+`Audit tooling unavailable` are infrastructure: re-run the job, do not bump a package,
+and do not read the run as a clean audit. A non-transient `pnpm audit` failure reports
 `pnpm audit failed`; read the log above that annotation before changing a dependency. If the
-annotation is `Vulnerabilities found`, the cargo steps below do not apply: bump the production
-package and re-run `pnpm audit --prod`. This repo has no pnpm ignore file.
+annotation is `Vulnerabilities found`, the cargo steps below do not apply. Inspect each
+affected production dependency in the log and choose the update that contains the fix:
+a lockfile update when a patched version is already inside the declared range, or a
+`package.json` range change plus a lockfile update when the range blocks it. Re-run
+`pnpm audit --prod`. This repo has no pnpm ignore file.
 
 Dependabot security updates are not a backstop until GitHub has imported the advisory. A
 compatible bump can still arrive as a version update after `cooldown.default-days`, on the

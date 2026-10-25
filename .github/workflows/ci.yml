@@ -251,8 +251,8 @@ jobs:
         run: pnpm exec tsc --noEmit
 
   audit:
-    # Real gate (not advisory): fails on vulnerability findings only.
-    # Informational cargo-audit warnings (unmaintained, etc.) do not fail.
+    # Real gate (not advisory). Informational cargo-audit warnings do not fail.
+    # A vulnerability fails the job, and so does an audit that did not complete.
     # Time-bound ignores: src-tauri/.cargo/audit.toml (+ audit-exceptions.toml).
     name: Dependency audit
     runs-on: ubuntu-latest

@@ -17,6 +17,7 @@ Run:
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import subprocess
@@ -26,6 +27,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "ci" / "scripts" / "pnpm-audit.sh"
+
+
+def _declared_pnpm_version() -> str:
+    """Version corepack should prepare: package.json, without a +sha512 suffix."""
+    raw = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["packageManager"]
+    return raw.split("@", 1)[1].split("+", 1)[0]
+
 
 # Local shim only. A failing enable must not be retried.
 COREPACK_ENABLE_FAILS = """#!/usr/bin/env bash
@@ -81,7 +89,11 @@ class PnpmAuditContractTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def _run(self, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self,
+        extra_env: dict[str, str] | None = None,
+        cwd: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         """Run the real wrapper with stubs ahead of the inherited PATH."""
         env = os.environ.copy()
         # Stub directory only, plus the system bins the wrapper and stubs call.
@@ -96,7 +108,7 @@ class PnpmAuditContractTests(unittest.TestCase):
             env.update(extra_env)
         return subprocess.run(
             ["bash", str(SCRIPT)],
-            cwd=ROOT,
+            cwd=cwd or ROOT,
             env=env,
             capture_output=True,
             text=True,
@@ -119,7 +131,10 @@ class PnpmAuditContractTests(unittest.TestCase):
         self.assertIn("No known vulnerabilities found", result.stdout)
         self.assertEqual(self._call_lines().count("pnpm audit --prod"), 1)
         self.assertIn("enable", self._call_lines())
-        self.assertTrue(any(line.startswith("prepare ") for line in self._call_lines()))
+        self.assertIn(
+            f"prepare pnpm@{_declared_pnpm_version()} --activate",
+            self._call_lines(),
+        )
 
     def test_findings_are_not_retried(self) -> None:
         # A later attempt would be clean. The wrapper must not take it.
@@ -256,9 +271,57 @@ class PnpmAuditContractTests(unittest.TestCase):
         )
         result = self._run({"PREPARE_FAILS": "2"})
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Transient registry failure", result.stderr)
+        self.assertNotIn("pnpm setup failed", result.stderr)
         prepare_calls = [line for line in self._call_lines() if line.startswith("prepare ")]
         self.assertEqual(len(prepare_calls), 3)
         self.assertEqual(self._call_lines().count("enable"), 1)
+
+    def test_corepack_prepare_permanent_error_is_not_retried(self) -> None:
+        _write_executable(
+            self.bindir / "corepack",
+            "#!/usr/bin/env bash\n"
+            'printf \'%s\\n\' "$*" >> "$CALLS"\n'
+            'if [[ "$1" == "enable" ]]; then\n'
+            "  exit 0\n"
+            "fi\n"
+            "printf 'Unknown option\\n' >&2\n"
+            "exit 1\n",
+        )
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("pnpm setup failed", result.stderr)
+        self.assertNotIn("retrying", result.stderr)
+        self.assertNotIn("Transient registry failure", result.stderr)
+        prepare_calls = [line for line in self._call_lines() if line.startswith("prepare ")]
+        self.assertEqual(len(prepare_calls), 1)
+
+    def test_package_manager_must_declare_pnpm(self) -> None:
+        repo = self.tmp / "repo"
+        repo.mkdir()
+        (repo / "package.json").write_text(
+            '{\n  "packageManager": "npm@10.0.0"\n}\n',
+            encoding="utf-8",
+        )
+        result = self._run(cwd=repo)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("pnpm setup failed", result.stderr)
+        self.assertEqual(self._call_lines(), [])
+
+    def test_prepare_strips_package_manager_integrity_suffix(self) -> None:
+        repo = self.tmp / "hashed"
+        repo.mkdir()
+        (repo / "package.json").write_text(
+            '{\n  "packageManager": "pnpm@9.9.9+sha512.abc"\n}\n',
+            encoding="utf-8",
+        )
+        _write_executable(
+            self.bindir / "pnpm",
+            _pnpm_script("printf 'No known vulnerabilities found\\n'\nexit 0\n"),
+        )
+        result = self._run(cwd=repo)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("prepare pnpm@9.9.9 --activate", self._call_lines())
 
     def test_non_numeric_attempts_do_not_evaluate(self) -> None:
         sentinel = self.tmp / "pwned"
