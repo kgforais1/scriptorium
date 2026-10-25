@@ -27,8 +27,11 @@ PNPM_VERSION="11.17.0"
 
 # Registry-shaped failures only. Do not use a bare ERR_PNPM prefix: pnpm uses
 # that prefix for non-transient errors too, including some audit failures.
+# pnpm 11.17.0 reports a non-200 audit response as ERR_PNPM_AUDIT_BAD_RESPONSE
+# with "responded with <status>". Match that 5xx phrase only — the same code
+# is also used for invalid JSON, which is not a registry retry.
 # Findings are detected separately and always win over this pattern.
-TRANSIENT_RE='ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|ENETUNREACH|socket hang up|TimeoutError|aborted due to timeout|error \(5[0-9][0-9]\)|error \(23\)|HTTP 503'
+TRANSIENT_RE='ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|ENETUNREACH|socket hang up|TimeoutError|aborted due to timeout|error \(5[0-9][0-9]\)|error \(23\)|HTTP 503|responded with 5[0-9][0-9]'
 
 fail() {
   printf '::error title=%s::%s\n' "$1" "$2" >&2

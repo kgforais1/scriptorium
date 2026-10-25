@@ -152,6 +152,44 @@ class PnpmAuditContractTests(unittest.TestCase):
         self.assertNotIn("retrying", result.stderr)
         self.assertEqual(self._call_lines().count("pnpm audit --prod"), 1)
 
+    def test_pnpm11_audit_bad_response_503_is_retried(self) -> None:
+        # pnpm 11.17.0: PnpmError AUDIT_BAD_RESPONSE for a non-200 audit HTTP
+        # status. The code alone is not transient; "responded with 503" is.
+        _write_executable(
+            self.bindir / "pnpm",
+            _pnpm_script(
+                "count=$(grep -c '^pnpm ' \"$CALLS\" || true)\n"
+                'if [[ "$count" -lt 2 ]]; then\n'
+                "  printf '%s\\n' 'ERR_PNPM_AUDIT_BAD_RESPONSE The audit endpoint"
+                " (at https://registry.npmjs.org/-/npm/v1/security/advisories/bulk)"
+                " responded with 503: unavailable' >&2\n"
+                "  exit 1\n"
+                "fi\n"
+                "printf 'No known vulnerabilities found\\n'\n"
+                "exit 0\n"
+            ),
+        )
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("retrying", result.stderr)
+        self.assertNotIn("Vulnerabilities found", result.stderr)
+        self.assertEqual(self._call_lines().count("pnpm audit --prod"), 2)
+
+    def test_pnpm11_audit_bad_response_invalid_json_is_not_retried(self) -> None:
+        _write_executable(
+            self.bindir / "pnpm",
+            _pnpm_script(
+                "printf '%s\\n' 'ERR_PNPM_AUDIT_BAD_RESPONSE The audit endpoint"
+                " returned invalid JSON' >&2\n"
+                "exit 1\n"
+            ),
+        )
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("pnpm audit failed", result.stderr)
+        self.assertNotIn("retrying", result.stderr)
+        self.assertEqual(self._call_lines().count("pnpm audit --prod"), 1)
+
     def test_transient_503_recovers_on_a_later_attempt(self) -> None:
         _write_executable(
             self.bindir / "pnpm",

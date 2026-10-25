@@ -15,7 +15,7 @@ Last reviewed: 2026-10-24
 | **Type check (Python)** | — | ✅ basedpyright | ✅ basedpyright | — |
 | **Rust fmt / clippy / test** | — | — | ✅ required from **M0** once `src-tauri/` exists | — |
 | **Type check (TypeScript)** | — | — | ✅ `pnpm exec tsc --noEmit` | — |
-| **Audit (pnpm + cargo)** | — | — | ✅ required (`Dependency audit`; vulns fail, informational warnings OK) | ✅ weekly re-run (`Dependency audit (weekly)`) |
+| **Audit (pnpm + cargo)** | — | — | ✅ required (`Dependency audit`; informational findings pass, audit and tooling failures fail closed) | ✅ weekly re-run (`Dependency audit (weekly)`) |
 | **Tests + coverage** | — | — | ✅ pytest-cov (report; gate later) | — |
 | **SAST** | — | — | — | ✅ Semgrep on PR (whole repo; templates/scratch in `.semgrepignore`) |
 | **CodeQL** | — | — | — | later — [M0.5](../plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri-scaffold--when-app-code-exists) |
@@ -43,7 +43,7 @@ After the first green `CI` run, set default-branch ruleset required checks to:
 - `SAST — Semgrep` (from Security workflow)
 - `Rust (src-tauri)` — **required from M0** once `src-tauri/` exists (`cargo fmt` / `clippy` / `test` / `check`; exact job name must match `ci.yml`)
 - `Type check (TypeScript)` — `pnpm install` + `tsc --noEmit`
-- `Dependency audit` — `pnpm audit --prod` + `cargo audit` (uses `src-tauri/.cargo/audit.toml`; fails on vulnerabilities only)
+- `Dependency audit` — `pnpm audit --prod` + `cargo audit` (uses `src-tauri/.cargo/audit.toml`). Informational findings pass. The job fails closed on a vulnerability and when the audit did not complete: an advisory-database fetch failure, a command error, or exhausted registry retries.
 - `CodeQL` — GitHub **default setup** (`dynamic/github-code-scanning/codeql`), not a workflow file in this repo; already a ruleset-required check
 
 `Dependency audit` replaced the old `Audit (advisory)` job (`rustsec/audit-check` + `continue-on-error`), which failed spuriously on `main` for missing `checks: write` while still going green on PRs.
