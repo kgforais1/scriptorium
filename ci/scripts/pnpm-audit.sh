@@ -53,20 +53,49 @@ if ((ATTEMPTS < 1 || ATTEMPTS > 5 || DELAY > 120)); then
   exit 1
 fi
 
-# One version source. Accept an optional corepack integrity suffix
-# (pnpm@11.17.0+sha512...) and pass only the version to corepack prepare.
+# One version source: the top-level packageManager field, as JSON, so a
+# compact or pretty package.json both work. An optional +sha512 suffix is
+# stripped before corepack prepare.
 if [[ ! -f package.json ]]; then
   fail "pnpm setup failed" "package.json is missing; cannot read packageManager"
   exit 1
 fi
-package_manager_line=$(grep -E \
-  '^[[:space:]]*"packageManager"[[:space:]]*:[[:space:]]*"pnpm@[^"]+"[[:space:]]*,?[[:space:]]*$' \
-  package.json || true)
-if [[ -z "$package_manager_line" ]]; then
-  fail "pnpm setup failed" 'package.json packageManager must be "pnpm@<version>"'
+if ! command -v python3 >/dev/null 2>&1; then
+  fail "pnpm setup failed" "python3 is required to read package.json packageManager"
   exit 1
 fi
-PNPM_VERSION=$(printf '%s\n' "$package_manager_line" | sed -E 's/.*"pnpm@([^"+]+).*/\1/')
+status=0
+PNPM_VERSION=$(
+  python3 - <<'PY'
+import json
+import sys
+
+try:
+    with open("package.json", encoding="utf-8") as handle:
+        data = json.load(handle)
+except (OSError, json.JSONDecodeError) as exc:
+    print(f"package.json: {exc}", file=sys.stderr)
+    sys.exit(2)
+if not isinstance(data, dict):
+    print("package.json must be a JSON object", file=sys.stderr)
+    sys.exit(2)
+raw = data.get("packageManager")
+if not isinstance(raw, str):
+    print('package.json packageManager must be "pnpm@<version>"', file=sys.stderr)
+    sys.exit(2)
+name, sep, rest = raw.partition("@")
+version = rest.split("+", 1)[0]
+if sep != "@" or name != "pnpm" or not version:
+    print('package.json packageManager must be "pnpm@<version>"', file=sys.stderr)
+    sys.exit(2)
+print(version)
+PY
+) || status=$?
+if ((status != 0)); then
+  fail "pnpm setup failed" \
+    'package.json packageManager must be "pnpm@<version>"; see log above'
+  exit 1
+fi
 if ! [[ "$PNPM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+)*$ ]]; then
   fail "pnpm setup failed" "package.json packageManager version is not a pnpm version"
   exit 1

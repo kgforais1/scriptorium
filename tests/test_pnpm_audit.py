@@ -308,6 +308,23 @@ class PnpmAuditContractTests(unittest.TestCase):
         self.assertIn("pnpm setup failed", result.stderr)
         self.assertEqual(self._call_lines(), [])
 
+    def test_compact_package_json_uses_top_level_package_manager(self) -> None:
+        repo = self.tmp / "compact"
+        repo.mkdir()
+        (repo / "package.json").write_text(
+            '{"name":"fixture","nested":{"packageManager":"pnpm@1.2.3"},'
+            '"packageManager":"pnpm@9.9.1"}\n',
+            encoding="utf-8",
+        )
+        _write_executable(
+            self.bindir / "pnpm",
+            _pnpm_script("printf 'No known vulnerabilities found\\n'\nexit 0\n"),
+        )
+        result = self._run(cwd=repo)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("prepare pnpm@9.9.1 --activate", self._call_lines())
+        self.assertNotIn("prepare pnpm@1.2.3 --activate", self._call_lines())
+
     def test_prepare_strips_package_manager_integrity_suffix(self) -> None:
         repo = self.tmp / "hashed"
         repo.mkdir()
