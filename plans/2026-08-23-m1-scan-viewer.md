@@ -235,7 +235,6 @@ Harness/docs (not M1 product):
 | S10 | README hedge; centralize or test slug regex triplication (Rust/Python/schema lockstep tests now exist) | M0.5 |
 | S11 | `tsc -b` for project references; ESLint/Prettier for TS | [roadmap M0.5](2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri-scaffold--when-app-code-exists) |
 | LC-L3 | Raise pytest `fail_under` from 0 (LongCat L3) | M0.5 |
-| LC-L4 | Remove audit job `continue-on-error` once deps stabilize (LongCat L4) | M0.5 / pre-public |
 | LC-T11 | Consider `pageLabel` `maxLength` (schema + Rust) to match title/rights/attribution (LongCat post-Qodo T11) | M1 format hardening |
 
 Sources: `tmp/2026-08-25-m0-tauri-foundation-senior-review.md`,
