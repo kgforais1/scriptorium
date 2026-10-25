@@ -71,10 +71,25 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
 
-      - name: Shellcheck
+      - name: Shellcheck (hooks/scripts)
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         with:
-          scandir: "hooks/scripts scripts"
+          # `scandir` is a single path (`find "$INPUT_SCANDIR"`), so each
+          # directory needs its own step. A space-separated value silently
+          # matches nothing and the action still exits 0.
+          scandir: "hooks/scripts"
+          severity: warning
+
+      - name: Shellcheck (scripts)
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: "scripts"
+          severity: warning
+
+      - name: Shellcheck (ci/scripts)
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: "ci/scripts"
           severity: warning
 
       - name: Markdownlint (maintained docs)
@@ -236,8 +251,8 @@ jobs:
         run: pnpm exec tsc --noEmit
 
   audit:
-    # Real gate (not advisory): fails on vulnerability findings only.
-    # Informational cargo-audit warnings (unmaintained, etc.) do not fail.
+    # Real gate (not advisory). Informational cargo-audit warnings do not fail.
+    # A vulnerability fails the job, and so does an audit that did not complete.
     # Time-bound ignores: src-tauri/.cargo/audit.toml (+ audit-exceptions.toml).
     name: Dependency audit
     runs-on: ubuntu-latest
@@ -250,9 +265,9 @@ jobs:
           rustup show
 
       - name: pnpm audit --prod
-        run: |
-          corepack enable && corepack prepare pnpm@11.17.0 --activate
-          pnpm audit --prod
+        # Registry 503s and client timeouts are retried inside the script, then it
+        # fails closed. A flake must read as infrastructure, never as a clean audit.
+        run: bash ci/scripts/pnpm-audit.sh
 
       # Cache the cargo-audit binary; compiling it from crates.io is ~3 minutes.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

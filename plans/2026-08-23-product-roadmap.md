@@ -60,10 +60,11 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Frontend Vitest coverage gates; raise `fail_under` for app code
 - [ ] Rust coverage (`cargo llvm-cov` / tarpaulin) when useful
 - [ ] Tighten Python harness coverage gate when in-process tests exist
-- [ ] Optional: CodeQL; Dependabot (required before public)
+- [x] CodeQL via GitHub default setup (ruleset code scanning; not a workflow file)
+- [ ] Dependabot (required before public)
 - [ ] GitHub ruleset: required CI + Semgrep checks
 - [ ] Note: `cargo fmt` / `clippy` / `test` moved **into M0** (not deferred)
-- [ ] **From M0 senior review:** tick archived M0 plan evidence / rephrase roadmap “app-data library root” as decision not delivery (**S9**); refresh stale pyproject/README/annotations wording (**S10**); `tsc -b` + ESLint/Prettier for TS (**S11**); raise pytest `fail_under` (**LC-L3**); remove audit `continue-on-error` when ready (**LC-L4**) — see M1 plan follow-ups table
+- [ ] **From M0 senior review:** tick archived M0 plan evidence / rephrase roadmap “app-data library root” as decision not delivery (**S9**); refresh stale pyproject/README/annotations wording (**S10**); `tsc -b` + ESLint/Prettier for TS (**S11**); raise pytest `fail_under` (**LC-L3**) — see M1 plan follow-ups table
 - [ ] Add `cargo build` to CI Rust job (**LC-M2**) before relying on M1 Tauri commands
 
 ### M1 — Scan viewer (MVP core)
