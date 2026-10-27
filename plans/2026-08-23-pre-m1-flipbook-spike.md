@@ -1,6 +1,6 @@
 # Plan: Pre-M1 — Flipbook library spike + ADR
 
-Last reviewed: 2026-08-23
+Last reviewed: 2026-10-27
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
 Status: draft
@@ -97,6 +97,22 @@ except optional trivial edge trim documented later.
 - [ ] ADR merged (or on branch ready for M1)
 - [ ] Prototype demo path documented in ADR (commands)
 - [ ] Spike code may stay under `tmp/` or a clearly marked throwaway path until M1 adopts it
+
+## Reader design input (added 2026-10-27)
+
+Seven look-and-feel prototypes (A–G) live in [`design/mockups/`](../design/mockups/) (PR #54).
+They are reference only, not code to adopt. The spike should measure the chosen page-turn
+approach against them, especially the curl in G and F.
+
+Consider supporting multiple skins from the start:
+
+- One shared page-turn engine.
+- Each skin is a data config: scene (wood, lighting, props, camera), book material
+  (cover, paper, ribbon) and UI theme tokens.
+- Swappable UI layouts (A-style toolbar vs B-style scrubber and panel) cost more; defer
+  unless needed.
+- Once a direction is picked, create `DESIGN.md` for shared principles and one token file
+  per skin (W3C design-tokens JSON). The token files are the source of truth for each look.
 
 ## Risks
 

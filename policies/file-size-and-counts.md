@@ -18,9 +18,9 @@ variables (see [`hooks/README.md`](../hooks/README.md)) or the script defaults.
 | Max lines per source file | **600** (soft warn), **1000** (hard) | soft→hard gate |
 | Max lines per function/method | 60 (soft), 100 (hard) | advisory → soft gate |
 | Max cyclomatic complexity per function | 10 (soft), 15 (hard) | advisory |
-| Max bytes per committed non-source file | 8 MB | hard gate |
+| Max bytes per committed file (non-binary) | 500 KB | hard gate |
 | Max files per directory (excl. generated) | 40 | advisory |
-| Disallow committing large binaries | > 10 MB | hard gate (use Git LFS / release assets) |
+| Disallow committing large binaries | > 5 MB | hard gate (use Git LFS / release assets) |
 | Doc (`.md`) max lines | 1000 | advisory (split into linked docs) |
 | Living `to_do` / `TODO.md` backlog | 150 (soft), 300 (hard) | see [`plans-and-todos.md`](plans-and-todos.md) |
 
