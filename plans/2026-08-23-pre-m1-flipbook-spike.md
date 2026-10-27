@@ -114,6 +114,17 @@ Consider supporting multiple skins from the start:
 - Once a direction is picked, create `DESIGN.md` for shared principles and one token file
   per skin (W3C design-tokens JSON). The token files are the source of truth for each look.
 
+Interaction requirements surfaced by the Greptile review of the mockups (PR #54). The spike
+should confirm the chosen engine can meet them:
+
+- [ ] A cancelled pointer drag (`pointercancel`, lost capture) settles the page and frees
+      navigation; the book never stays stuck mid-turn.
+- [ ] Navigation requested during a turn or corner preview is queued and applied when it
+      ends, so the open note and the visible spread never disagree.
+- [ ] Note panels and popups are reachable by screen readers (`aria-hidden` toggled on open
+      and close, focus moved into the panel).
+- [ ] Hotspot popups clamp to the viewport or flip above/below on narrow windows.
+
 ## Risks
 
 | Risk | Mitigation |
