@@ -80,8 +80,8 @@ IGNORE_FRAGMENTS = [
     "venv/",
     ".tox/",
     ".eggs/",
-    # Throwaway look-and-feel prototypes and their screenshots; the 5 MB
-    # large-file gate in .pre-commit-config.yaml still applies.
+    # Throwaway look-and-feel prototypes and their screenshots; only the
+    # 5 MB hard limit applies to ignored paths.
     "design/mockups/",
 ]
 
@@ -111,13 +111,13 @@ def check(filepath: str) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
 
     path = Path(filepath)
-    if not path.exists() or is_ignored(filepath):
+    if not path.exists():
         return errors, warnings
 
     size = path.stat().st_size
     ext = path.suffix.lower()
 
-    # ── Binary / giant file ───────────────────────────────────────────────────
+    # ── Binary / giant file (applies to ignored paths too) ────────────────────
     if size > BINARY_HARD_BYTES:
         mb = size / (1024 * 1024)
         limit_mb = BINARY_HARD_BYTES / (1024 * 1024)
@@ -126,6 +126,9 @@ def check(filepath: str) -> tuple[list[str], list[str]]:
             "Use Git LFS or release assets for large files."
         )
         return errors, warnings  # no point checking lines
+
+    if is_ignored(filepath):
+        return errors, warnings
 
     if size > MAX_BYTES and ext not in SOURCE_EXTS | DOC_EXTS:
         kb = size / 1024
