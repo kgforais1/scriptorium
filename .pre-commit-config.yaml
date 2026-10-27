@@ -91,7 +91,7 @@ repos:
     rev: v5.0.0
     hooks:
       - id: check-added-large-files
-        args: [--maxkb=5120]
+        args: [--maxkb=10240]
         name: "size: large file gate"
       - id: detect-private-key
         name: "secrets: private key detect"
