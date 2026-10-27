@@ -21,7 +21,13 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Unplanned / small
 
-_(none — use this section only for work that fits in one session and does not warrant a plan.)_
+- **Pick a reader design** — choose a direction (or a hybrid) from the seven look-and-feel
+  candidates A–G in [`design/mockups/`](design/mockups/) (PR #54); then feed it into the
+  [pre-M1 flipbook spike](plans/2026-08-23-pre-m1-flipbook-spike.md). Consider supporting
+  multiple skins: one shared page-turn engine, with each skin a data config for scene
+  (wood, lighting, props, camera), book material (cover, paper, ribbon) and UI theme tokens.
+  Swappable UI layouts (A-style toolbar vs B-style scrubber/panel) cost more; defer unless needed.
+  Once a direction is picked, create `DESIGN.md` (shared principles) and per-skin token files.
 
 ## Icebox
 
