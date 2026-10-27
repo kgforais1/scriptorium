@@ -1,0 +1,2028 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scriptorium · Lamplit Toolbar</title>
+<!--
+  Scriptorium — Direction D, "Lamplit toolbar".
+  Remix of A (walnut desk, lamp pool, ribbon, pill toolbar, lore card) with B's flat-on
+  top-down camera and a leaf that stands up off the spine like C's. The turning leaf is a
+  developable surface (rigid strips hinged on rulings), so corner drags never shear the page.
+  Single file, no network: desk, leather, paper, pages and page turn are generated at
+  runtime (WebGL2 shaders + Canvas 2D).
+  Debug params: ?ui=1 keeps the toolbar visible, ?turn=0.35 freezes a page mid-turn
+  (&grab=0..1 picks the grabbed row, 0 = bottom), ?lore=0|1|2 opens a lore card,
+  ?spread=N opens at spread N.
+-->
+<style>
+  :root {
+    --ink: #f3e6cf;
+    --ink-dim: rgba(243, 230, 207, .62);
+    --gold: #e2bd72;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #070504; }
+  body {
+    font-family: var(--serif); color: var(--ink);
+    -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none;
+  }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #gl.over-page { cursor: pointer; }
+  #gl.over-corner { cursor: grab; }
+  #gl.dragging { cursor: grabbing; }
+  #gl.panning { cursor: move; }
+
+  /* Lamp-on veil */
+  #veil {
+    position: fixed; inset: 0; background: #070504; pointer-events: none;
+    transition: opacity 1.4s cubic-bezier(.3, .1, .2, 1);
+  }
+  #veil.off { opacity: 0; }
+
+  /* Floating toolbar */
+  #toolbar {
+    position: fixed; top: 18px; left: 50%; z-index: 20;
+    display: flex; align-items: center; gap: 2px; padding: 5px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(46, 32, 22, .74), rgba(20, 13, 9, .78));
+    border: 1px solid rgba(236, 204, 150, .13);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .35),
+                inset 0 1px 0 rgba(255, 236, 200, .07);
+    backdrop-filter: blur(16px) saturate(1.25); -webkit-backdrop-filter: blur(16px) saturate(1.25);
+    opacity: 0; transform: translate(-50%, -10px); pointer-events: none;
+    transition: opacity .5s ease, transform .5s cubic-bezier(.2, .8, .2, 1);
+  }
+  body.ui #toolbar { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  .tb-btn {
+    height: 34px; min-width: 34px; padding: 0 11px; border: 0; border-radius: 999px;
+    background: transparent; color: var(--ink); font: inherit; font-size: 14px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    cursor: pointer; transition: background .2s, color .2s;
+  }
+  .tb-btn.icon { padding: 0; }
+  .tb-btn:hover { background: rgba(255, 226, 180, .09); }
+  .tb-btn:active { background: rgba(255, 226, 180, .15); }
+  .tb-btn:disabled { opacity: .35; cursor: default; background: transparent; }
+  .tb-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6;
+                stroke-linecap: round; stroke-linejoin: round; }
+  .tb-btn.on { color: #f3cf86; background: rgba(243, 207, 134, .11); }
+  .tb-sep { width: 1px; height: 20px; background: rgba(236, 204, 150, .15); margin: 0 5px; }
+  .tb-title { font-style: italic; font-size: 15px; color: var(--ink); padding: 0 10px 0 4px; white-space: nowrap; }
+  .tb-label {
+    font-size: 13px; color: var(--ink-dim); white-space: nowrap; text-align: center;
+    font-variant-numeric: oldstyle-nums proportional-nums; letter-spacing: .02em; min-width: 92px;
+  }
+  .tb-label b { color: var(--ink); font-weight: 400; }
+  .tb-zoom { min-width: 46px; }
+
+  #hint {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 5;
+    font-size: 12.5px; letter-spacing: .08em; color: rgba(243, 230, 207, .5);
+    white-space: nowrap; opacity: 0; transition: opacity .6s ease; pointer-events: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+  }
+  body.ui #hint { opacity: 1; }
+  #hint kbd { font: inherit; padding: 0 5px; border: 1px solid rgba(243, 230, 207, .25); border-radius: 4px; }
+
+  /* Hotspots */
+  .hotspot {
+    position: fixed; left: 0; top: 0; width: 30px; height: 30px; margin: -15px 0 0 -15px; z-index: 6;
+    border: 0; background: none; border-radius: 50%; cursor: pointer;
+    transition: opacity .45s ease; will-change: transform;
+  }
+  .hotspot::before {
+    content: ""; position: absolute; inset: 9px; border-radius: 50%;
+    background: radial-gradient(circle, #fff6dc 0, #f3c970 38%, rgba(226, 178, 87, .25) 62%, rgba(226, 178, 87, 0) 74%);
+    box-shadow: 0 0 14px 4px rgba(255, 205, 120, .42), 0 0 2px 1px rgba(60, 30, 5, .35);
+    transition: transform .25s ease;
+  }
+  .hotspot::after {
+    content: ""; position: absolute; inset: 4px; border-radius: 50%;
+    border: 1px solid rgba(255, 218, 150, .8);
+    animation: glint 3.2s ease-out infinite;
+  }
+  .hotspot:hover::before { transform: scale(1.35); }
+  .hotspot.hidden { opacity: 0; pointer-events: none; }
+  @keyframes glint {
+    0% { transform: scale(.45); opacity: 0; }
+    15% { opacity: .95; }
+    75% { transform: scale(1.3); opacity: 0; }
+    100% { opacity: 0; }
+  }
+
+  /* Lore card */
+  #lore {
+    position: fixed; left: 0; top: 0; width: 344px; z-index: 30;
+    padding: 30px 30px 22px; color: #2a1c11;
+    background:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .42  0 0 0 0 .30  0 0 0 0 .16  0 0 0 .10 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+      radial-gradient(120% 90% at 30% 20%, #f8efdc 0%, #efe2c6 60%, #e2cfa8 100%);
+    border-radius: 3px;
+    box-shadow: 0 34px 70px -12px rgba(0, 0, 0, .7), 0 10px 22px rgba(0, 0, 0, .4),
+                inset 0 0 0 1px rgba(255, 255, 255, .35), inset 0 0 40px rgba(150, 105, 50, .18);
+    opacity: 0; transform: translateY(8px) scale(.97); transform-origin: var(--ox, 0) 50%;
+    transition: opacity .3s ease, transform .4s cubic-bezier(.2, .8, .2, 1);
+    pointer-events: none;
+  }
+  #lore.open { opacity: 1; transform: none; pointer-events: auto; }
+  #lore::before {
+    content: ""; position: absolute; inset: 8px; pointer-events: none;
+    border: 1px solid rgba(138, 96, 40, .38); border-radius: 1px;
+    box-shadow: inset 0 0 0 3px rgba(239, 226, 198, .0), inset 0 0 0 4px rgba(138, 96, 40, .16);
+  }
+  #lore .arrow {
+    position: absolute; width: 14px; height: 14px; top: var(--ay, 50%); margin-top: -7px;
+    background: #f1e5ca; transform: rotate(45deg);
+    box-shadow: -1px 1px 0 rgba(138, 96, 40, .0);
+  }
+  #lore.right .arrow { left: -7px; }
+  #lore.left .arrow { right: -7px; }
+  .lore-kicker { font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: #8d2c1b; }
+  .lore-title { font-size: 28px; font-style: italic; line-height: 1.1; margin: 8px 0 2px; color: #22150c; }
+  .lore-orn { display: flex; align-items: center; gap: 10px; margin: 10px 0 12px; color: #a27a35; }
+  .lore-orn::before, .lore-orn::after { content: ""; flex: 1; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(138, 96, 40, .5), transparent); }
+  .lore-orn svg { width: 22px; height: 12px; fill: currentColor; }
+  .lore-body { font-size: 15px; line-height: 1.58; color: #33220f; hyphens: auto; text-align: left; }
+  .lore-body::first-letter {
+    float: left; font-size: 46px; line-height: .86; padding: 4px 6px 0 0; color: #8d2c1b;
+  }
+  .lore-foot {
+    margin-top: 14px; padding-top: 10px; font-size: 12.5px; font-style: italic; color: #6c5234;
+    border-top: 1px solid rgba(138, 96, 40, .22); display: flex; justify-content: space-between; gap: 12px;
+  }
+  .lore-foot span:last-child { font-style: normal; letter-spacing: .12em; font-size: 10.5px; text-transform: uppercase; }
+  .lore-close {
+    position: absolute; top: 14px; right: 14px; width: 26px; height: 26px; border: 0; border-radius: 50%;
+    background: transparent; color: #7b5a35; cursor: pointer; display: grid; place-items: center;
+    transition: background .2s;
+  }
+  .lore-close:hover { background: rgba(138, 96, 40, .14); }
+  .lore-close svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 1.6; fill: none; stroke-linecap: round; }
+
+  /* Responsive: the pill sheds its least important parts first */
+  #lore { max-width: calc(100vw - 32px); }
+  @media (max-width: 760px) {
+    .tb-title, .tb-sep.t { display: none; }
+    #hint .h2 { display: none; }
+  }
+  @media (max-width: 560px) {
+    #toolbar { top: 10px; }
+    .tb-zoom, #tb-zout, #tb-zin, .tb-sep.z { display: none; }
+    .tb-btn span { display: none; }
+    .tb-btn { padding: 0 9px; }
+    .tb-label { min-width: 74px; }
+    #hint { font-size: 11.5px; bottom: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hotspot::after { animation: none; }
+  }
+
+  #nogl { position: fixed; inset: 0; display: none; place-items: center; color: var(--ink-dim); font-style: italic; }
+</style>
+</head>
+<body class="ui">
+<canvas id="gl"></canvas>
+<div id="hotspots"></div>
+
+<div id="lore" role="dialog" aria-modal="false" aria-labelledby="lore-title">
+  <div class="arrow"></div>
+  <button class="lore-close" aria-label="Close note"><svg viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>
+  <div class="lore-kicker" id="lore-kicker"></div>
+  <div class="lore-title" id="lore-title"></div>
+  <div class="lore-orn"><svg viewBox="0 0 44 24"><path d="M22 3c3 5 9 7 14 6-3 3-8 4-12 2 2 3 2 7-2 10-4-3-4-7-2-10-4 2-9 1-12-2 5 1 11-1 14-6z"/></svg></div>
+  <div class="lore-body" id="lore-body"></div>
+  <div class="lore-foot"><span id="lore-foot"></span><span>Curator</span></div>
+</div>
+
+<nav id="toolbar" aria-label="Reader controls">
+  <button class="tb-btn" id="tb-back" title="Back to library">
+    <svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg><span>Library</span>
+  </button>
+  <div class="tb-sep"></div>
+  <span class="tb-title">Liber Mirabilium</span>
+  <div class="tb-sep t"></div>
+  <button class="tb-btn icon" id="tb-prev" title="Previous page (←)"><svg viewBox="0 0 16 16"><path d="M9.5 4L5.5 8l4 4"/></svg></button>
+  <span class="tb-label" id="tb-pages"></span>
+  <button class="tb-btn icon" id="tb-next" title="Next page (→)"><svg viewBox="0 0 16 16"><path d="M6.5 4l4 4-4 4"/></svg></button>
+  <div class="tb-sep z"></div>
+  <button class="tb-btn icon" id="tb-zout" title="Zoom out (−)"><svg viewBox="0 0 16 16"><path d="M4 8h8"/></svg></button>
+  <span class="tb-label tb-zoom" id="tb-zoom">100%</span>
+  <button class="tb-btn icon" id="tb-zin" title="Zoom in (+)"><svg viewBox="0 0 16 16"><path d="M4 8h8M8 4v8"/></svg></button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn on" id="tb-lore" title="Show curator notes (H)">
+    <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><circle cx="8" cy="8" r="5.6" stroke-dasharray="2.2 2.2"/></svg><span>Notes</span>
+  </button>
+</nav>
+
+<div id="hint">Drag a page corner or press <kbd>←</kbd> <kbd>→</kbd> to turn<span class="h2"> &nbsp;·&nbsp; click a glint for the curator’s note</span></div>
+<div id="veil"></div>
+<div id="nogl">This mockup needs WebGL 2.</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ======================================================================================
+   Constants & small utilities
+   ====================================================================================== */
+const SERIF = '"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif';
+const W = 1.0, H = 1.44;          // page size (book units; 1 unit ≈ a 17 cm page)
+const O = 0.05, C = 0.022;        // board overhang ("squares"), board thickness
+const ZG = 0.006;                 // page block height at the gutter
+const NS = 80, NT = 20, DS = W / NS;
+const NPAGES = 12, NSPREADS = NPAGES / 2;
+const TW = 1024, TH = Math.round(TW * H);
+const BOOK_ANGLE = -0.012;        // the book lies slightly askew on the desk
+const params = new URLSearchParams(location.search);
+
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+
+/* ======================================================================================
+   Page artwork (Canvas 2D). Gold leaf is written into the alpha channel (alpha < 1) so the
+   page shader can make it glint as the page moves under the lamp.
+   ====================================================================================== */
+const INK = '#2a1a0e', RED = '#962d1b', BLUE = '#27457f';
+
+function noiseCanvas(w, h, r, lo, hi) {
+  const c = makeCanvas(w, h), g = c.getContext('2d'), im = g.createImageData(w, h), d = im.data;
+  for (let i = 0; i < w * h; i++) { const v = lo + (hi - lo) * r(); d[i * 4] = v; d[i * 4 + 1] = v * 0.985; d[i * 4 + 2] = v * 0.95; d[i * 4 + 3] = 255; }
+  g.putImageData(im, 0, 0); return c;
+}
+
+function makePaperBase() {
+  const c = makeCanvas(TW, TH), g = c.getContext('2d'), r = rng(7);
+  g.fillStyle = '#ecdcbb'; g.fillRect(0, 0, TW, TH);
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  g.globalCompositeOperation = 'multiply';
+  for (const [div, lo, a] of [[3, .9, .55], [9, .9, .5], [28, .9, .5], [90, .9, .45], [260, .86, .5]]) {
+    const n = noiseCanvas(Math.ceil(TW / div) + 3, Math.ceil(TH / div) + 3, r, lo * 255, 255);
+    g.globalAlpha = a; g.drawImage(n, -div, -div, TW + 2 * div, TH + 2 * div);
+  }
+  g.globalAlpha = 1;
+  // fibres
+  g.globalCompositeOperation = 'source-over';
+  for (let i = 0; i < 1400; i++) {
+    const x = r() * TW, y = r() * TH, len = 5 + r() * 24, a = r() * Math.PI * 2;
+    g.strokeStyle = r() < .55 ? `rgba(120,88,48,${.04 + r() * .06})` : `rgba(255,251,238,${.08 + r() * .1})`;
+    g.lineWidth = .5 + r() * .9;
+    g.beginPath(); g.moveTo(x, y);
+    g.quadraticCurveTo(x + Math.cos(a + .6) * len * .5, y + Math.sin(a + .6) * len * .5, x + Math.cos(a) * len, y + Math.sin(a) * len);
+    g.stroke();
+  }
+  // per-pixel tooth
+  const im = g.getImageData(0, 0, TW, TH), d = im.data;
+  for (let i = 0; i < d.length; i += 4) { const n = (r() - .5) * 13; d[i] += n; d[i + 1] += n; d[i + 2] += n * .9; }
+  g.putImageData(im, 0, 0);
+  // age: browner toward the edges
+  g.globalCompositeOperation = 'multiply';
+  const rg = g.createRadialGradient(TW * .5, TH * .48, TW * .25, TW * .5, TH * .5, TW * .95);
+  rg.addColorStop(0, 'rgba(255,255,255,0)'); rg.addColorStop(1, 'rgba(196,150,96,.55)');
+  g.fillStyle = rg; g.fillRect(0, 0, TW, TH);
+  const edge = (x0, y0, x1, y1, a) => {
+    const lg = g.createLinearGradient(x0, y0, x1, y1);
+    lg.addColorStop(0, `rgba(150,100,52,${a})`); lg.addColorStop(1, 'rgba(150,100,52,0)');
+    g.fillStyle = lg; g.fillRect(0, 0, TW, TH);
+  };
+  for (const [s, a] of [[16, .55], [70, .22]]) {
+    edge(0, 0, s, 0, a); edge(TW, 0, TW - s, 0, a); edge(0, 0, 0, s, a); edge(0, TH, 0, TH - s, a);
+  }
+  g.globalCompositeOperation = 'source-over';
+  return c;
+}
+
+const goldNoise = (() => {
+  const c = makeCanvas(128, 128), g = c.getContext('2d'), im = g.createImageData(128, 128), r = rng(99);
+  for (let i = 0; i < 128 * 128; i++) {
+    const dark = r() < .55;
+    im.data[i * 4] = dark ? 80 : 255; im.data[i * 4 + 1] = dark ? 46 : 244; im.data[i * 4 + 2] = dark ? 12 : 205;
+    im.data[i * 4 + 3] = Math.floor(Math.pow(r(), 2.6) * 170);
+  }
+  g.putImageData(im, 0, 0); return c;
+})();
+
+function goldGrad(g, x, y, w, h) {
+  const gr = g.createLinearGradient(x, y, x + w, y + h);
+  gr.addColorStop(0, '#f7df93'); gr.addColorStop(.3, '#c99a40'); gr.addColorStop(.52, '#f2d27c');
+  gr.addColorStop(.78, '#a8782c'); gr.addColorStop(1, '#e9c56c');
+  return gr;
+}
+
+/** Draw gold-leaf shapes: paints them on the page and records them in the gold mask. */
+function goldPass(P, fn) {
+  const t = makeCanvas(TW, TH), tg = t.getContext('2d');
+  fn(tg);
+  tg.globalCompositeOperation = 'source-atop';
+  tg.fillStyle = tg.createPattern(goldNoise, 'repeat'); tg.fillRect(0, 0, TW, TH);
+  P.g.drawImage(t, 0, 0); P.mask.drawImage(t, 0, 0);
+}
+
+function drawSpaced(g, text, x, y, size, spacing, color, opts = {}) {
+  g.font = `${opts.italic ? 'italic ' : ''}${opts.weight || ''} ${size}px ${SERIF}`;
+  g.fillStyle = color; g.textAlign = 'left';
+  const chars = [...text], ws = chars.map(ch => g.measureText(ch).width);
+  const total = ws.reduce((a, b) => a + b, 0) + spacing * (chars.length - 1);
+  let cx = opts.align === 'left' ? x : opts.align === 'right' ? x - total : x - total / 2;
+  chars.forEach((ch, i) => { g.fillText(ch, cx, y); cx += ws[i] + spacing; });
+  return total;
+}
+
+function centerText(g, text, x, y, font, color) {
+  g.font = font; g.fillStyle = color; g.textAlign = 'center'; g.fillText(text, x, y); g.textAlign = 'left';
+}
+
+const LAT = ('et in est ad cum non quod sed ut per enim autem quae qui sunt esse vero etiam hoc ex ab de sic nam ipse tamen ' +
+  'inter igitur ergo atque neque caelum terra mundus stella stellae sidera luna sol orbis orbem ignis aqua aer natura naturae ' +
+  'rerum corpus corpora motus lumen lux tenebrae umbra tempus annus dies nox caeli terrae aquas ventis montes maria flumina ' +
+  'arbor herba animal homines deus numen aeternum magnum longe prope semper numquam saepe primum deinde postea antiquus ' +
+  'veteres sapientes philosophi docent dicunt scribunt videntur apparet manifestum ratio causa causae principium finis forma ' +
+  'materia spiritus anima mens oculis manu libro liber scriptum verba signum signa figura circulus linea punctum numerus ' +
+  'mensura gradus ordo cursus via iter locus loco regio insula insulae oriens occidens septentrio meridies ventus calor ' +
+  'frigus siccum humidum lapis aurum argentum ferrum plumbum sal sulphur virtus potentia occultus arcanum mirabile ' +
+  'mirabilia secretum ostendit demonstrat probat narrat refert tradit ferunt quoque item praeterea denique scilicet ' +
+  'videlicet quidem certe forte observatur nauigantes peregrini incolae memoriae proditum circa supra infra ultra citra').split(' ');
+
+function latin(r, nSent, lead) {
+  const toks = [];
+  if (lead) lead.split(/\s+/).forEach(w => w && toks.push({ w }));
+  for (let k = 0; k < nSent; k++) {
+    const n = 6 + Math.floor(r() * 13);
+    for (let i = 0; i < n; i++) {
+      let w = LAT[Math.floor(r() * LAT.length)];
+      if (i === 0) w = w[0].toUpperCase() + w.slice(1);
+      if (i === n - 1) w += r() < .82 ? '.' : (r() < .5 ? ';' : ':');
+      else if (r() < .1) w += ',';
+      toks.push({ w });
+    }
+    if (r() < .07) toks.push({ para: true });
+  }
+  return toks;
+}
+
+/** Justified text setter. Returns the index of the first token not set. */
+function setText(P, toks, x, y, w, maxLines, o = {}) {
+  const g = P.g, size = o.size || 21, lh = o.lh || 29, r = P.r;
+  const fN = `${size}px ${SERIF}`, fI = `italic ${size}px ${SERIF}`;
+  const meas = t => { g.font = t.it ? fI : fN; return g.measureText(t.w).width; };
+  g.font = fN; const sp = g.measureText(' ').width;
+  let i = o.start || 0, line = 0, paraStart = false;
+  g.textAlign = 'left';
+  while (line < maxLines && i < toks.length) {
+    const ind = (o.indentLines && line < o.indentLines) ? o.indentPx : 0;
+    const lw = w - ind, row = []; let tw = 0, brk = false;
+    if (paraStart) { const t = { w: '¶', red: true }; t.ww = meas(t); row.push(t); tw = t.ww; paraStart = false; }
+    while (i < toks.length) {
+      const t = toks[i];
+      if (t.para) { i++; if (row.length) { brk = true; paraStart = true; break; } continue; }
+      const ww = meas(t), need = tw + (row.length ? sp : 0) + ww;
+      if (need > lw && row.length) break;
+      row.push(Object.assign({}, t, { ww })); tw = need; i++;
+    }
+    const last = brk || i >= toks.length || o.ragged;
+    let extra = (!last && row.length > 1) ? (lw - tw) / (row.length - 1) : 0;
+    if (extra > sp * 3) extra = 0;
+    let cx = x + ind;
+    if (o.center) cx = x + (w - tw) / 2;
+    for (const t of row) {
+      g.font = t.it ? fI : fN; g.fillStyle = t.red ? RED : (t.blue ? BLUE : INK);
+      g.globalAlpha = .84 + .16 * r();
+      g.fillText(t.w, cx, y + line * lh);
+      cx += t.ww + sp + extra;
+    }
+    line++;
+  }
+  g.globalAlpha = 1;
+  return i;
+}
+
+function pageGeom(i) {
+  const left = i % 2 === 0, inner = 88, outer = 134;
+  const x0 = left ? outer : inner, w = TW - inner - outer;
+  return { left, x0, w, x1: x0 + w, colW: (w - 34) / 2, col2: x0 + (w - 34) / 2 + 34 };
+}
+
+function runningHead(P, title) {
+  const { g } = P, { left, x0, w, x1 } = pageGeom(P.i);
+  drawSpaced(g, title, x0 + w / 2, 130, 19, 5, RED);
+  g.font = `italic 21px ${SERIF}`; g.fillStyle = '#3c2817'; g.textAlign = left ? 'left' : 'right';
+  g.fillText(String(41 + P.i), left ? x0 : x1, 130); g.textAlign = 'left';
+  g.fillStyle = 'rgba(58,38,20,.55)'; g.fillRect(x0, 146, w, 1.6); g.fillRect(x0, 150, w, .8);
+}
+
+function catchword(P, word) {
+  const { g } = P, { x1 } = pageGeom(P.i);
+  g.font = `italic 19px ${SERIF}`; g.fillStyle = '#3c2817'; g.textAlign = 'right';
+  g.fillText(word, x1, TH - 150); g.textAlign = 'left';
+}
+
+function stains(P, n) {
+  const { g, r } = P;
+  g.globalCompositeOperation = 'multiply';
+  for (let k = 0; k < n; k++) {
+    const x = r() * TW, y = r() * TH, rad = 1.5 + Math.pow(r(), 3) * 9;
+    const gr = g.createRadialGradient(x, y, 0, x, y, rad);
+    gr.addColorStop(0, `rgba(150,96,46,${.25 + r() * .35})`); gr.addColorStop(1, 'rgba(150,96,46,0)');
+    g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  if (r() < .6) { // a faint tide line
+    const x = r() * TW, y = r() * TH, rad = 90 + r() * 160;
+    const gr = g.createRadialGradient(x, y, rad * .7, x, y, rad);
+    gr.addColorStop(0, 'rgba(170,120,60,0)'); gr.addColorStop(.92, 'rgba(170,120,60,.10)'); gr.addColorStop(1, 'rgba(170,120,60,0)');
+    g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+function star(g, x, y, r1, r2, n, rot = -Math.PI / 2) {
+  g.beginPath();
+  for (let k = 0; k < n * 2; k++) {
+    const rr = k % 2 ? r2 : r1, a = rot + k * Math.PI / n;
+    k ? g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : g.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  g.closePath();
+}
+
+function textOnArc(g, text, cx, cy, rad, aCenter, size, color, spacing = 1) {
+  g.font = `${size}px ${SERIF}`; g.fillStyle = color; g.textAlign = 'center';
+  const chars = [...text], ws = chars.map(c => g.measureText(c).width + spacing);
+  const total = ws.reduce((a, b) => a + b, 0);
+  let a = aCenter - total / rad / 2;
+  chars.forEach((ch, k) => {
+    const aa = a + ws[k] / rad / 2;
+    g.save(); g.translate(cx + Math.cos(aa) * rad, cy + Math.sin(aa) * rad); g.rotate(aa + Math.PI / 2);
+    g.fillText(ch, 0, 0); g.restore();
+    a += ws[k] / rad;
+  });
+  g.textAlign = 'left';
+}
+
+function vine(P, x, y, len, dir) {
+  // penwork stem with ivy leaves running down the margin from an initial
+  const { g, r } = P;
+  g.strokeStyle = '#3a2412'; g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(x, y);
+  const pts = [];
+  for (let k = 1; k <= 24; k++) {
+    const t = k / 24, yy = y + t * len, xx = x + Math.sin(t * 9) * 9 * dir;
+    g.lineTo(xx, yy); pts.push([xx, yy, t]);
+  }
+  g.stroke();
+  pts.forEach(([xx, yy, t], k) => {
+    if (k % 3) return;
+    const s = k % 6 ? 1 : -1, lx = xx + s * 15, ly = yy + 4;
+    g.beginPath(); g.moveTo(xx, yy); g.quadraticCurveTo(xx + s * 8, yy - 6, lx, ly); g.stroke();
+    g.beginPath(); g.moveTo(lx, ly);
+    g.bezierCurveTo(lx + s * 9, ly - 9, lx + s * 14, ly + 3, lx + s * 4, ly + 10);
+    g.bezierCurveTo(lx - s * 2, ly + 8, lx - s * 3, ly + 3, lx, ly);
+    g.fillStyle = k % 9 === 0 ? BLUE : (k % 9 === 3 ? '#4f6b33' : RED); g.fill();
+    g.lineWidth = 1; g.stroke(); g.lineWidth = 1.6;
+  });
+  goldPass(P, tg => {
+    tg.fillStyle = goldGrad(tg, x - 20, y, 40, len);
+    pts.forEach(([xx, yy], k) => { if (k % 3 === 1) { tg.beginPath(); tg.arc(xx - (k % 2 ? 9 : -9) * dir, yy, 4.2, 0, 7); tg.fill(); } });
+    tg.beginPath(); tg.arc(pts[pts.length - 1][0], pts[pts.length - 1][1] + 8, 7, 0, 7); tg.fill();
+  });
+  g.strokeStyle = '#3a2412'; g.lineWidth = 1;
+  pts.forEach(([xx, yy], k) => { if (k % 3 === 1) { g.beginPath(); g.arc(xx - (k % 2 ? 9 : -9) * dir, yy, 4.2, 0, 7); g.stroke(); } });
+}
+
+function illuminatedInitial(P, letter, x, y, s, vineLen = 640) {
+  const { g, r } = P;
+  goldPass(P, tg => { tg.fillStyle = goldGrad(tg, x, y, s, s); tg.fillRect(x, y, s, s); tg.clearRect(x + 8, y + 8, s - 16, s - 16); });
+  const ix = x + 8, iy = y + 8, is = s - 16;
+  // split ground: ultramarine and rose, divided diagonally like a period initial
+  g.fillStyle = '#1d3a78'; g.fillRect(ix, iy, is, is);
+  g.save(); g.beginPath(); g.moveTo(ix + is, iy); g.lineTo(ix + is, iy + is); g.lineTo(ix, iy + is); g.closePath(); g.clip();
+  g.fillStyle = '#9c3a3f'; g.fillRect(ix, iy, is, is); g.restore();
+  // white filigree
+  g.strokeStyle = 'rgba(244,238,222,.78)'; g.lineWidth = 1.2;
+  for (let k = 0; k < 16; k++) {
+    const cx = ix + 14 + r() * (is - 28), cy = iy + 14 + r() * (is - 28), rad = 5 + r() * 8;
+    g.beginPath();
+    for (let a = 0; a < 9; a += .2) { const rr = rad * (1 - a / 10); g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
+    g.stroke();
+  }
+  g.fillStyle = 'rgba(244,238,222,.85)';
+  for (let k = 0; k < 40; k++) { g.beginPath(); g.arc(ix + 6 + r() * (is - 12), iy + 6 + r() * (is - 12), 1.3, 0, 7); g.fill(); }
+  // gold letter with ink outline
+  const font = `bold ${Math.round(is * .96)}px ${SERIF}`;
+  goldPass(P, tg => {
+    tg.font = font; tg.textAlign = 'center'; tg.fillStyle = goldGrad(tg, ix, iy, is, is);
+    tg.fillText(letter, ix + is / 2, iy + is * .84);
+  });
+  g.font = font; g.textAlign = 'center'; g.strokeStyle = '#2c1708'; g.lineWidth = 2.2;
+  g.strokeText(letter, ix + is / 2, iy + is * .84); g.textAlign = 'left';
+  g.strokeStyle = '#3b1c0c'; g.lineWidth = 1.6; g.strokeRect(x + .8, y + .8, s - 1.6, s - 1.6); g.strokeRect(ix, iy, is, is);
+  vine(P, x - 30, y + 30, vineLen, 1);
+}
+
+function penInitial(P, letter, x, y, size, color) {
+  const { g } = P;
+  g.font = `${size}px ${SERIF}`; g.fillStyle = color; g.fillText(letter, x, y);
+  const w = g.measureText(letter).width;
+  g.strokeStyle = color === RED ? BLUE : RED; g.lineWidth = 1;
+  for (let k = 0; k < 7; k++) {
+    const yy = y - size * .8 + k * size * .2;
+    g.beginPath(); g.moveTo(x - 6, yy);
+    g.bezierCurveTo(x - 22, yy + 4, x - 16, yy + 14, x - 8, yy + 10); g.stroke();
+  }
+  g.beginPath(); g.moveTo(x - 10, y + 4); g.bezierCurveTo(x - 14, y + 60, x - 2, y + 120, x - 12, y + 190); g.stroke();
+  for (let k = 0; k < 6; k++) { const yy = y + 20 + k * 30; g.beginPath(); g.arc(x - 10 + Math.sin(k) * 3, yy, 3, 0, 7); g.stroke(); }
+  return w;
+}
+
+/* ---------- individual pages ---------- */
+function marbled(P, seed) {
+  const { g } = P, r = rng(seed), im = g.getImageData(0, 0, TW, TH), d = im.data;
+  const pal = [[29, 40, 78], [142, 48, 38], [198, 158, 82], [232, 220, 192], [24, 28, 40], [70, 96, 120]];
+  const ph = Array.from({ length: 6 }, () => r() * 6.28);
+  for (let y = 0; y < TH; y++) {
+    const v = y / TH;
+    for (let x = 0; x < TW; x++) {
+      const u = x / TW;
+      let f = v * 22 + 1.4 * Math.sin(u * 6.3 + v * 4 + ph[0]) + .8 * Math.sin(u * 15 + ph[1] + v * 9)
+        + .35 * Math.sin(u * 41 + v * 3 + ph[2]) + .22 * Math.sin(u * 140 + ph[3]) * Math.sin(v * 30 + ph[4]);
+      f += .5 * Math.sin(v * 70 + u * 12 + ph[5]);
+      const b = f - Math.floor(f), idx = Math.floor(f) % 5, col = pal[(idx + 5) % 5];
+      const vein = Math.max(0, 1 - Math.abs(b - .5) * 24);
+      const k = (y * TW + x) * 4, m = .55 + .45 * (b < .5 ? 1 - b * .4 : .8 + b * .2);
+      d[k] = d[k] * (1 - m) + (col[0] * (1 - vein) + 205 * vein) * m * (d[k] / 236);
+      d[k + 1] = d[k + 1] * (1 - m) + (col[1] * (1 - vein) + 170 * vein) * m * (d[k + 1] / 220);
+      d[k + 2] = d[k + 2] * (1 - m) + (col[2] * (1 - vein) + 110 * vein) * m * (d[k + 2] / 187);
+    }
+  }
+  g.putImageData(im, 0, 0);
+}
+
+function page0(P) { // marbled paste-down with a bookplate
+  marbled(P, 11);
+  const { g } = P, x = 300, y = 520, w = 430, h = 300;
+  g.save(); g.shadowColor = 'rgba(30,15,5,.35)'; g.shadowBlur = 8; g.shadowOffsetY = 2;
+  g.fillStyle = '#efe2c4'; g.fillRect(x, y, w, h); g.restore();
+  g.strokeStyle = INK; g.lineWidth = 2.5; g.strokeRect(x + 14, y + 14, w - 28, h - 28);
+  g.lineWidth = .8; g.strokeRect(x + 20, y + 20, w - 40, h - 40);
+  drawSpaced(g, 'EX LIBRIS', x + w / 2, y + 86, 30, 9, RED);
+  centerText(g, 'Bibliothecae', x + w / 2, y + 138, `italic 30px ${SERIF}`, INK);
+  drawSpaced(g, 'SCRIPTORIVM', x + w / 2, y + 190, 38, 6, INK);
+  centerText(g, '❧  N° 1642  ❧', x + w / 2, y + 245, `italic 22px ${SERIF}`, '#5b3d22');
+}
+
+function page1(P) { // title page
+  const { g } = P, cx = TW / 2 + 23;
+  g.strokeStyle = INK; g.lineWidth = 3; g.strokeRect(120, 110, TW - 210, TH - 230);
+  g.lineWidth = 1; g.strokeRect(132, 122, TW - 234, TH - 254);
+  drawSpaced(g, 'LIBER', cx, 300, 36, 14, INK);
+  drawSpaced(g, 'MIRABILIVM', cx, 400, 76, 8, RED);
+  centerText(g, 'seu', cx, 458, `italic 32px ${SERIF}`, INK);
+  drawSpaced(g, 'DE MVNDI ARCANIS', cx, 520, 38, 7, INK);
+  centerText(g, 'tractatus, in quo caeli, terrae, marisque', cx, 580, `italic 26px ${SERIF}`, INK);
+  centerText(g, 'secreta ex veterum libris explicantur.', cx, 614, `italic 26px ${SERIF}`, INK);
+  g.fillStyle = INK; g.fillRect(cx - 160, 660, 320, 1.5);
+  // printer's device: an oil lamp in a wreath
+  const dy = 860;
+  g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.arc(cx, dy, 112, 0, 7); g.stroke();
+  g.lineWidth = .8; g.beginPath(); g.arc(cx, dy, 104, 0, 7); g.stroke();
+  textOnArc(g, 'LVCET · ET · ARDET ·', cx, dy, 88, -Math.PI / 2, 17, RED, 2.5);
+  for (let k = 0; k < 18; k++) {
+    const a = Math.PI * .15 + k / 17 * Math.PI * .7, rr = 76;
+    for (const s of [-1, 1]) {
+      const aa = Math.PI / 2 + s * (a - Math.PI / 2) * 1, px = cx + Math.cos(aa) * rr, py = dy + Math.sin(aa) * rr;
+      g.save(); g.translate(px, py); g.rotate(aa + s * .8);
+      g.beginPath(); g.ellipse(0, 0, 9, 3.5, 0, 0, 7); g.fillStyle = '#3d5a2a'; g.fill(); g.restore();
+    }
+  }
+  g.fillStyle = INK;
+  g.beginPath(); g.moveTo(cx - 46, dy + 26); g.bezierCurveTo(cx - 40, dy + 2, cx + 20, dy + 2, cx + 52, dy + 6);
+  g.lineTo(cx + 22, dy + 26); g.bezierCurveTo(cx + 10, dy + 36, cx - 30, dy + 38, cx - 46, dy + 26); g.fill();
+  g.fillRect(cx - 14, dy + 34, 28, 6); g.fillRect(cx - 24, dy + 40, 48, 5);
+  goldPass(P, tg => {
+    tg.fillStyle = goldGrad(tg, cx + 30, dy - 50, 40, 60);
+    tg.beginPath(); tg.moveTo(cx + 52, dy + 4); tg.bezierCurveTo(cx + 34, dy - 16, cx + 50, dy - 34, cx + 56, dy - 52);
+    tg.bezierCurveTo(cx + 64, dy - 30, cx + 74, dy - 14, cx + 52, dy + 4); tg.fill();
+  });
+  drawSpaced(g, 'VENETIIS,', cx, 1090, 28, 6, INK);
+  centerText(g, 'Apud Io. Scriptorium, ad signum Lucernae.', cx, 1136, `italic 25px ${SERIF}`, INK);
+  drawSpaced(g, 'M. DC. XLII.', cx, 1200, 30, 8, RED);
+}
+
+function page2(P) { // celestial plate
+  const { g, r } = P, cx = 535, cy = 730, R = 330;
+  runningHead(P, 'DE MVNDO');
+  drawSpaced(g, 'SYSTEMA MVNDI', cx, 222, 40, 7, RED);
+  centerText(g, 'secundum veterum sententiam', cx, 262, `italic 24px ${SERIF}`, INK);
+  const ring = (r0, r1, fill) => { g.beginPath(); g.arc(cx, cy, r0, 0, 7); g.arc(cx, cy, r1, 7, 0, true); g.fillStyle = fill; g.fill(); };
+  ring(R, R - 46, 'rgba(58,86,140,.24)');
+  ring(R - 46, R - 98, 'rgba(196,150,70,.26)');
+  ring(62, 52, 'rgba(206,92,48,.28)'); ring(52, 44, 'rgba(150,190,210,.25)'); ring(44, 36, 'rgba(70,110,170,.25)');
+  g.strokeStyle = INK;
+  for (const [rad, lw] of [[R, 2.4], [R - 4, .8], [R - 46, 1.4], [R - 98, 1.4], [R - 104, .8], [62, 1], [52, .8], [44, .8], [36, 1.2]]) {
+    g.lineWidth = lw; g.beginPath(); g.arc(cx, cy, rad, 0, 7); g.stroke();
+  }
+  for (let k = 0; k < 360; k += 2) {
+    const a = k * Math.PI / 180, l = k % 10 === 0 ? 6 : 3;
+    g.lineWidth = .7; g.beginPath();
+    g.moveTo(cx + Math.cos(a) * (R - 98), cy + Math.sin(a) * (R - 98));
+    g.lineTo(cx + Math.cos(a) * (R - 98 + l), cy + Math.sin(a) * (R - 98 + l)); g.stroke();
+  }
+  const signs = ['ARIES', 'TAVRVS', 'GEMINI', 'CANCER', 'LEO', 'VIRGO', 'LIBRA', 'SCORPIO', 'SAGITTAR.', 'CAPRICOR.', 'AQVARIVS', 'PISCES'];
+  signs.forEach((s, k) => {
+    const a = -Math.PI / 2 + k * Math.PI / 6;
+    g.lineWidth = 1; g.beginPath();
+    g.moveTo(cx + Math.cos(a) * (R - 46), cy + Math.sin(a) * (R - 46)); g.lineTo(cx + Math.cos(a) * (R - 92), cy + Math.sin(a) * (R - 92)); g.stroke();
+    textOnArc(g, s, cx, cy, R - 78, a + Math.PI / 12, 17, k % 2 ? RED : INK, 1.5);
+  });
+  for (let k = 0; k < 70; k++) {
+    const a = r() * Math.PI * 2, rr = R - 10 - r() * 30;
+    star(g, cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 2 + r() * 3.5, 1, 5, r());
+    g.fillStyle = INK; g.fill();
+  }
+  const planets = [['Luna', 78, '#c9c3b0'], ['Mercurius', 106, '#9a8f7e'], ['Venus', 134, '#d8c58c'], ['Sol', 164, null],
+    ['Mars', 192, '#b4523a'], ['Iuppiter', 216, '#c79a5a'], ['Saturnus', 238, '#7e7462']];
+  planets.forEach(([name, rad, col], k) => {
+    g.lineWidth = .9; g.setLineDash(k % 2 ? [] : [5, 4]); g.beginPath(); g.arc(cx, cy, rad, 0, 7); g.stroke(); g.setLineDash([]);
+    const a = -2.1 + k * 0.83, px = cx + Math.cos(a) * rad, py = cy + Math.sin(a) * rad;
+    if (col) {
+      g.beginPath(); g.arc(px, py, 8, 0, 7); g.fillStyle = col; g.fill(); g.lineWidth = 1.2; g.stroke();
+    } else {
+      goldPass(P, tg => {
+        tg.fillStyle = goldGrad(tg, px - 30, py - 30, 60, 60);
+        star(tg, px, py, 30, 17, 16); tg.fill();
+      });
+      g.lineWidth = 1; star(g, px, py, 30, 17, 16); g.stroke();
+      g.beginPath(); g.arc(px, py, 15, 0, 7); g.stroke();
+      g.fillStyle = INK; g.beginPath(); g.arc(px - 5, py - 3, 1.6, 0, 7); g.arc(px + 5, py - 3, 1.6, 0, 7); g.fill();
+      g.beginPath(); g.arc(px, py + 2, 6, .3, Math.PI - .3); g.stroke();
+    }
+    g.font = `italic 15px ${SERIF}`; g.fillStyle = INK; g.textAlign = 'center';
+    g.fillText(name, px, py + (col ? 24 : 46)); g.textAlign = 'left';
+  });
+  // the Earth
+  g.save(); g.beginPath(); g.arc(cx, cy, 36, 0, 7); g.clip();
+  g.fillStyle = 'rgba(120,140,90,.35)'; g.fillRect(cx - 40, cy - 40, 80, 80);
+  g.strokeStyle = 'rgba(42,26,14,.6)'; g.lineWidth = .8;
+  for (let yy = -36; yy < 36; yy += 4) { g.beginPath(); g.moveTo(cx - 36, cy + yy); g.lineTo(cx + 36, cy + yy); g.stroke(); }
+  g.restore();
+  centerText(g, 'TERRA', cx, cy + 6, `15px ${SERIF}`, INK);
+  // comet (later addition, breaking the ring)
+  const hx = 784, hy = 422;
+  for (let k = 0; k < 26; k++) {
+    const a = -0.95 + (r() - .5) * .34, len = 90 + r() * 120;
+    g.strokeStyle = `rgba(42,26,14,${.25 + r() * .4})`; g.lineWidth = .6 + r() * .8;
+    g.beginPath(); g.moveTo(hx, hy);
+    g.quadraticCurveTo(hx + Math.cos(a) * len * .5, hy + Math.sin(a) * len * .5 - 6, hx + Math.cos(a) * len, hy + Math.sin(a) * len - 14); g.stroke();
+  }
+  goldPass(P, tg => { tg.fillStyle = goldGrad(tg, hx - 14, hy - 14, 28, 28); star(tg, hx, hy, 14, 6, 8); tg.fill(); });
+  g.strokeStyle = INK; g.lineWidth = 1; star(g, hx, hy, 14, 6, 8); g.stroke();
+  centerText(g, 'Cometa', hx - 4, hy + 40, `italic 16px ${SERIF}`, RED);
+  centerText(g, 'Fig. II.  Orbium caelestium ordo, cum stella vagante anni MDCXVIII.', cx, 1112, `italic 22px ${SERIF}`, INK);
+  const toks = latin(r, 12, 'Haec figura ordinem orbium ostendit, quem veteres philosophi tradiderunt; terra in medio immota, circa eam elementa, deinde septem errantes, ultimo firmamentum cum signis.');
+  setText(P, toks, 134, 1166, 802, 4, { size: 20, lh: 28 });
+}
+
+function page3(P) { // illuminated text page
+  const { g, r } = P, { x0, w, colW, col2 } = pageGeom(3);
+  runningHead(P, 'LIBER SECVNDVS');
+  drawSpaced(g, 'DE MVNDO, ET AN FINITVS SIT.  CAP. I.', x0 + w / 2, 210, 21, 3.2, RED);
+  // The chapter opens with a full-measure paragraph beside the initial, then breaks into two
+  // columns below it, so the text never has to squeeze into a sliver next to the M.
+  const S = 170;
+  illuminatedInitial(P, 'M', x0, 232, S, 236);
+  const lead = 'VNDVM et hoc quodcumque nomine alio caelum appellare libuit, cuius circumflexu teguntur cuncta, numen esse credi par est, aeternum, inmensum, neque genitum neque interiturum umquam. Huius extera indagare nec interest hominum nec capit humanae coniectura mentis. Sacer est, aeternus, inmensus, totus in toto, immo vero ipse totum, infinitus ac finito similis, omnium rerum certus et similis incerto, extra intra cuncta conplexus in se, idemque rerum naturae opus et rerum ipsa natura.';
+  setText(P, latin(r, 0, lead), x0, 258, w, 8, { indentLines: 6, indentPx: S + 22, size: 22, lh: 30 });
+  centerText(g, '❧', x0 + w / 2, 512, `22px ${SERIF}`, RED);
+  const toks = latin(r, 60, 'Mundum autem finitum esse plerique veterum docent, quoniam omne quod movetur certo ordine movetur, et ordo sine fine esse non potest.');
+  const top = 556, rows = 25;
+  let i = setText(P, toks, x0, top, colW, rows);
+  setText(P, toks, col2, top, colW, rows, { start: i });
+  catchword(P, 'mundus');
+  // marginal gloss
+  g.font = `italic 15px ${SERIF}`; g.fillStyle = '#4a3220';
+  ['Plin. lib. II.', 'cap. i.'].forEach((t, k) => g.fillText(t, TW - 124, 300 + k * 20));
+  g.fillStyle = 'rgba(120,70,40,.75)';
+  ['nota bene', 'de comete', 'fol. 47'].forEach((t, k) => g.fillText(t, TW - 124, 760 + k * 20));
+}
+
+function page4(P) {
+  const { g, r } = P, { x0, w, colW, col2, left } = pageGeom(4);
+  runningHead(P, 'DE STELLIS');
+  drawSpaced(g, 'DE STELLIS ERRANTIBVS.  CAP. II.', x0 + w / 2, 210, 21, 3.2, RED);
+  penInitial(P, 'Q', x0, 330, 104, BLUE);
+  const toks = latin(r, 70, 'VAE autem stellae errantes dicuntur, non quod errent, sed quod cursum suum vario modo peragant, nunc citius, nunc tardius.');
+  let i = setText(P, toks, x0, 252, colW, 36, { indentLines: 3, indentPx: 84 });
+  setText(P, toks, col2, 252, colW, 36, { start: i });
+  g.font = `italic 15px ${SERIF}`; g.fillStyle = '#4a3220';
+  ['Ptol. Alm.', 'lib. IX.'].forEach((t, k) => g.fillText(t, 22, 420 + k * 20));
+  ['Saturnus', 'tardissimus.'].forEach((t, k) => g.fillText(t, 22, 980 + k * 20));
+}
+
+function armillary(P, cx, cy, R) {
+  const { g } = P;
+  g.strokeStyle = INK; g.lineWidth = 1.6;
+  g.beginPath(); g.arc(cx, cy, R, 0, 7); g.stroke();
+  g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, R - 6, 0, 7); g.stroke();
+  g.fillStyle = 'rgba(196,150,70,.3)';
+  g.beginPath(); g.ellipse(cx, cy, R, R * .3, -.41, 0, 7); g.ellipse(cx, cy, R - 12, R * .3 - 12, -.41, 7, 0, true); g.fill();
+  g.lineWidth = 1.2;
+  for (const [rx, ry, rot] of [[R, R * .3, -.41], [R, R * .22, .0], [R * .26, R, .0], [R, R * .3, .41]]) {
+    g.beginPath(); g.ellipse(cx, cy, rx, ry, rot, 0, 7); g.stroke();
+  }
+  g.beginPath(); g.moveTo(cx - Math.sin(.41) * R * 1.18, cy - Math.cos(.41) * R * 1.18);
+  g.lineTo(cx + Math.sin(.41) * R * 1.18, cy + Math.cos(.41) * R * 1.18); g.stroke();
+  g.beginPath(); g.arc(cx, cy, 12, 0, 7); g.fillStyle = 'rgba(70,110,170,.4)'; g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(cx, cy + R); g.lineTo(cx, cy + R + 30);
+  g.moveTo(cx - 40, cy + R + 40); g.lineTo(cx + 40, cy + R + 40); g.moveTo(cx - 30, cy + R + 30); g.lineTo(cx + 30, cy + R + 30);
+  g.lineWidth = 2; g.stroke();
+}
+
+function page5(P) {
+  const { g, r } = P, { x0, w, colW, col2 } = pageGeom(5);
+  runningHead(P, 'LIBER SECVNDVS');
+  const toks = latin(r, 80, 'Sphaera vero, quam armillarem vocant, ex circulis conficitur, qui caeli motus imitantur.');
+  let i = setText(P, toks, x0, 210, colW, 38);
+  i = setText(P, toks, col2, 210, colW, 12, { start: i });
+  armillary(P, col2 + colW / 2, 650, 140);
+  centerText(g, 'Sphaera armillaris.', col2 + colW / 2, 870, `italic 20px ${SERIF}`, RED);
+  setText(P, toks, col2, 918, colW, 13, { start: i });
+  catchword(P, 'circuli');
+}
+
+function islandPts(cx, cy, rx, ry, r) {
+  const ph = [r() * 6, r() * 6, r() * 6, r() * 6], pts = [];
+  for (let k = 0; k < 220; k++) {
+    const a = k / 220 * Math.PI * 2;
+    const rr = 1 + .17 * Math.sin(2 * a + ph[0]) + .11 * Math.sin(3 * a + ph[1]) + .07 * Math.sin(6 * a + ph[2]) + .04 * Math.sin(13 * a + ph[3]) + (r() - .5) * .035;
+    pts.push([cx + Math.cos(a) * rx * rr, cy + Math.sin(a) * ry * rr]);
+  }
+  return pts;
+}
+function trace(g, pts, s, cx, cy) {
+  g.beginPath();
+  pts.forEach(([x, y], k) => { const X = cx + (x - cx) * s, Y = cy + (y - cy) * s; k ? g.lineTo(X, Y) : g.moveTo(X, Y); });
+  g.closePath();
+}
+
+function page6(P) { // map plate
+  const { g, r } = P, fx = 134, fy = 196, fw = 802, fh = 990;
+  runningHead(P, 'DE INSVLIS');
+  g.fillStyle = 'rgba(96,128,140,.13)'; g.fillRect(fx, fy, fw, fh);
+  g.save(); g.beginPath(); g.rect(fx, fy, fw, fh); g.clip();
+  // rhumb lines from the rose
+  const rx = 776, ry = 400;
+  for (let k = 0; k < 32; k++) {
+    const a = k * Math.PI / 16;
+    g.strokeStyle = k % 4 === 0 ? 'rgba(42,26,14,.32)' : (k % 2 ? 'rgba(60,110,70,.22)' : 'rgba(150,50,30,.25)');
+    g.lineWidth = k % 4 === 0 ? 1 : .7;
+    g.beginPath(); g.moveTo(rx, ry); g.lineTo(rx + Math.cos(a) * 1600, ry + Math.sin(a) * 1600); g.stroke();
+  }
+  const isl = [[420, 540, 160, 100, 'Insula Ferrea'], [650, 860, 120, 150, 'Hesperis'], [250, 900, 46, 36, 'Thule minor'], [870, 640, 30, 22, '']];
+  isl.forEach(([cx, cy, ax, ay, name]) => {
+    const pts = islandPts(cx, cy, ax, ay, r);
+    for (let k = 7; k >= 1; k--) { trace(g, pts, 1 + k * 18 / Math.max(ax, ay), cx, cy); g.strokeStyle = `rgba(42,26,14,${.32 - k * .035})`; g.lineWidth = .8; g.stroke(); }
+    trace(g, pts, 1, cx, cy); g.fillStyle = '#eadcb9'; g.fill(); g.fillStyle = 'rgba(176,150,84,.42)'; g.fill();
+    g.strokeStyle = INK; g.lineWidth = 1.8; g.stroke();
+    trace(g, pts, .94, cx, cy); g.strokeStyle = 'rgba(70,100,50,.4)'; g.lineWidth = 4; g.stroke();
+    for (let k = 0; k < ax * ay / 900; k++) {
+      const mx = cx + (r() - .5) * ax * 1.1, my = cy + (r() - .5) * ay * 1.0;
+      if (r() < .55) {
+        g.beginPath(); g.moveTo(mx - 9, my); g.lineTo(mx, my - 13); g.lineTo(mx + 9, my);
+        g.strokeStyle = INK; g.lineWidth = 1.2; g.stroke();
+        g.lineWidth = .6; for (let h = 1; h < 4; h++) { g.beginPath(); g.moveTo(mx + h * 2.2, my - 13 + h * 3.2); g.lineTo(mx + h * 2.2 - 1, my); g.stroke(); }
+      } else {
+        g.beginPath(); g.arc(mx, my - 6, 4, 0, 7); g.fillStyle = 'rgba(70,100,50,.6)'; g.fill(); g.strokeStyle = INK; g.lineWidth = .8; g.stroke();
+        g.beginPath(); g.moveTo(mx, my - 2); g.lineTo(mx, my + 2); g.stroke();
+      }
+    }
+    if (name) centerText(g, name, cx, cy + ay + 34, `italic 21px ${SERIF}`, INK);
+  });
+  // sea serpent
+  g.strokeStyle = INK; g.lineWidth = 2; g.fillStyle = 'rgba(60,90,70,.45)';
+  for (let k = 0; k < 4; k++) { g.beginPath(); g.arc(300 + k * 30, 700, 13, Math.PI, 0); g.fill(); g.stroke(); }
+  g.beginPath(); g.moveTo(287, 700); g.quadraticCurveTo(270, 676, 254, 684); g.lineTo(262, 694); g.lineTo(250, 700); g.stroke();
+  drawSpaced(g, 'MARE TENEBROSVM', 360, 1080, 22, 9, 'rgba(42,26,14,.8)', { italic: true });
+  g.restore();
+  // compass rose
+  for (let k = 0; k < 16; k++) {
+    const a = -Math.PI / 2 + k * Math.PI / 8, L = k % 2 ? 46 : (k % 4 ? 64 : 84), bw = k % 2 ? 7 : 10;
+    const tip = [rx + Math.cos(a) * L, ry + Math.sin(a) * L];
+    const l = [rx + Math.cos(a - Math.PI / 2) * bw, ry + Math.sin(a - Math.PI / 2) * bw];
+    const rr = [rx + Math.cos(a + Math.PI / 2) * bw, ry + Math.sin(a + Math.PI / 2) * bw];
+    g.beginPath(); g.moveTo(rx, ry); g.lineTo(...l); g.lineTo(...tip); g.closePath(); g.fillStyle = k % 4 === 0 ? RED : INK; g.fill();
+    g.beginPath(); g.moveTo(rx, ry); g.lineTo(...rr); g.lineTo(...tip); g.closePath(); g.fillStyle = '#efe3c6'; g.fill();
+    g.strokeStyle = INK; g.lineWidth = .9; g.stroke();
+  }
+  g.beginPath(); g.arc(rx, ry, 30, 0, 7); g.strokeStyle = INK; g.lineWidth = .8; g.stroke();
+  goldPass(P, tg => { tg.fillStyle = goldGrad(tg, rx - 9, ry - 9, 18, 18); tg.beginPath(); tg.arc(rx, ry, 9, 0, 7); tg.fill(); });
+  centerText(g, 'N', rx, ry - 92, `bold 22px ${SERIF}`, RED);
+  // neat-line with degree band
+  g.strokeStyle = INK; g.lineWidth = 2.4; g.strokeRect(fx, fy, fw, fh);
+  g.lineWidth = .8; g.strokeRect(fx - 9, fy - 9, fw + 18, fh + 18);
+  for (let k = 0; k < fw / 20; k++) if (k % 2) { g.fillStyle = INK; g.fillRect(fx + k * 20, fy - 9, 20, 4); g.fillRect(fx + k * 20, fy + fh + 5, 20, 4); }
+  for (let k = 0; k < fh / 20; k++) if (k % 2) { g.fillRect(fx - 9, fy + k * 20, 4, 20); g.fillRect(fx + fw + 5, fy + k * 20, 4, 20); }
+  // cartouche
+  const cx0 = 160, cy0 = 226, cw = 300, ch = 92;
+  g.fillStyle = '#efe2c3'; g.fillRect(cx0, cy0, cw, ch); g.strokeStyle = INK; g.lineWidth = 1.6; g.strokeRect(cx0, cy0, cw, ch);
+  g.lineWidth = .7; g.strokeRect(cx0 + 5, cy0 + 5, cw - 10, ch - 10);
+  drawSpaced(g, 'INSVLAE OBSCVRAE', cx0 + cw / 2, cy0 + 44, 21, 2.5, RED);
+  centerText(g, 'nova et accurata descriptio', cx0 + cw / 2, cy0 + 74, `italic 18px ${SERIF}`, INK);
+  // scale
+  g.fillStyle = INK; for (let k = 0; k < 5; k++) if (!(k % 2)) g.fillRect(170 + k * 34, 1150, 34, 6);
+  g.strokeRect(170, 1150, 170, 6);
+  g.font = `italic 15px ${SERIF}`; g.fillText('Milliaria', 222, 1140);
+  centerText(g, 'Tab. VII.', TW / 2 + 23, 1250, `italic 22px ${SERIF}`, INK);
+}
+
+function page7(P) {
+  const { g, r } = P, { x0, w, colW, col2 } = pageGeom(7);
+  runningHead(P, 'LIBER SECVNDVS');
+  drawSpaced(g, 'DE INSVLIS INCOGNITIS.  CAP. III.', x0 + w / 2, 210, 21, 3.2, RED);
+  penInitial(P, 'N', x0, 330, 104, RED);
+  const toks = latin(r, 80, 'AVIGANTES ultra columnas insulas multas viderunt, quarum aliae ferro abundant, aliae nebula perpetua teguntur.');
+  let i = setText(P, toks, x0, 252, colW, 36, { indentLines: 3, indentPx: 84 });
+  setText(P, toks, col2, 252, colW, 36, { start: i });
+  catchword(P, 'aquae');
+}
+
+function page8(P) {
+  const { g, r } = P, { x0, w } = pageGeom(8);
+  runningHead(P, 'CARMEN');
+  drawSpaced(g, 'CARMEN DE LVCE', x0 + w / 2, 240, 30, 6, RED);
+  centerText(g, 'ad lucernam scriptoris', x0 + w / 2, 280, `italic 22px ${SERIF}`, INK);
+  let y = 360;
+  for (let s = 0; s < 6; s++) {
+    for (let l = 0; l < 4; l++) {
+      const toks = latin(r, 1);
+      const words = toks.filter(t => !t.para).slice(0, 5 + Math.floor(r() * 3));
+      words[words.length - 1].w = words[words.length - 1].w.replace(/[.;:,]$/, l === 3 ? '.' : ',');
+      if (l === 0) { words[0] = { w: words[0].w[0], red: true }; }
+      const line = words.map(t => t.w).join(' ').replace(/^(\S) /, '$1');
+      g.font = `${23}px ${SERIF}`; g.fillStyle = INK;
+      const xx = x0 + 120 + (l % 2) * 34;
+      if (l === 0) { g.fillStyle = s % 2 ? BLUE : RED; g.font = `30px ${SERIF}`; g.fillText(line[0], xx - 4, y); g.font = `23px ${SERIF}`; g.fillStyle = INK; g.fillText(line.slice(1), xx + 18, y); }
+      else g.fillText(line, xx, y);
+      y += 33;
+    }
+    y += 24;
+  }
+}
+
+function page9(P) {
+  const { g, r } = P, { x0, w, colW, col2 } = pageGeom(9);
+  runningHead(P, 'LIBER SECVNDVS');
+  const toks = latin(r, 80, 'Quattuor sunt elementa, ignis, aer, aqua, terra, quae inter se qualitatibus conveniunt et repugnant.');
+  let i = setText(P, toks, x0, 210, colW, 38);
+  i = setText(P, toks, col2, 210, colW, 10, { start: i });
+  const cx = col2 + colW / 2, cy = 640, R = 140;
+  const q = [['IGNIS', 'rgba(200,80,40,.3)'], ['AER', 'rgba(200,180,100,.3)'], ['AQVA', 'rgba(70,110,170,.3)'], ['TERRA', 'rgba(110,130,70,.3)']];
+  q.forEach(([name, col], k) => {
+    const a0 = -Math.PI / 2 - Math.PI / 4 + k * Math.PI / 2;
+    g.beginPath(); g.moveTo(cx, cy); g.arc(cx, cy, R, a0, a0 + Math.PI / 2); g.closePath(); g.fillStyle = col; g.fill();
+    textOnArc(g, name, cx, cy, R - 26, a0 + Math.PI / 4, 18, INK, 3);
+  });
+  g.strokeStyle = INK; g.lineWidth = 1.6; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.stroke();
+  g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, R - 48, 0, 7); g.stroke();
+  g.beginPath(); g.moveTo(cx, cy - R + 48); g.lineTo(cx + R - 48, cy); g.lineTo(cx, cy + R - 48); g.lineTo(cx - R + 48, cy); g.closePath(); g.stroke();
+  ['calidum', 'humidum', 'frigidum', 'siccum'].forEach((t, k) => {
+    const a = -Math.PI / 4 + k * Math.PI / 2;
+    centerText(g, t, cx + Math.cos(a) * 52, cy + Math.sin(a) * 52 + 5, `italic 14px ${SERIF}`, RED);
+  });
+  centerText(g, 'Elementorum quadratura.', cx, cy + R + 44, `italic 20px ${SERIF}`, RED);
+  setText(P, toks, col2, 880, colW, 14, { start: i });
+  catchword(P, 'ignis');
+}
+
+function page10(P) { // colophon
+  const { g, r } = P, { x0, w } = pageGeom(10), cx = x0 + w / 2;
+  runningHead(P, 'FINIS');
+  const toks = latin(r, 30, 'Explicit liber secundus de mundi arcanis, scriptus ad lucernam, anno salutis millesimo sexcentesimo quadragesimo secundo, mense Octobri.');
+  let i = 0, y = 260;
+  for (let l = 0; l < 14; l++) {
+    const lw = 640 - l * 42; if (lw < 80) break;
+    i = setText(P, toks, cx - lw / 2, y, lw, 1, { start: i, size: 22, lh: 32, center: l > 9 });
+    y += 32;
+  }
+  drawSpaced(g, 'FINIS.', cx, y + 70, 40, 12, RED);
+  centerText(g, '❦', cx, y + 140, `46px ${SERIF}`, INK);
+  centerText(g, 'Laus Deo.', cx, y + 200, `italic 26px ${SERIF}`, INK);
+}
+
+function page11(P) { marbled(P, 23); }
+
+const PAGE_FNS = [page0, page1, page2, page3, page4, page5, page6, page7, page8, page9, page10, page11];
+
+function buildPage(i, base) {
+  const c = makeCanvas(TW, TH), g = c.getContext('2d');
+  const mask = makeCanvas(TW, TH).getContext('2d');
+  g.save();
+  if (i & 1) { g.translate(TW, 0); g.scale(-1, 1); }
+  if (i & 2) { g.translate(0, TH); g.scale(1, -1); }
+  g.drawImage(base, 0, 0); g.restore();
+  const P = { g, mask, i, r: rng(1000 + i * 77) };
+  stains(P, 8 + Math.floor(P.r() * 14));
+  PAGE_FNS[i](P);
+  // printed ink sits slightly into the paper: a whisper of the paper colour back on top
+  g.globalCompositeOperation = 'multiply'; g.globalAlpha = .18; g.drawImage(base, 0, 0);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'destination-out'; g.globalAlpha = .5;
+  g.drawImage(mask.canvas, 0, 0);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  return c;
+}
+
+/* ======================================================================================
+   WebGL
+   ====================================================================================== */
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, premultipliedAlpha: false });
+if (!gl) { document.getElementById('nogl').style.display = 'grid'; return; }
+
+const COMMON = `
+precision highp float;
+uniform vec3 uLampPos, uLampDir, uCamPos;
+uniform vec2 uRes;
+uniform float uLampInt, uExposure;
+vec3 toLin(vec3 c){ return pow(c, vec3(2.2)); }
+float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+vec2 hash22(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * vec3(.1031,.1030,.0973)); p3 += dot(p3, p3.yzx+33.33); return fract((p3.xx+p3.yz)*p3.zy); }
+float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.-2.*f);
+  float a = hash12(i), b = hash12(i+vec2(1,0)), c = hash12(i+vec2(0,1)), d = hash12(i+vec2(1,1));
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y); }
+float fbm(vec2 p){ float s = 0., a = .5; mat2 m = mat2(1.6,1.2,-1.2,1.6);
+  for (int i = 0; i < 5; i++){ s += a*vnoise(p); p = m*p + 17.1; a *= .5; } return s; }
+const vec3 LAMP_COL = vec3(1.0, 0.82, 0.62);
+vec3 lampRad(vec3 P, out vec3 L){
+  vec3 d = uLampPos - P; float dist = length(d); L = d / dist;
+  // a lamp-shade pool: soft elliptical falloff on the desk plane, centred up-left of the book
+  vec2 q = (P.xy - vec2(-0.22, 0.14)) * vec2(0.80, 1.0);
+  float pool = 1. - smoothstep(0.30, 2.05, length(q));
+  pool = pool*pool*(3. - 2.*pool);
+  pool = 0.07 + 0.93*pool;
+  return LAMP_COL * uLampInt * pool / pow(dist, 1.5);
+}
+vec3 ambientRad(vec3 N){ return vec3(0.024, 0.018, 0.014) * (0.55 + 0.45*N.z); }
+vec3 finish(vec3 col){
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec2 q = (uv - vec2(0.47, 0.55)); q.x *= uRes.x / uRes.y;
+  float vig = 1. - smoothstep(0.32, 1.05, length(q * vec2(0.82, 1.0)));
+  col *= mix(0.22, 1.0, vig);
+  col *= uExposure;
+  col = (col*(2.51*col+0.03))/(col*(2.43*col+0.59)+0.14);
+  col = pow(clamp(col, 0., 1.), vec3(1./2.2));
+  col += (hash12(gl_FragCoord.xy + fract(uRes.x*0.1)) - 0.5) / 255.;
+  return col;
+}
+`;
+
+const VS_QUAD = `#version 300 es
+layout(location=0) in vec2 aPos; out vec2 vNdc;
+void main(){ vNdc = aPos; gl_Position = vec4(aPos, 0., 1.); }`;
+
+const FS_DESK = `#version 300 es
+${COMMON}
+in vec2 vNdc; out vec4 fragColor;
+uniform mat4 uInvVP; uniform vec4 uBook; uniform float uPx; uniform vec2 uBookHalf;
+vec4 wood(vec2 p){
+  const float PW = 0.84;
+  float yy = p.y + 0.41;
+  float pid = floor(yy / PW), py = yy - pid*PW;
+  float r1 = hash12(vec2(pid,1.37)), r2 = hash12(vec2(pid,7.71)), r3 = hash12(vec2(pid,4.13));
+  float Lb = 3.6 + 2.4*r1;
+  float xx = p.x + r2*9.0 + 4.0;
+  float jid = floor(xx / Lb), jx = xx - jid*Lb;
+  float sd = pid*17.0 + jid*3.0 + 0.5;
+  float s1 = hash12(vec2(sd,2.3)), s2 = hash12(vec2(sd,5.9)), s3 = hash12(vec2(sd,9.4));
+  vec2 b = vec2(jx - Lb*0.5 + (s1-0.5)*1.4, py - PW*0.5);
+  float w1 = fbm(vec2(b.x*0.32 + s2*31.0, b.y*1.3 + s3*17.0));
+  float w2 = fbm(vec2(b.x*1.1 + 11.0 + s1*9., b.y*4.2));
+  float cy = (s3 - 0.5)*0.9 + 0.25*sign(s3 - 0.5);
+  float rr = length(vec2(b.x*(0.09 + 0.08*s2), b.y - cy + 0.30*(w1 - 0.5)));
+  float ring = rr*26.0 + w1*3.0 + w2*0.8 + 2.6*fbm(vec2(b.x*0.12 + s1*7., b.y*5.0));
+  float t = fract(ring);
+  float late = smoothstep(0.50, 0.95, t) - smoothstep(0.95, 1.0, t);
+  float streak = fbm(vec2(b.x*1.7 + s1*50., b.y*52.0 + w1*6.0));
+  float fine = vnoise(vec2(b.x*5.0, b.y*360.0 + w2*20.0));
+  float pore = smoothstep(0.80, 0.97, vnoise(vec2(b.x*60.0, b.y*900.0 + w1*40.0))) * (0.35 + 0.65*late);
+  float figure = fbm(vec2(b.x*0.6 + s2*20., b.y*2.2 + 3.0));
+  float band = fbm(vec2(b.x*0.5 + s2*13., b.y*13.0 + w1*3.0));
+  float hair = fbm(vec2(b.x*2.6 + s3*40., b.y*170.0 + w2*12.0));
+  late *= 0.35 + 0.9*fbm(vec2(b.x*0.9 + s1*5., b.y*3.0 + 9.0));
+  // oiled black walnut: chocolate-brown with grey-violet undertones, not orange
+  vec3 cLight = vec3(0.365, 0.268, 0.198);
+  vec3 cMid   = vec3(0.222, 0.153, 0.110);
+  vec3 cDark  = vec3(0.086, 0.057, 0.045);
+  float fine2 = vnoise(vec2(b.x*16.0 + s1*7., b.y*1500.0 + w1*30.0));
+  float d = late*0.36 + (streak-0.5)*0.34 + (band-0.5)*0.38 + (hair-0.5)*0.62 + (fine-0.5)*0.34 + (fine2-0.5)*0.2
+          + (figure-0.5)*0.4 + (r3-0.5)*0.2;
+  vec3 col = mix(cLight, cMid, smoothstep(-0.15, 0.35, d));
+  col = mix(col, cDark, smoothstep(0.28, 0.98, d));
+  col = mix(col, cDark*0.8, pore*0.5);
+  col *= mix(vec3(1.0), vec3(1.035, 0.985, 0.95), s2);
+  float seamD = min(min(py, PW - py), min(jx, Lb - jx));
+  float seam = 1.0 - smoothstep(0.0, 0.0035, seamD);
+  col *= 1.0 - 0.72*seam;
+  float h = -late*0.1 - pore*0.35 + (streak-0.5)*0.05 + fine*0.03 - (1.0 - smoothstep(0.0, 0.006, seamD))*1.4;
+  return vec4(col, h);
+}
+float sdBox(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q,0.)) + min(max(q.x,q.y),0.) - r; }
+void main(){
+  vec4 a = uInvVP*vec4(vNdc, -1., 1.); a /= a.w;
+  vec4 b = uInvVP*vec4(vNdc, 1., 1.); b /= b.w;
+  vec3 dir = b.xyz - a.xyz; vec3 P = a.xyz + dir*(-a.z/dir.z);
+  float e = max(uPx, 0.0005);
+  vec4 w0 = wood(P.xy);
+  float hx = wood(P.xy + vec2(e, 0.)).w, hy = wood(P.xy + vec2(0., e)).w;
+  vec3 N = normalize(vec3((w0.w - hx)/e*0.0007, (w0.w - hy)/e*0.0007, 1.));
+  vec3 alb = toLin(w0.rgb);
+  vec3 L; vec3 rad = lampRad(P, L);
+  vec3 V = normalize(uCamPos - P);
+  vec2 lp = P.xy - uBook.zw; lp = vec2(uBook.x*lp.x + uBook.y*lp.y, -uBook.y*lp.x + uBook.x*lp.y);
+  float sdb = sdBox(lp, uBookHalf, 0.014);
+  vec2 off = -normalize(L.xy) * 0.075;
+  float contact = 1. - smoothstep(-0.003, 0.03, sdb);
+  float drop = 1. - smoothstep(-0.13, 0.20, sdBox(lp - off, uBookHalf*0.985, 0.06));
+  float occl = (1. - 0.85*contact) * (1. - 0.72*drop);
+  float ndl = max(dot(N, L), 0.);
+  vec3 Hh = normalize(L + V);
+  vec3 Nc = normalize(mix(vec3(0,0,1), N, 0.3));
+  float nhc = max(dot(Nc, Hh), 0.);
+  float fres = 0.04 + 0.96*pow(1. - max(dot(Nc, V), 0.), 5.);
+  vec3 col = alb * (rad*ndl*occl + ambientRad(N)*(1. - 0.6*contact));
+  // hand-rubbed oil finish: a broad satin sheen rather than a lacquer highlight
+  float gloss = 1.0 - 0.6*smoothstep(-0.9, -0.2, -w0.w);
+  col += rad * occl * (pow(nhc, 22.)*0.045 + pow(nhc, 5.)*0.018) * (0.6 + fres) * gloss;
+  fragColor = vec4(finish(col), 1.);
+}`;
+
+const FS_BLIT = `#version 300 es
+precision highp float; uniform sampler2D uTex; uniform vec2 uRes; out vec4 fragColor;
+void main(){ fragColor = texture(uTex, gl_FragCoord.xy / uRes); }`;
+
+const VS_BOOK = `#version 300 es
+layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNor; layout(location=2) in vec2 aUV;
+uniform mat4 uVP, uModel;
+out vec3 vW, vL, vN, vNL; out vec2 vUV;
+void main(){ vec4 w = uModel*vec4(aPos, 1.); vW = w.xyz; vL = aPos; vNL = aNor; vN = mat3(uModel)*aNor; vUV = aUV; gl_Position = uVP*w; }`;
+
+const FS_BOOK = `#version 300 es
+${COMMON}
+in vec3 vW, vL, vN, vNL; in vec2 vUV; out vec4 fragColor;
+uniform int uMode; uniform vec2 uBoard; uniform vec2 uBlock;
+float voro(vec2 x){ vec2 n = floor(x), f = fract(x); float f1 = 8., f2 = 8.;
+  for (int j=-1;j<=1;j++) for (int i=-1;i<=1;i++){ vec2 g = vec2(i,j); vec2 r = g + hash22(n+g) - f; float d = dot(r,r);
+    if (d < f1){ f2 = f1; f1 = d; } else if (d < f2) f2 = d; }
+  return sqrt(f2) - sqrt(f1); }
+float leatherH(vec2 p){ return smoothstep(0.0, 0.35, voro(p*270.))*0.32 + fbm(p*70.)*0.33 + fbm(p*9.)*0.35; }
+void main(){
+  vec3 N = normalize(vN);
+  vec3 L; vec3 rad = lampRad(vW, L);
+  vec3 V = normalize(uCamPos - vW);
+  vec3 alb; float specK = 0.15, specP = 30., metal = 0.;
+  if (uMode == 4) { // soft ribbon shadow on the desk
+    float a = smoothstep(0., .5, vUV.x) * smoothstep(1., .5, vUV.x) * 0.5;
+    fragColor = vec4(0.03, 0.015, 0.0, a); return;
+  }
+  if (uMode == 0) { // leather boards
+    bool top = vNL.z > 0.5;
+    vec2 p = top ? vL.xy : vec2(vL.x + vL.y, vL.z*3.0);
+    float e = 0.0009;
+    float h0 = leatherH(p), hx = leatherH(p + vec2(e,0.)), hy = leatherH(p + vec2(0.,e));
+    float de = top ? min(uBoard.x - abs(vL.x), uBoard.y - abs(vL.y)) : 0.0;
+    float wear = top ? (1. - smoothstep(0.0, 0.03, de)) : 0.75;
+    wear *= 0.45 + 0.75*fbm(p*14.);
+    vec3 tb = top ? vec3((h0-hx)/e, (h0-hy)/e, 0.)*0.0008 : vec3(0.);
+    if (top) {
+      vec2 out2 = (uBoard.x - abs(vL.x) < uBoard.y - abs(vL.y)) ? vec2(sign(vL.x), 0.) : vec2(0., sign(vL.y));
+      float bev = 1. - smoothstep(0.0, 0.007, de);
+      tb.xy += out2 * bev * 0.9;
+    } else {
+      tb = vec3(0., 0., (vL.z/${C.toFixed(4)} - 0.5)*0.8);
+    }
+    N = normalize(N + mat3(1.)*tb);
+    vec3 base = vec3(0.25, 0.115, 0.07);
+    vec3 crease = vec3(0.15, 0.065, 0.04);
+    vec3 worn = vec3(0.44, 0.27, 0.16);
+    alb = mix(crease, base, smoothstep(0.25, 0.75, h0));
+    alb = mix(alb, worn, clamp(wear, 0., 1.)*0.85);
+    alb *= 0.9 + 0.2*fbm(p*3.);
+    specK = 0.22*smoothstep(0.2, 0.8, h0) + 0.08; specP = 26.;
+    // gilt roll along the turn-ins
+    if (top) {
+      float inBlock = step(abs(vL.x), uBlock.x + 0.004) * step(abs(vL.y), uBlock.y + 0.004);
+      float dl = abs(de - 0.017);
+      float along = abs(vL.x) > uBoard.x - 0.03 ? vL.y : vL.x;
+      float dots = step(0.5, fract(along*95.));
+      float g1 = (1. - smoothstep(0.0011, 0.0022, dl));
+      float g2 = (1. - smoothstep(0.0018, 0.003, abs(de - 0.026))) * dots;
+      float gold = max(g1, g2*0.6) * (1. - inBlock) * smoothstep(0.3, 0.6, fbm(p*30.) + 0.1);
+      alb = mix(alb, vec3(0.62, 0.43, 0.15), gold);
+      metal = gold;
+    }
+    alb = toLin(alb);
+  } else if (uMode == 1) { // page-block edges
+    float along = vL.x + vL.y;
+    float lines = vnoise(vec2(along*3.0, vL.z*1500.)) * 0.6 + vnoise(vec2(along*9.0, vL.z*4200.))*0.4;
+    float grime = fbm(vec2(along*6., vL.z*80.));
+    vec3 c = mix(vec3(0.80, 0.69, 0.50), vec3(0.62, 0.50, 0.33), lines*0.7 + grime*0.4);
+    float sp = step(0.955, hash12(floor(vec2(along, vL.z*1.5)*620.)));
+    c = mix(c, vec3(0.55, 0.20, 0.12), sp*0.55);
+    c *= 0.86 + 0.14*smoothstep(0.0, 1.0, vUV.y);
+    alb = toLin(c); specK = 0.03; specP = 10.;
+  } else if (uMode == 2) { // headband
+    float st = step(0.5, fract(vL.x*150.));
+    alb = toLin(mix(vec3(0.52, 0.10, 0.10), vec3(0.85, 0.74, 0.50), st));
+    specK = 0.25; specP = 20.;
+  } else { // silk ribbon
+    float weave = 0.85 + 0.15*vnoise(vec2(vUV.x*40., vUV.y*900.));
+    alb = toLin(vec3(0.54, 0.075, 0.085)*weave);
+    specK = 0.3; specP = 18.;
+  }
+  float ndl = max(dot(N, L), 0.);
+  vec3 Hh = normalize(L + V);
+  float nh = max(dot(N, Hh), 0.);
+  vec3 col = alb*(rad*ndl + ambientRad(N));
+  if (uMode == 1) col += alb * rad * 0.42;   // bounce from the lit desk onto the page edges
+  col += rad * (specK*pow(nh, specP)) * mix(vec3(1.), vec3(1.0, 0.75, 0.38)*2.5, metal);
+  col += rad * metal * pow(nh, 6.) * 0.3 * vec3(1.0, 0.75, 0.38);
+  fragColor = vec4(finish(col), 1.);
+}`;
+
+const FS_PAGE = `#version 300 es
+${COMMON}
+in vec3 vW, vL, vN, vNL; in vec2 vUV; out vec4 fragColor;
+uniform sampler2D uTexA, uTexB;
+uniform int uLeaf; uniform float uSide;
+uniform vec4 uShR, uShL, uAo; uniform float uShStr, uLeafAO;
+void main(){
+  bool front = (uLeaf == 0) || gl_FrontFacing;
+  float s = vUV.x;
+  vec2 tuv = vec2((uLeaf == 1 ? front : uSide > 0.) ? s : 1. - s, 1. - vUV.y);
+  vec4 tx = front ? texture(uTexA, tuv) : texture(uTexB, tuv);
+  vec3 N = normalize(vN); if (!front) N = -N;
+  vec3 L; vec3 rad = lampRad(vW, L);
+  vec3 V = normalize(uCamPos - vW);
+  vec3 alb = toLin(tx.rgb);
+  float gold = clamp((1. - tx.a)*2.2, 0., 1.);
+  float ndl = dot(N, L);
+  vec3 col = alb * (rad*max(ndl, 0.)*(1. - 0.3*gold) + ambientRad(N));
+  if (uLeaf == 1) {
+    // light through the leaf: warm glow plus a ghost of the ink on the other side
+    vec2 ouv = vec2(1. - tuv.x, tuv.y);
+    vec3 other = toLin((front ? texture(uTexB, ouv) : texture(uTexA, ouv)).rgb);
+    col += mix(alb, other, 0.45) * rad * max(-ndl, 0.) * 0.28 * vec3(1.0, 0.82, 0.55);
+    // fill bounced up from the lit pages and desk, so a leaf turned away from the lamp stays readable
+    col += alb * rad * 0.085 * (0.6 + 0.4 * abs(N.x));
+  }
+  vec3 Hh = normalize(L + V);
+  float nh = max(dot(N, Hh), 0.);
+  vec3 spec = rad * (pow(nh, 16.)*0.035 + pow(nh, 80.)*0.025);
+  spec += rad * gold * alb * (pow(nh, 40.)*3.0 + pow(nh, 8.)*0.35);
+  float fresnelRim = pow(1. - abs(dot(N, V)), 4.) * 0.06;
+  float sh = 1.;
+  float ao = mix(0.30, 1.0, smoothstep(0.0, 0.17, s)) * mix(0.7, 1.0, smoothstep(0.0, 0.035, s));
+  if (uLeaf == 1) ao = mix(1.0, ao, uLeafAO);
+  sh *= ao;
+  if (uLeaf == 0) {
+    float x = vL.x, t = vUV.y;
+    if (uSide > 0.) {
+      float edge = mix(uShR.x, uShR.y, t), pen = mix(uShR.z, uShR.w, t);
+      sh *= 1. - uShStr * (1. - smoothstep(edge - pen*0.25, edge + pen, x));
+      sh *= 1. - uAo.z * (1. - smoothstep(0., uAo.w, x - uAo.x));
+    } else {
+      float edge = mix(uShL.x, uShL.y, t), pen = mix(uShL.z, uShL.w, t);
+      sh *= 1. - uShStr * smoothstep(edge - pen, edge + pen*0.25, x);
+      sh *= 1. - uAo.z * (1. - smoothstep(0., uAo.w, uAo.y - x));
+    }
+  }
+  col = col*sh + (spec + rad*fresnelRim*alb)*sh;
+  fragColor = vec4(finish(col), 1.);
+}`;
+
+function compile(vs, fs) {
+  const mk = (type, src) => {
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) + '\n' + src.split('\n').map((l, i) => (i + 1) + ': ' + l).join('\n'));
+    return s;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  p.loc = {};
+  return p;
+}
+const progDesk = compile(VS_QUAD, FS_DESK), progBlit = compile(VS_QUAD, FS_BLIT);
+const progBook = compile(VS_BOOK, FS_BOOK), progPage = compile(VS_BOOK, FS_PAGE);
+function U(p, name) { if (!(name in p.loc)) p.loc[name] = gl.getUniformLocation(p, name); return p.loc[name]; }
+
+function mesh(pos, nor, uv, idx, dynamic) {
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const mk = (data, loc, size) => {
+    const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, data, dynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); return b;
+  };
+  const m = { vao, pb: mk(pos, 0, 3), nb: mk(nor, 1, 3), ub: mk(uv, 2, 2), count: idx ? idx.length : pos.length / 3, indexed: !!idx };
+  if (idx) { const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW); }
+  gl.bindVertexArray(null);
+  return m;
+}
+function updateMesh(m, pos, nor, uv) {
+  gl.bindBuffer(gl.ARRAY_BUFFER, m.pb); gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos);
+  gl.bindBuffer(gl.ARRAY_BUFFER, m.nb); gl.bufferSubData(gl.ARRAY_BUFFER, 0, nor);
+  if (uv) { gl.bindBuffer(gl.ARRAY_BUFFER, m.ub); gl.bufferSubData(gl.ARRAY_BUFFER, 0, uv); }
+}
+function drawMesh(m) {
+  gl.bindVertexArray(m.vao);
+  if (m.indexed) gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_SHORT, 0); else gl.drawArrays(gl.TRIANGLES, 0, m.count);
+}
+
+const quadVao = (() => {
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null); return vao;
+})();
+
+/* ---------- geometry builders ---------- */
+const gridIdx = (() => {
+  const a = [];
+  for (let j = 0; j < NT; j++) for (let i = 0; i < NS; i++) {
+    const p = j * (NS + 1) + i, q = p + 1, r = p + NS + 1, s = r + 1;
+    a.push(p, q, r, q, s, r);
+  }
+  return new Uint16Array(a);
+})();
+const gridUV = (() => {
+  const a = new Float32Array((NS + 1) * (NT + 1) * 2);
+  for (let j = 0; j <= NT; j++) for (let i = 0; i <= NS; i++) { const k = (j * (NS + 1) + i) * 2; a[k] = i / NS; a[k + 1] = j / NT; }
+  return a;
+})();
+
+function boxFaces(x0, x1, y0, y1, z0, z1) {
+  const P = [], N = [], T = [];
+  const quad = (a, b, c, d, n) => { for (const v of [a, b, c, a, c, d]) { P.push(...v); N.push(...n); T.push(0, 0); } };
+  quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1]);
+  quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0]);
+  quad([x1, y1, z0], [x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [0, 1, 0]);
+  quad([x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], [1, 0, 0]);
+  quad([x0, y1, z0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [-1, 0, 0]);
+  return [new Float32Array(P), new Float32Array(N), new Float32Array(T)];
+}
+const BOARD = [W + O, H / 2 + O];
+const coverMesh = mesh(...boxFaces(-BOARD[0], BOARD[0], -BOARD[1], BOARD[1], 0, C), null, false);
+
+function headbandMesh() {
+  const P = [], N = [], T = [];
+  for (const sy of [-1, 1]) {
+    const yc = sy * (H / 2 + 0.003), zc = C + 0.002, r = 0.0075;
+    for (let i = 0; i < 10; i++) for (let k = 0; k < 12; k++) {
+      const x0 = -0.03 + i * 0.006, x1 = x0 + 0.006, a0 = k / 12 * Math.PI, a1 = (k + 1) / 12 * Math.PI;
+      const n = a => [0, Math.cos(a), Math.sin(a)];
+      for (const [x, a] of [[x0, a0], [x1, a0], [x1, a1], [x0, a0], [x1, a1], [x0, a1]]) { P.push(x, yc + Math.cos(a) * r, zc + Math.sin(a) * r); N.push(...n(a)); T.push(0, 0); }
+    }
+  }
+  return mesh(new Float32Array(P), new Float32Array(N), new Float32Array(T), null, false);
+}
+const hbMesh = headbandMesh();
+
+function ribbonMeshes() {
+  const yb = -BOARD[1];
+  // out from the gutter at the tail, over the block and board edge, then a lazy S on the desk
+  const ctrl = [[0.0, -H / 2 + 0.05, C + ZG * 0.4], [0.002, -H / 2 + 0.004, C + 0.004], [0.005, yb - 0.004, 0.012],
+    [0.011, yb - 0.035, 0.0012], [0.026, yb - 0.085, 0.0012], [0.066, yb - 0.128, 0.0012], [0.13, yb - 0.158, 0.0012],
+    [0.205, yb - 0.17, 0.0012], [0.25, yb - 0.168, 0.0012]];
+  const cr = (p0, p1, p2, p3, t) => p1.map((_, k) => 0.5 * ((2 * p1[k]) + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t * t + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t * t * t));
+  const pts = [];
+  for (let s = 0; s < ctrl.length - 1; s++) for (let k = 0; k < 12; k++) {
+    const p0 = ctrl[Math.max(0, s - 1)], p1 = ctrl[s], p2 = ctrl[s + 1], p3 = ctrl[Math.min(ctrl.length - 1, s + 2)];
+    pts.push(cr(p0, p1, p2, p3, k / 12));
+  }
+  pts.push(ctrl[ctrl.length - 1]);
+  const build = (halfW, dz, ox, oy) => {
+    const P = [], N = [], T = [];
+    const n = pts.length;
+    let len = 0;
+    for (let i = 0; i < n - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const tx = b[0] - a[0], ty = b[1] - a[1], tz = b[2] - a[2], tl = Math.hypot(tx, ty, tz);
+      const sx = -ty / Math.hypot(tx, ty), sy = tx / Math.hypot(tx, ty);
+      const last = i === n - 2;
+      const l0 = len, l1 = len + tl; len = l1;
+      const A = [a[0] - sx * halfW + ox, a[1] - sy * halfW + oy, a[2] + dz], B = [a[0] + sx * halfW + ox, a[1] + sy * halfW + oy, a[2] + dz];
+      let Cc = [b[0] + sx * halfW + ox, b[1] + sy * halfW + oy, b[2] + dz], D = [b[0] - sx * halfW + ox, b[1] - sy * halfW + oy, b[2] + dz];
+      if (last) { // swallowtail cut
+        const mx = (a[0] + b[0]) / 2 + ox, my = (a[1] + b[1]) / 2 + oy;
+        const notch = [mx, my, b[2] + dz];
+        for (const [v, u] of [[A, 0], [notch, .5], [D, 0], [B, 1], [Cc, 1], [notch, .5]]) { P.push(...v); N.push(0, 0, 1); T.push(u, l0); }
+        continue;
+      }
+      const nrm = (() => { const ux = tx / tl, uy = ty / tl, uz = tz / tl; const cx = sy * uz, cy = -sx * uz, cz = sx * uy - sy * ux; const m = Math.hypot(cx, cy, cz); return [cx / m, cy / m, cz / m]; })();
+      const nn = nrm[2] < 0 ? nrm.map(v => -v) : nrm;
+      for (const [v, u, l] of [[A, 0, l0], [B, 1, l0], [Cc, 1, l1], [A, 0, l0], [Cc, 1, l1], [D, 0, l1]]) { P.push(...v); N.push(...nn); T.push(u, l); }
+    }
+    return mesh(new Float32Array(P), new Float32Array(N), new Float32Array(T), null, false);
+  };
+  return { ribbon: build(0.0135, 0.0004, 0, 0), shadow: build(0.024, 0.0002, 0.009, -0.008) };
+}
+const ribbon = ribbonMeshes();
+
+/* ---------- page block curves ---------- */
+function stackCurve(h) {
+  const lam = 0.15, droop = 0.012, rise = h - ZG;
+  const phiAt = (p0, s) => p0 * Math.exp(-s / lam) - droop * 3 * (s / W) * (s / W);
+  const riseOf = p0 => { let z = 0; for (let i = 0; i < NS; i++) z += Math.sin(phiAt(p0, (i + .5) * DS)) * DS; return z; };
+  let lo = 0, hi = 1.5;
+  for (let it = 0; it < 28; it++) {
+    const m = (lo + hi) / 2;
+    if (riseOf(m) < rise) lo = m; else hi = m;
+  }
+  const p0 = (lo + hi) / 2;
+  const phi = new Float64Array(NS + 1), x = new Float64Array(NS + 1), z = new Float64Array(NS + 1);
+  for (let i = 0; i <= NS; i++) phi[i] = phiAt(p0, i * DS);
+  z[0] = ZG;
+  for (let i = 0; i < NS; i++) { const ph = (phi[i] + phi[i + 1]) / 2; x[i + 1] = x[i] + Math.cos(ph) * DS; z[i + 1] = z[i] + Math.sin(ph) * DS; }
+  return { phi, x, z, h };
+}
+
+const stackPos = [new Float32Array((NS + 1) * (NT + 1) * 3), new Float32Array((NS + 1) * (NT + 1) * 3)];
+const stackNor = [new Float32Array((NS + 1) * (NT + 1) * 3), new Float32Array((NS + 1) * (NT + 1) * 3)];
+const stackMesh = [mesh(stackPos[0], stackNor[0], gridUV, gridIdx, true), mesh(stackPos[1], stackNor[1], gridUV, gridIdx, true)];
+const WALL_N = (NS * 2 + 1) * 6;
+const wallBuf = [0, 1].map(() => ({ p: new Float32Array(WALL_N * 3), n: new Float32Array(WALL_N * 3), t: new Float32Array(WALL_N * 2) }));
+const wallMesh = wallBuf.map(b => mesh(b.p, b.n, b.t, null, true));
+
+function buildStack(k, side, cv) {
+  const P = stackPos[k], N = stackNor[k];
+  for (let j = 0; j <= NT; j++) {
+    const y = -H / 2 + j / NT * H;
+    for (let i = 0; i <= NS; i++) {
+      const o = (j * (NS + 1) + i) * 3, ph = cv.phi[i];
+      P[o] = side * cv.x[i]; P[o + 1] = y; P[o + 2] = C + cv.z[i];
+      N[o] = -side * Math.sin(ph); N[o + 1] = 0; N[o + 2] = Math.cos(ph);
+    }
+  }
+  updateMesh(stackMesh[k], P, N);
+  // walls: fore-edge + head + tail
+  const b = wallBuf[k]; let v = 0;
+  const put = (x, y, z, nx, ny, nz, u, t) => { b.p.set([x, y, z], v * 3); b.n.set([nx, ny, nz], v * 3); b.t.set([u, t], v * 2); v++; };
+  const xe = side * cv.x[NS], ze = C + cv.z[NS];
+  for (const [y, t] of [[-H / 2, 0], [H / 2, 0], [H / 2, 1], [-H / 2, 0], [H / 2, 1], [-H / 2, 1]]) put(xe, y, t ? ze : C, side, 0, 0, y, t);
+  for (const sy of [-1, 1]) {
+    const y = sy * H / 2;
+    for (let i = 0; i < NS; i++) {
+      const xa = side * cv.x[i], xb = side * cv.x[i + 1], za = C + cv.z[i], zb = C + cv.z[i + 1];
+      for (const [x, z, t] of [[xa, C, 0], [xb, C, 0], [xb, zb, 1], [xa, C, 0], [xb, zb, 1], [xa, za, 1]]) put(x, y, z, 0, sy, 0, x, t);
+    }
+  }
+  updateMesh(wallMesh[k], b.p, b.n, b.t);
+}
+
+/* ---------- the turning leaf ----------
+   The leaf is a developable surface: rigid strips hinged on straight rulings, so it can bend
+   but never stretch or shear. Near the spine the rulings run parallel to it (the leaf rolls up
+   off the gutter, as in C). Further out they fan to a slant whose direction follows the row the
+   reader is holding, so a dragged corner leads the turn. The bend profile along the leaf
+   blends the resting curve of the right block into the mirrored curve of the left block. */
+const LS = 120, LT = 36;                 // leaf mesh resolution
+const NR = NS + 34;                      // rulings at the block's sample spacing, plus extras past the fore-edge
+const KMAX = 0.5;                        // steepest ruling slant (dx per dy) when a corner leads
+const psiSeg = new Float64Array(NR), rulK = new Float64Array(NR);
+const panR = new Float64Array(NR * 9), panT = new Float64Array(NR * 3);
+const leafPos = new Float32Array((LS + 1) * (LT + 1) * 3), leafNor = new Float32Array((LS + 1) * (LT + 1) * 3);
+const leafIdx = (() => {
+  const a = [];
+  for (let j = 0; j < LT; j++) for (let i = 0; i < LS; i++) {
+    const p = j * (LS + 1) + i, q = p + 1, r = p + LS + 1, s = r + 1;
+    a.push(p, q, r, q, s, r);
+  }
+  return new Uint16Array(a);
+})();
+const leafUV = (() => {
+  const a = new Float32Array((LS + 1) * (LT + 1) * 2);
+  for (let j = 0; j <= LT; j++) for (let i = 0; i <= LS; i++) { const k = (j * (LS + 1) + i) * 2; a[k] = i / LS; a[k + 1] = j / LT; }
+  return a;
+})();
+const leafMesh = mesh(leafPos, leafNor, leafUV, leafIdx, true);
+
+/** Tangent angle of each strip (0 = lying flat on the right, PI = flat on the left). */
+function leafProfile(p, cR, cL) {
+  const sp = Math.sin(Math.PI * p);
+  const aS = smooth(0.06, 0.94, p);                                // the hinge at the spine
+  const aE = p + 0.27 * sp * (Math.cos(Math.PI * p) + 0.3);        // the free edge: leads, then floats down behind
+  const gam = 1.15 + 1.8 * Math.pow(1 - sp, 2);
+  for (let i = 0; i < NR; i++) {
+    const k = Math.min(i, NS - 1);
+    const f = Math.pow((i + .5) / NS, gam);
+    const a = clamp(aS + (aE - aS) * f, 0, 1);
+    psiSeg[i] = (1 - a) * (cR.phi[k] + cR.phi[k + 1]) * .5 + a * (Math.PI - (cL.phi[k] + cL.phi[k + 1]) * .5);
+  }
+}
+
+/** Compose the rigid transform of every strip, walking out from the spine. */
+function leafPanels(p, grabT, bias, cR, cL) {
+  leafProfile(p, cR, cL);
+  const env = smooth(0, 0.08, p) * smooth(0, 0.08, 1 - p);
+  // the held row leads; lifting a corner toward the middle of the book steepens the diagonal
+  const kc = KMAX * clamp(1 - 2 * grabT + 1.6 * bias, -1, 1) * env;
+  for (let i = 0; i < NR; i++) rulK[i] = kc * smooth(0.12, 0.75, i * DS / W);
+  const c0 = Math.cos(psiSeg[0]), s0 = Math.sin(psiSeg[0]);
+  panR.set([c0, 0, -s0, 0, 1, 0, s0, 0, c0], 0);
+  panT[0] = 0; panT[1] = 0; panT[2] = C + ZG;
+  for (let i = 1; i < NR; i++) {
+    const b = psiSeg[i - 1] - psiSeg[i];              // rotate by -delta about the ruling: +delta lifts the outer side
+    const n = Math.hypot(rulK[i], 1), dx = rulK[i] / n, dy = 1 / n;
+    const cb = Math.cos(b), sb = Math.sin(b), ic = 1 - cb;
+    // Rodrigues: Q = cos(b) I + sin(b) [d]x + (1 - cos(b)) d d^T, with d = (dx, dy, 0)
+    const q00 = cb + ic * dx * dx, q01 = ic * dx * dy, q02 = sb * dy;
+    const q10 = ic * dx * dy, q11 = cb + ic * dy * dy, q12 = -sb * dx;
+    const q20 = -sb * dy, q21 = sb * dx, q22 = cb;
+    const o = (i - 1) * 9, m = i * 9, si = i * DS;
+    for (let r = 0; r < 3; r++) {
+      const a0 = panR[o + r * 3], a1 = panR[o + r * 3 + 1], a2 = panR[o + r * 3 + 2];
+      panR[m + r * 3] = a0 * q00 + a1 * q10 + a2 * q20;
+      panR[m + r * 3 + 1] = a0 * q01 + a1 * q11 + a2 * q21;
+      panR[m + r * 3 + 2] = a0 * q02 + a1 * q12 + a2 * q22;
+      // the ruling's midpoint (si, 0) must land in the same place under both strips
+      panT[i * 3 + r] = panR[o + r * 3] * si + panT[(i - 1) * 3 + r] - panR[m + r * 3] * si;
+    }
+  }
+}
+
+/** Strip that intrinsic point (s, y) belongs to, searching forward from `from`. */
+function stripAt(s, y, from) {
+  let k = from;
+  while (k + 1 < NR && (k + 1) * DS + rulK[k + 1] * y <= s) k++;
+  return k;
+}
+function leafPoint(s, y) {
+  const k = stripAt(s, y, 0), m = k * 9;
+  return [panR[m] * s + panR[m + 1] * y + panT[k * 3], panR[m + 3] * s + panR[m + 4] * y + panT[k * 3 + 1],
+    panR[m + 6] * s + panR[m + 7] * y + panT[k * 3 + 2]];
+}
+
+function buildLeaf(p, grabT, bias, cR, cL) {
+  leafPanels(p, grabT, bias, cR, cL);
+  const P = leafPos, N = leafNor;
+  for (let j = 0; j <= LT; j++) {
+    const y = -H / 2 + j / LT * H;
+    let k = 0;
+    for (let i = 0; i <= LS; i++) {
+      const s = i / LS * W;
+      k = stripAt(s, y, k);
+      const m = k * 9, o = (j * (LS + 1) + i) * 3;
+      // smooth shading: blend toward the neighbouring strips' normals across the strip
+      const x0 = k * DS + rulK[k] * y, x1 = (k + 1) * DS + (k + 1 < NR ? rulK[k + 1] : rulK[k]) * y;
+      const f = clamp((s - x0) / Math.max(x1 - x0, 1e-6), 0, 1);
+      const mp = Math.max(k - 1, 0) * 9, mn = Math.min(k + 1, NR - 1) * 9;
+      let nx = panR[m + 2] + (1 - f) * panR[mp + 2] + f * panR[mn + 2];
+      let ny = panR[m + 5] + (1 - f) * panR[mp + 5] + f * panR[mn + 5];
+      let nz = panR[m + 8] + (1 - f) * panR[mp + 8] + f * panR[mn + 8];
+      const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+      N[o] = nx; N[o + 1] = ny; N[o + 2] = nz;
+      // float the leaf a hair above whichever block it lies on (the front normal points down once it has turned)
+      const lift = 0.0016 * clamp(nz * 4, -1, 1);
+      P[o] = panR[m] * s + panR[m + 1] * y + panT[k * 3] + nx * lift;
+      P[o + 1] = panR[m + 3] * s + panR[m + 4] * y + panT[k * 3 + 1] + ny * lift;
+      P[o + 2] = panR[m + 6] * s + panR[m + 7] * y + panT[k * 3 + 2] + nz * lift;
+    }
+  }
+  updateMesh(leafMesh, P, N);
+}
+
+/** Shadow + occlusion the leaf throws on the two blocks (cheap analytic projection). */
+function leafShadows(cR, cL) {
+  const res = { shR: [-9, -9, .01, .01], shL: [9, 9, .01, .01], ao: [-9, 9, 0, .05], str: 0 };
+  const zR = C + cR.h, zL = C + cL.h;
+  let maxLift = 0, aoR = -9, aoL = 9, aoH = 0;
+  for (const [j, slot] of [[0, 0], [LT, 1]]) {
+    let eR = -9, pR = .01, eL = 9, pL = .01;
+    for (let i = 0; i <= LS; i++) {
+      const o = (j * (LS + 1) + i) * 3, x = leafPos[o], y = leafPos[o + 1], z = leafPos[o + 2];
+      const zs = x >= 0 ? zR : zL, lift = z - zs;
+      if (lift > maxLift) maxLift = lift;
+      if (lift <= 0.002) continue;
+      const lx = lampLocal[0] - x, ly = lampLocal[1] - y, lz = lampLocal[2] - z;
+      const xsR = x - lx * (z - zR) / lz, xsL = x - lx * (z - zL) / lz;
+      if (xsR > eR) { eR = xsR; pR = 0.006 + 0.32 * (z - zR); }
+      if (xsL < eL) { eL = xsL; pL = 0.006 + 0.32 * (z - zL); }
+      if (x > aoR) aoR = x;
+      if (x < aoL) aoL = x;
+      if (lift > aoH) aoH = lift;
+    }
+    res.shR[slot] = eR; res.shR[slot + 2] = pR; res.shL[slot] = eL; res.shL[slot + 2] = pL;
+  }
+  res.str = 0.5 * smooth(0.0, 0.05, maxLift);   // paper is translucent: a leaf never throws a black shadow
+  res.ao = [aoR, aoL, 0.32 * smooth(0.0, 0.12, maxLift), 0.04 + 0.5 * aoH];
+  return res;
+}
+
+/* ---------- textures ---------- */
+const anisoExt = gl.getExtension('EXT_texture_filter_anisotropic');
+function uploadTexture(c) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  if (anisoExt) gl.texParameterf(gl.TEXTURE_2D, anisoExt.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(anisoExt.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  return t;
+}
+const pageTex = new Array(NPAGES).fill(null);
+
+/* ======================================================================================
+   Camera, matrices
+   ====================================================================================== */
+const M4 = {
+  persp(fovy, aspect, n, f) { const t = 1 / Math.tan(fovy / 2), nf = 1 / (n - f); return new Float32Array([t / aspect, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) * nf, -1, 0, 0, 2 * f * n * nf, 0]); },
+  lookAt(e, c, up) {
+    let zx = e[0] - c[0], zy = e[1] - c[1], zz = e[2] - c[2]; let l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l;
+    let xx = up[1] * zz - up[2] * zy, xy = up[2] * zx - up[0] * zz, xz = up[0] * zy - up[1] * zx; l = Math.hypot(xx, xy, xz); xx /= l; xy /= l; xz /= l;
+    const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+    return new Float32Array([xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0,
+      -xx * e[0] - xy * e[1] - xz * e[2], -yx * e[0] - yy * e[1] - yz * e[2], -zx * e[0] - zy * e[1] - zz * e[2], 1]);
+  },
+  mul(a, b) { const o = new Float32Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; },
+  inv(m) {
+    const o = new Float32Array(16), [a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23, a30, a31, a32, a33] = m;
+    const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11,
+      b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12, b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30,
+      b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+    const d = 1 / (b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06);
+    o[0] = (a11 * b11 - a12 * b10 + a13 * b09) * d; o[1] = (a02 * b10 - a01 * b11 - a03 * b09) * d; o[2] = (a31 * b05 - a32 * b04 + a33 * b03) * d; o[3] = (a22 * b04 - a21 * b05 - a23 * b03) * d;
+    o[4] = (a12 * b08 - a10 * b11 - a13 * b07) * d; o[5] = (a00 * b11 - a02 * b08 + a03 * b07) * d; o[6] = (a32 * b02 - a30 * b05 - a33 * b01) * d; o[7] = (a20 * b05 - a22 * b02 + a23 * b01) * d;
+    o[8] = (a10 * b10 - a11 * b08 + a13 * b06) * d; o[9] = (a01 * b08 - a00 * b10 - a03 * b06) * d; o[10] = (a30 * b04 - a31 * b02 + a33 * b00) * d; o[11] = (a21 * b02 - a20 * b04 - a23 * b00) * d;
+    o[12] = (a11 * b07 - a10 * b09 - a12 * b06) * d; o[13] = (a00 * b09 - a01 * b07 + a02 * b06) * d; o[14] = (a31 * b01 - a30 * b03 - a32 * b00) * d; o[15] = (a20 * b03 - a21 * b01 + a22 * b00) * d;
+    return o;
+  },
+  xf(m, v) { const [x, y, z] = v, w = m[3] * x + m[7] * y + m[11] * z + m[15]; return [(m[0] * x + m[4] * y + m[8] * z + m[12]) / w, (m[1] * x + m[5] * y + m[9] * z + m[13]) / w, (m[2] * x + m[6] * y + m[10] * z + m[14]) / w]; },
+};
+const BOOK_POS = [0, 0.0];
+const cosB = Math.cos(BOOK_ANGLE), sinB = Math.sin(BOOK_ANGLE);
+const MODEL = new Float32Array([cosB, sinB, 0, 0, -sinB, cosB, 0, 0, 0, 0, 1, 0, BOOK_POS[0], BOOK_POS[1], 0, 1]);
+const LAMP = [-2.15, 1.75, 2.7];
+const LAMP_AIM = [-0.22, 0.12, 0];
+const LAMP_DIR = (() => { const d = LAMP_AIM.map((v, i) => v - LAMP[i]), l = Math.hypot(...d); return d.map(v => v / l); })();
+const lampLocal = (() => { const x = LAMP[0] - BOOK_POS[0], y = LAMP[1] - BOOK_POS[1]; return [cosB * x + sinB * y, -sinB * x + cosB * y, LAMP[2]]; })();
+const toLocal = (x, y) => { x -= BOOK_POS[0]; y -= BOOK_POS[1]; return [cosB * x + sinB * y, -sinB * x + cosB * y]; };
+
+// Flat-on, straight down (B's camera). A modest field of view keeps a little perspective on
+// the lifted leaf, which is what sells it standing up off the spine.
+const FOV = 26 * Math.PI / 180;
+const view = { zoom: 1, zoomT: 1, pan: [0, 0], VP: null, invVP: null, eye: null, dpr: 1, w: 1, h: 1, fitDist: 4, pxWorld: .001 };
+
+function updateCamera() {
+  const aspect = view.w / view.h;
+  const halfW = BOARD[0] + 0.05, halfH = BOARD[1] + 0.05;
+  const tY = Math.tan(FOV / 2), tX = tY * aspect;
+  const fitH = view.h < 560 ? 0.9 : 0.8;   // leave room for the toolbar and hint line
+  view.fitDist = Math.max(halfW / (0.9 * tX), halfH / (fitH * tY));
+  const d = view.fitDist / view.zoom;
+  const tgt = [view.pan[0], view.pan[1] - 0.03, 0.0];
+  const eye = [tgt[0], tgt[1], tgt[2] + d];
+  view.eye = eye;
+  const P = M4.persp(FOV, aspect, 0.05, 40), V = M4.lookAt(eye, tgt, [0, 1, 0]);
+  view.VP = M4.mul(P, V); view.invVP = M4.inv(view.VP);
+  view.pxWorld = 2 * d * tY / (view.h * view.dpr);
+}
+
+function resize() {
+  view.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = window.innerWidth; view.h = window.innerHeight;
+  canvas.width = Math.round(view.w * view.dpr); canvas.height = Math.round(view.h * view.dpr);
+  allocDeskFbo(); updateCamera(); deskDirty = true; dirty = true;
+}
+
+let deskFbo = null, deskTex = null, deskDirty = true, dirty = true;
+function allocDeskFbo() {
+  if (deskTex) gl.deleteTexture(deskTex);
+  if (deskFbo) gl.deleteFramebuffer(deskFbo);
+  deskTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, deskTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  deskFbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, deskFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, deskTex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+function project(local) {
+  const w = M4.xf(MODEL, local), c = M4.xf(view.VP, w);
+  return [(c[0] * .5 + .5) * view.w, (1 - (c[1] * .5 + .5)) * view.h];
+}
+function screenToLocal(sx, sy, zPlane) {
+  const nx = sx / view.w * 2 - 1, ny = 1 - sy / view.h * 2;
+  const a = M4.xf(view.invVP, [nx, ny, -1]), b = M4.xf(view.invVP, [nx, ny, 1]);
+  const t = (zPlane - a[2]) / (b[2] - a[2]);
+  return toLocal(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
+}
+
+/* ======================================================================================
+   Book state & page turning
+   ====================================================================================== */
+let spread = clamp(parseInt(params.get('spread') || '1', 10) || 1, 0, NSPREADS - 1);
+let turn = null, queued = 0;
+const F = s => 0.3 + 0.4 * s / (NSPREADS - 1);
+let curR = null, curL = null, curF = -1;
+
+function heights() {
+  let f = F(spread);
+  if (turn) { const base = turn.dir > 0 ? turn.base : turn.base - 1; f = F(base) + (F(base + 1) - F(base)) * turn.p; }
+  return f;
+}
+function refreshStacks() {
+  const f = heights();
+  if (Math.abs(f - curF) < 1e-6 && curR) return;
+  curF = f;
+  curL = stackCurve(0.02 + 0.11 * f); curR = stackCurve(0.02 + 0.11 * (1 - f));
+  buildStack(0, 1, curR); buildStack(1, -1, curL);
+}
+
+function pagesShown() {
+  if (!turn) return { left: 2 * spread, right: 2 * spread + 1 };
+  const s = turn.base;
+  return turn.dir > 0
+    ? { left: 2 * s, right: 2 * s + 3, front: 2 * s + 1, back: 2 * s + 2 }
+    : { left: 2 * s - 2, right: 2 * s + 1, front: 2 * s - 1, back: 2 * s };
+}
+function canTurn(dir) { return dir > 0 ? spread < NSPREADS - 1 : spread > 0; }
+
+function beginTurn(dir, mode, grabT) {
+  if (!canTurn(dir)) return null;
+  turn = { dir, base: spread, p: dir > 0 ? 0 : 1, mode, grabT: grabT ?? 0.18, bias: 0, anim: null, vel: 0 };
+  closeLore();
+  return turn;
+}
+function animateTo(target, dur, ease) {
+  turn.anim = { from: turn.p, to: target, t0: performance.now(), dur: dur * 1000, ease };
+  turn.mode = 'anim';
+}
+function requestTurn(dir) {
+  if (turn && turn.mode === 'anim') {
+    const done = turn.dir > 0 ? 1 : 0;
+    if (turn.anim.to === done && turn.dir === dir) { queued += dir; return; }
+  }
+  if (turn && (turn.mode === 'peek') && turn.dir === dir) { turn.mode = 'anim'; animateTo(dir > 0 ? 1 : 0, 0.95, easeInOut); return; }
+  if (turn) return;
+  if (!beginTurn(dir, 'anim')) return;
+  animateTo(dir > 0 ? 1 : 0, queued ? 0.7 : 0.95, easeInOut);
+}
+function finishTurn() {
+  const done = turn.dir > 0 ? 1 : 0;
+  if (turn.p === done) spread = turn.base + turn.dir;
+  turn = null; curF = -1; refreshStacks(); updateUI();
+  if (queued) { const d = Math.sign(queued); queued -= d; requestTurn(d); }
+}
+function stepTurn(now) {
+  if (!turn || !turn.anim) return;
+  const a = turn.anim, t = clamp((now - a.t0) / a.dur, 0, 1);
+  turn.p = a.from + (a.to - a.from) * a.ease(t);
+  if (t >= 1) { turn.p = a.to; turn.anim = null; if (turn.mode === 'anim' || turn.mode === 'settle') finishTurn(); }
+}
+
+/** Screen-plane x of the grabbed point of the leaf for a given progress (inverted by bisection). */
+function grabX(p, sGrab) {
+  leafPanels(p, turn.grabT, turn.bias, curR, curL);
+  return leafPoint(sGrab, -H / 2 + turn.grabT * H)[0];
+}
+function progressForX(mx, sGrab) {
+  let lo = 0, hi = 1;
+  for (let it = 0; it < 22; it++) {
+    const m = (lo + hi) / 2;
+    if (grabX(m, sGrab) > mx) lo = m; else hi = m;
+  }
+  return (lo + hi) / 2;
+}
+
+/* ======================================================================================
+   Rendering
+   ====================================================================================== */
+function setCommon(p) {
+  gl.uniform3fv(U(p, 'uLampPos'), LAMP); gl.uniform3fv(U(p, 'uLampDir'), LAMP_DIR);
+  gl.uniform3fv(U(p, 'uCamPos'), view.eye); gl.uniform2f(U(p, 'uRes'), canvas.width, canvas.height);
+  gl.uniform1f(U(p, 'uLampInt'), 12.5); gl.uniform1f(U(p, 'uExposure'), 1.0);
+}
+
+function render() {
+  refreshStacks();
+  const shown = pagesShown();
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  if (deskDirty) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, deskFbo);
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
+    gl.useProgram(progDesk); setCommon(progDesk);
+    gl.uniformMatrix4fv(U(progDesk, 'uInvVP'), false, view.invVP);
+    gl.uniform4f(U(progDesk, 'uBook'), cosB, sinB, BOOK_POS[0], BOOK_POS[1]);
+    gl.uniform2f(U(progDesk, 'uBookHalf'), BOARD[0], BOARD[1]);
+    gl.uniform1f(U(progDesk, 'uPx'), view.pxWorld);
+    gl.bindVertexArray(quadVao); gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    deskDirty = false;
+  }
+  gl.disable(gl.DEPTH_TEST);
+  gl.useProgram(progBlit);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, deskTex);
+  gl.uniform1i(U(progBlit, 'uTex'), 0); gl.uniform2f(U(progBlit, 'uRes'), canvas.width, canvas.height);
+  gl.bindVertexArray(quadVao); gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+  // procedural book parts
+  gl.useProgram(progBook); setCommon(progBook);
+  gl.uniformMatrix4fv(U(progBook, 'uVP'), false, view.VP); gl.uniformMatrix4fv(U(progBook, 'uModel'), false, MODEL);
+  gl.uniform2f(U(progBook, 'uBoard'), BOARD[0], BOARD[1]);
+  gl.uniform2f(U(progBook, 'uBlock'), Math.max(curR.x[NS], curL.x[NS]), H / 2);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.uniform1i(U(progBook, 'uMode'), 4); drawMesh(ribbon.shadow);
+  gl.disable(gl.BLEND);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.clear(gl.DEPTH_BUFFER_BIT);
+  gl.uniform1i(U(progBook, 'uMode'), 0); drawMesh(coverMesh);
+  gl.uniform1i(U(progBook, 'uMode'), 1); drawMesh(wallMesh[0]); drawMesh(wallMesh[1]);
+  gl.uniform1i(U(progBook, 'uMode'), 2); drawMesh(hbMesh);
+  gl.uniform1i(U(progBook, 'uMode'), 3); drawMesh(ribbon.ribbon);
+
+  // pages
+  gl.useProgram(progPage); setCommon(progPage);
+  gl.uniformMatrix4fv(U(progPage, 'uVP'), false, view.VP); gl.uniformMatrix4fv(U(progPage, 'uModel'), false, MODEL);
+  gl.uniform1i(U(progPage, 'uTexA'), 0); gl.uniform1i(U(progPage, 'uTexB'), 1);
+  let sh = { shR: [-9, -9, .01, .01], shL: [9, 9, .01, .01], ao: [-9, 9, 0, .05], str: 0 };
+  if (turn) {
+    buildLeaf(turn.p, turn.grabT, turn.bias, curR, curL);
+    sh = leafShadows(curR, curL);
+  }
+  gl.uniform4fv(U(progPage, 'uShR'), sh.shR); gl.uniform4fv(U(progPage, 'uShL'), sh.shL);
+  gl.uniform4fv(U(progPage, 'uAo'), sh.ao); gl.uniform1f(U(progPage, 'uShStr'), sh.str);
+  gl.uniform1i(U(progPage, 'uLeaf'), 0);
+  for (const [k, side, pg] of [[0, 1, shown.right], [1, -1, shown.left]]) {
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, pageTex[pg]);
+    gl.uniform1f(U(progPage, 'uSide'), side); drawMesh(stackMesh[k]);
+  }
+  if (turn) {
+    gl.uniform1i(U(progPage, 'uLeaf'), 1);
+    gl.uniform1f(U(progPage, 'uLeafAO'), 1 - smooth(0.0, 0.12, Math.min(turn.p, 1 - turn.p)));
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, pageTex[shown.front]);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, pageTex[shown.back]);
+    drawMesh(leafMesh);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+  gl.bindVertexArray(null);
+  placeHotspots();
+}
+
+/* ======================================================================================
+   Hotspots, lore card, toolbar
+   ====================================================================================== */
+const HOTSPOTS = [
+  { page: 2, u: 784 / TW, v: 422 / TH, kicker: 'Plate II · Later addition', title: 'Stella Vagans',
+    body: 'In the autumn of 1618 three comets crossed the northern sky. The engraver added this one after the plate was cut, which is why its tail breaks clean through the zodiac ring. A later owner wrote beside it in brown ink: “seen from the abbey roof, the night the bells cracked.”',
+    foot: 'See also Tabula VII' },
+  { page: 3, u: (88 + 85) / TW, v: (232 + 85) / TH, kicker: 'Folio 44 · Illumination', title: 'The Lapis Initial',
+    body: 'The blue ground is ultramarine, ground from Afghan lapis lazuli and once dearer than the gold beside it. Tilt the page toward the lamp: the leaf was laid on raised gesso and burnished with a dog’s tooth, so it still catches light four centuries on.',
+    foot: 'Conservation report, 2019' },
+  { page: 6, u: 420 / TW, v: 540 / TH, kicker: 'Tabula VII · Cartography', title: 'Insula Ferrea',
+    body: 'No such island exists. Sailors told of a shoal that sent compass needles spinning, and the cartographer gave it a coastline anyway. Three later atlases copied it, each drawing it a little larger than the last.',
+    foot: 'Phantom island · cf. Frisland' },
+];
+const hsLayer = document.getElementById('hotspots');
+let showHotspots = true, openLore = -1;
+const hsEls = HOTSPOTS.map((h, k) => {
+  const b = document.createElement('button'); b.className = 'hotspot hidden'; b.setAttribute('aria-label', 'Curator note: ' + h.title);
+  b.addEventListener('pointerdown', e => e.stopPropagation());
+  b.addEventListener('click', e => { e.stopPropagation(); openLore === k ? closeLore() : showLore(k); });
+  hsLayer.appendChild(b); return b;
+});
+
+function hotspotScreen(h) {
+  const shown = pagesShown();
+  let side;
+  if (h.page === shown.left) side = -1; else if (h.page === shown.right) side = 1; else return null;
+  const cv = side > 0 ? curR : curL, s = (side > 0 ? h.u : 1 - h.u) * W;
+  const k = clamp(s / DS, 0, NS), i = Math.min(Math.floor(k), NS - 1), f = k - i;
+  const x = cv.x[i] * (1 - f) + cv.x[i + 1] * f, z = cv.z[i] * (1 - f) + cv.z[i + 1] * f;
+  return project([side * x, H / 2 - h.v * H, C + z + 0.002]);
+}
+function placeHotspots() {
+  const turning = turn && turn.mode !== 'peek';
+  HOTSPOTS.forEach((h, k) => {
+    const el = hsEls[k], pos = turning ? null : hotspotScreen(h);
+    if (!pos || !showHotspots) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    el.style.transform = `translate(${pos[0].toFixed(1)}px, ${pos[1].toFixed(1)}px)`;
+    h.screen = pos;
+  });
+  if (openLore >= 0) positionLore();
+}
+
+const lore = document.getElementById('lore');
+function showLore(k) {
+  const h = HOTSPOTS[k]; openLore = k;
+  document.getElementById('lore-kicker').textContent = h.kicker;
+  document.getElementById('lore-title').textContent = h.title;
+  document.getElementById('lore-body').textContent = h.body;
+  document.getElementById('lore-foot').textContent = h.foot;
+  positionLore();
+  lore.classList.add('open');
+}
+function closeLore() { openLore = -1; lore.classList.remove('open'); }
+function positionLore() {
+  const h = HOTSPOTS[openLore]; if (!h.screen) return;
+  const [x, y] = h.screen, cw = lore.offsetWidth, ch = lore.offsetHeight, gap = 26;
+  const right = x + gap + cw < view.w - 16;
+  const lx = right ? x + gap : x - gap - cw;
+  const ly = clamp(y - ch * 0.42, 16, Math.max(16, view.h - ch - 16));
+  lore.classList.toggle('right', right); lore.classList.toggle('left', !right);
+  lore.style.left = lx + 'px'; lore.style.top = ly + 'px';
+  lore.style.setProperty('--ay', clamp(y - ly, 24, ch - 24) + 'px');
+  lore.style.setProperty('--ox', right ? '0px' : '100%');
+}
+lore.querySelector('.lore-close').addEventListener('click', closeLore);
+lore.addEventListener('pointerdown', e => e.stopPropagation());
+
+const $ = id => document.getElementById(id);
+function updateUI() {
+  const s = turn ? turn.base + (turn.anim && turn.anim.to === (turn.dir > 0 ? 1 : 0) ? turn.dir : 0) : spread;
+  $('tb-pages').innerHTML = `<b>${2 * s + 1}–${2 * s + 2}</b> of ${NPAGES}`;
+  $('tb-prev').disabled = s <= 0; $('tb-next').disabled = s >= NSPREADS - 1;
+  $('tb-zoom').textContent = Math.round(view.zoomT * 100) + '%';
+  $('tb-lore').classList.toggle('on', showHotspots);
+}
+$('tb-prev').onclick = () => requestTurn(-1);
+$('tb-next').onclick = () => requestTurn(1);
+const setZoom = z => { view.zoomT = clamp(Math.round(z * 100) / 100, 0.6, 2.5); if (view.zoomT <= 1) view.panT = [0, 0]; updateUI(); };
+$('tb-zin').onclick = () => setZoom(view.zoomT + 0.25);
+$('tb-zout').onclick = () => setZoom(view.zoomT - 0.25);
+$('tb-lore').onclick = () => { showHotspots = !showHotspots; if (!showHotspots) closeLore(); updateUI(); dirty = true; };
+$('tb-back').onclick = () => { const v = $('veil'); v.classList.remove('off'); setTimeout(() => v.classList.add('off'), 900); };
+
+let uiTimer = 0, overToolbar = false;
+function pokeUI(ms = 2600) {
+  document.body.classList.add('ui'); clearTimeout(uiTimer);
+  if (params.get('ui') === '1') return;
+  uiTimer = setTimeout(() => { if (!overToolbar) document.body.classList.remove('ui'); }, ms);
+}
+$('toolbar').addEventListener('pointerenter', () => { overToolbar = true; pokeUI(); });
+$('toolbar').addEventListener('pointerleave', () => { overToolbar = false; pokeUI(); });
+
+/* ======================================================================================
+   Input
+   ====================================================================================== */
+let drag = null;
+view.panT = [0, 0];
+function hitPage(sx, sy) {
+  const [x, y] = screenToLocal(sx, sy, C + 0.05);
+  if (Math.abs(y) > H / 2 + 0.01 || Math.abs(x) > W + 0.01) return null;
+  const side = x >= 0 ? 1 : -1;
+  return { side, x, y, s: Math.abs(x), t: clamp((y + H / 2) / H, 0, 1), corner: Math.abs(x) > W * 0.8 };
+}
+
+canvas.addEventListener('pointerdown', e => {
+  pokeUI();
+  if (openLore >= 0) { closeLore(); return; }
+  canvas.setPointerCapture(e.pointerId);
+  const hit = hitPage(e.clientX, e.clientY);
+  if (hit) {
+    const dir = hit.side;
+    if (turn && turn.mode === 'peek' && turn.dir !== dir) { turn = null; }
+    if (turn && turn.mode !== 'peek') return;
+    if (!turn && !beginTurn(dir, 'drag', hit.t)) return;
+    turn.mode = 'drag'; turn.anim = null; turn.grabT = hit.t;
+    turn.bias = 0;
+    drag = { kind: 'page', x0: e.clientX, y0: e.clientY, sGrab: Math.max(hit.s, 0.25), yGrab: hit.y, moved: false, lastP: turn.p, lastT: performance.now() };
+  } else if (view.zoomT > 1) {
+    drag = { kind: 'pan', x0: e.clientX, y0: e.clientY, pan0: view.panT.slice() };
+    canvas.classList.add('panning');
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  pokeUI();
+  if (drag && drag.kind === 'page' && turn) {
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 5) drag.moved = true;
+    if (!drag.moved) return;
+    canvas.classList.add('dragging');
+    const [x, y] = screenToLocal(e.clientX, e.clientY, C + 0.06);
+    const p = progressForX(x, drag.sGrab);
+    const now = performance.now(), dt = Math.max(1, now - drag.lastT);
+    turn.vel = (p - drag.lastP) / dt * 1000; drag.lastP = p; drag.lastT = now;
+    turn.p = p; turn.bias = clamp((y - drag.yGrab) / H, -0.6, 0.6);
+    dirty = true;
+    return;
+  }
+  if (drag && drag.kind === 'pan') {
+    const k = view.pxWorld * view.dpr;
+    view.panT = [drag.pan0[0] - (e.clientX - drag.x0) * k, drag.pan0[1] + (e.clientY - drag.y0) * k];
+    const lim = 0.9 * (1 - 1 / view.zoomT) + 0.1;
+    view.panT = [clamp(view.panT[0], -lim, lim), clamp(view.panT[1], -lim * .8, lim * .8)];
+    return;
+  }
+  // hover: peek a corner
+  const hit = hitPage(e.clientX, e.clientY);
+  canvas.classList.toggle('over-page', !!hit && !hit.corner);
+  canvas.classList.toggle('over-corner', !!hit && hit.corner);
+  if (!turn && hit && hit.corner && canTurn(hit.side)) {
+    beginTurn(hit.side, 'peek', hit.t);
+    turn.bias = (0.5 - hit.t) * 1.2;   // a peek curls the corner under the cursor, not the whole edge
+    turn.anim = { from: turn.p, to: hit.side > 0 ? 0.12 : 0.88, t0: performance.now(), dur: 380, ease: easeOut };
+    turn.mode = 'peek';
+  } else if (turn && turn.mode === 'peek') {
+    if (!hit || !hit.corner || hit.side !== turn.dir) {
+      turn.mode = 'settle'; turn.anim = { from: turn.p, to: turn.dir > 0 ? 0 : 1, t0: performance.now(), dur: 300, ease: easeOut };
+    } else { turn.grabT = hit.t; turn.bias = (0.5 - hit.t) * 1.2; dirty = true; }
+  }
+});
+function endDrag(e) {
+  canvas.classList.remove('dragging', 'panning');
+  if (!drag) return;
+  if (drag.kind === 'page' && turn) {
+    const done = turn.dir > 0 ? 1 : 0;
+    if (!drag.moved) { animateTo(done, 0.95 * Math.abs(done - turn.p) + 0.1, easeInOut); }
+    else {
+      const proj = turn.p + turn.vel * 0.18;
+      const complete = turn.dir > 0 ? proj > 0.5 : proj < 0.5;
+      const target = complete ? done : 1 - done;
+      animateTo(target, 0.25 + 0.6 * Math.abs(target - turn.p), easeOut);
+      if (!complete) turn.mode = 'settle';
+    }
+    updateUI();
+  }
+  drag = null;
+}
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+canvas.addEventListener('pointerleave', () => {
+  if (!drag && turn && turn.mode === 'peek') { turn.mode = 'settle'; turn.anim = { from: turn.p, to: turn.dir > 0 ? 0 : 1, t0: performance.now(), dur: 300, ease: easeOut }; }
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault(); pokeUI();
+  if (e.ctrlKey || e.metaKey) setZoom(view.zoomT * Math.exp(-e.deltaY * 0.01));
+  else if (view.zoomT > 1) {
+    const k = view.pxWorld * view.dpr, lim = 0.9 * (1 - 1 / view.zoomT) + 0.1;
+    view.panT = [clamp(view.panT[0] + e.deltaX * k, -lim, lim), clamp(view.panT[1] - e.deltaY * k, -lim * .8, lim * .8)];
+  }
+}, { passive: false });
+canvas.addEventListener('dblclick', () => setZoom(view.zoomT > 1 ? 1 : 1.75));
+window.addEventListener('keydown', e => {
+  pokeUI();
+  if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); requestTurn(1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); requestTurn(-1); }
+  else if (e.key === '+' || e.key === '=') setZoom(view.zoomT + 0.25);
+  else if (e.key === '-' || e.key === '_') setZoom(view.zoomT - 0.25);
+  else if (e.key === '0') setZoom(1);
+  else if (e.key.toLowerCase() === 'h') $('tb-lore').click();
+  else if (e.key === 'Escape') closeLore();
+});
+window.addEventListener('resize', resize);
+
+/* ======================================================================================
+   Main loop
+   ====================================================================================== */
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (turn) { stepTurn(now); dirty = true; }
+  const zd = view.zoomT - view.zoom, pd0 = view.panT[0] - view.pan[0], pd1 = view.panT[1] - view.pan[1];
+  if (Math.abs(zd) > 1e-4 || Math.abs(pd0) > 1e-5 || Math.abs(pd1) > 1e-5) {
+    view.zoom += zd * 0.2; view.pan[0] += pd0 * 0.25; view.pan[1] += pd1 * 0.25;
+    if (Math.abs(zd) < 1e-3) view.zoom = view.zoomT;
+    updateCamera(); deskDirty = true; dirty = true;
+  }
+  if (!dirty) return;
+  dirty = false;
+  render();
+}
+
+window.__scriptorium = { get turn() { return turn; }, get spread() { return spread; }, hitPage };
+function init() {
+  const base = makePaperBase();
+  const order = [2 * spread, 2 * spread + 1, ...Array.from({ length: NPAGES }, (_, i) => i)];
+  for (const i of order) if (!pageTex[i]) pageTex[i] = uploadTexture(buildPage(i, base));
+  resize(); refreshStacks(); updateUI();
+  const tp = parseFloat(params.get('turn'));
+  if (!isNaN(tp) && canTurn(1)) {
+    const g = parseFloat(params.get('grab'));
+    beginTurn(1, 'drag', isNaN(g) ? 0.12 : g); turn.p = tp;
+  }
+  requestAnimationFrame(frame);
+  requestAnimationFrame(() => $('veil').classList.add('off'));
+  pokeUI(4500);
+  const lk = parseInt(params.get('lore'), 10);
+  if (!isNaN(lk)) setTimeout(() => { render(); showLore(lk); }, 60);
+}
+init();
+})();
+</script>
+</body>
+</html>

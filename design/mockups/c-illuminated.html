@@ -774,7 +774,7 @@ function ribbonMesh(width){const P_=[];for(let i=0;i<RIB_PTS.length-1;i++){const
 // Inkwell (lathe) and its ink surface
 function inkwellMeshes(){const prof=[[0,0],[.118,0],[.128,.004],[.132,.014],[.138,.04],[.145,.075],[.142,.105],[.128,.128],[.098,.146],[.066,.156],[.054,.163],[.052,.176],[.06,.182],[.064,.19],[.06,.197],[.05,.2],[.042,.196],[.039,.186],[.038,.168]];
  const b=builder(),seg=72,np=prof.length;
- for(let k=0;k<np;k++){const a=prof[Math.max(0,k-1)],c=prof[Math.min(np-1,k+1)];let nr=c[1]-a[1],nz=-(c[0]-a[0]);const l=Math.hypot(nr,nz)||1;nr/=l;nz/=l;
+ for(let k=0;k<np;k++){const a=prof[Math.max(0,k-1)],c=prof[Math.min(np-1,k+1)];let nr=c[1]-a[1],nz=a[0]-c[0];const l=Math.hypot(nr,nz)||1;nr/=l;nz/=l;
   for(let s=0;s<=seg;s++){const ph=s/seg*PI*2,cs=Math.cos(ph),sn=Math.sin(ph);b.v(prof[k][0]*cs,prof[k][0]*sn,prof[k][1],nr*cs,nr*sn,nz,s/seg,k/(np-1));}}
  for(let k=0;k<np-1;k++)for(let s=0;s<seg;s++){const a=k*(seg+1)+s,c=a+seg+1;b.I.push(a,a+1,c,c,a+1,c+1);}
  const d=builder();d.v(0,0,.17,0,0,1,0,0);for(let s=0;s<=seg;s++){const ph=s/seg*PI*2;d.v(Math.cos(ph)*.039,Math.sin(ph)*.039,.17,0,0,1,0,0);if(s)d.I.push(0,s,s+1);}
