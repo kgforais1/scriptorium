@@ -4,11 +4,16 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     cooldown:
       default-days: 7
     open-pull-requests-limit: 10
+    # One PR per month for all minor/patch version updates in this ecosystem.
+    # Security updates still open their own PRs immediately.
+    groups:
+      python-minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "python"
@@ -24,11 +29,16 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "tuesday"
+      interval: "monthly"
     cooldown:
       default-days: 7
     open-pull-requests-limit: 10
+    # One PR per month for all minor/patch version updates in this ecosystem.
+    # Security updates still open their own PRs immediately.
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "javascript"
@@ -44,11 +54,16 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "wednesday"
+      interval: "monthly"
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    # One PR per month for all minor/patch version updates in this ecosystem.
+    # Security updates still open their own PRs immediately.
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "github-actions"
@@ -60,11 +75,16 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
     schedule:
-      interval: "weekly"
-      day: "thursday"
+      interval: "monthly"
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    # One PR per month for all minor/patch version updates in this ecosystem.
+    # Security updates still open their own PRs immediately.
+    groups:
+      cargo-minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "rust"
