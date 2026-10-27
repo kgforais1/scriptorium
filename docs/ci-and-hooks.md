@@ -79,7 +79,8 @@ a lockfile update when a patched version is already inside the declared range, o
 
 Dependabot security updates are not a backstop until GitHub has imported the advisory. A
 compatible bump can still arrive as a version update after `cooldown.default-days`, on the
-cargo schedule (weekly Thursday), with no advisory import. As of 2026-10-24,
+cargo schedule (monthly, grouped into one minor/patch PR), with no advisory import, so
+that path can take up to about five weeks. Do not wait for it; apply the fix by hand. As of 2026-10-24,
 RUSTSEC-2026-0382 (published 2026-10-20) and RUSTSEC-2026-0383 (published 2026-10-19), both
 aliased to `CVE-2026-111943`, were absent from GitHub's advisory database, and this repo had
 neither a Dependabot alert nor a Dependabot security-update PR for `rustls-webpki` or
