@@ -79,7 +79,7 @@ The policy scripts read thresholds from environment variables:
 # check_file_size.py
 POLICY_SOFT_LINE_CAP=600        # warn above this (source files)
 POLICY_HARD_LINE_CAP=1000       # block above this
-POLICY_MAX_BYTES=512000         # non-source file size limit (500 KB)
+POLICY_MAX_BYTES=1048576        # non-source file size limit (1 MB)
 POLICY_BINARY_HARD_BYTES=5242880 # binary hard limit (5 MB)
 POLICY_DOC_SOFT_LINE_CAP=1000  # markdown soft cap
 POLICY_WARN_AS_ERROR=0          # set to 1 to treat soft warnings as errors

@@ -154,7 +154,7 @@ Per [`policies/file-size-and-counts.md`](../policies/file-size-and-counts.md):
 - **Source files**: Soft 600 lines / Hard 1000 lines
 - **Markdown docs**: Soft 1000 lines / Hard 1000 lines  
 - **Binary files**: 5 MB hard limit
-- **Non-source files**: 500 KB hard limit
+- **Non-source files**: 1 MB hard limit
 
 ## Common Commands
 

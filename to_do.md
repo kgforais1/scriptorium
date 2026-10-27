@@ -21,7 +21,9 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Unplanned / small
 
-_(none — use this section only for work that fits in one session and does not warrant a plan.)_
+- **Pick a reader design** — choose a direction from mockups A–G in
+  [`design/mockups/`](design/mockups/) (PR #54); skins and `DESIGN.md` notes →
+  [spike plan](plans/2026-08-23-pre-m1-flipbook-spike.md#reader-design-input-added-2026-10-27)
 
 ## Icebox
 

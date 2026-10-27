@@ -1,0 +1,1239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scriptorium — Gallery Daylight</title>
+<style>
+:root{
+  --ink:#1f2529; --muted:rgba(31,37,41,.55); --faint:rgba(31,37,41,.36); --hair:rgba(31,37,41,.10);
+  --accent:#3b6273; --glass:rgba(249,249,247,.74);
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --display:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --serif:"Iowan Old Style","Palatino","Palatino Linotype","Book Antiqua",Georgia,serif;
+  --ease:cubic-bezier(.2,.75,.15,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#d6c6aa;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+#table{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+#stage{position:fixed;inset:0;z-index:1}
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}
+#light{position:fixed;inset:0;z-index:3;pointer-events:none;
+  background:
+    radial-gradient(120% 90% at 8% -12%, rgba(236,244,250,.20), rgba(236,244,250,0) 55%),
+    radial-gradient(140% 120% at 50% 45%, rgba(20,30,40,0) 58%, rgba(20,30,40,.16) 100%);}
+
+/* ---------- book ---------- */
+#book{position:absolute;touch-action:none;transition:left .7s var(--ease),top .7s var(--ease),width .7s var(--ease),height .7s var(--ease)}
+.board{position:absolute;border-radius:5px;
+  background-color:#41525f;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.05), inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 0 rgba(0,0,0,.18),
+    0 1px 1px rgba(16,24,30,.30), 0 3px 6px rgba(16,24,30,.18), 10px 18px 26px rgba(22,32,40,.22), 26px 46px 90px rgba(22,32,40,.20);}
+.board::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(90deg, rgba(255,255,255,.06), rgba(0,0,0,0) 8%, rgba(0,0,0,0) 46.5%, rgba(0,0,0,.28) 49.2%, rgba(255,255,255,.05) 50%, rgba(0,0,0,.28) 50.8%, rgba(0,0,0,0) 53.5%, rgba(0,0,0,0) 92%, rgba(0,0,0,.10)),
+             linear-gradient(180deg, rgba(255,255,255,.07), rgba(0,0,0,0) 30%, rgba(0,0,0,.08));}
+.edge{position:absolute;pointer-events:none}
+.edge.side{top:3px;bottom:1px;transition:width .5s var(--ease),left .5s var(--ease),right .5s var(--ease)}
+.edge.side.l{background:linear-gradient(90deg, rgba(60,50,40,.22), rgba(60,50,40,0) 70%), repeating-linear-gradient(90deg,#efe9dc 0 1px,#d8cfbd 1px 1.6px,#e8e1d1 1.6px 2.4px);border-radius:3px 0 0 3px}
+.edge.side.r{background:linear-gradient(270deg, rgba(60,50,40,.24), rgba(60,50,40,0) 70%), repeating-linear-gradient(90deg,#efe9dc 0 1px,#d8cfbd 1px 1.6px,#e8e1d1 1.6px 2.4px);border-radius:0 3px 3px 0}
+.edge.bot{height:4px;background:linear-gradient(180deg,#d9d0be,#c9bfab);transition:left .5s var(--ease),right .5s var(--ease)}
+.page{position:absolute;top:0;height:100%;overflow:hidden;background:#f3eddf}
+.page canvas.pg{position:absolute;inset:0;width:100%;height:100%;display:none}
+.page canvas.pg.on{display:block}
+.page .gut{position:absolute;inset:0;background-size:100% 100%;pointer-events:none}
+.crease{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:linear-gradient(90deg,rgba(40,30,22,.0),rgba(40,30,22,.35),rgba(40,30,22,0));pointer-events:none}
+
+/* hotspots */
+.hs{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;cursor:pointer;z-index:4;transition:opacity .35s ease, transform .35s var(--ease)}
+.hs::before{content:"";position:absolute;left:50%;top:50%;width:9px;height:9px;margin:-4.5px;border-radius:50%;
+  background:rgba(255,255,255,.88);box-shadow:0 0 0 1px rgba(46,84,102,.45),0 1px 3px rgba(20,40,50,.25),0 0 10px rgba(255,255,255,.7)}
+.hs::after{content:"";position:absolute;left:50%;top:50%;width:9px;height:9px;margin:-4.5px;border-radius:50%;
+  border:1px solid rgba(46,96,118,.55);animation:pulse 2.8s cubic-bezier(.2,.6,.3,1) infinite}
+.hs.d1::after{animation-delay:.9s}.hs.d2::after{animation-delay:1.8s}
+@keyframes pulse{0%{transform:scale(1);opacity:.85}70%{transform:scale(3.3);opacity:0}100%{transform:scale(3.3);opacity:0}}
+.hs:hover{transform:scale(1.15)}
+.hs.active::before{background:#3b6273;box-shadow:0 0 0 3px rgba(255,255,255,.85),0 0 0 4px rgba(46,84,102,.35),0 2px 6px rgba(20,40,50,.3)}
+.hs .tip{position:absolute;left:50%;bottom:30px;transform:translate(-50%,4px);white-space:nowrap;padding:5px 9px;border-radius:7px;
+  background:rgba(250,250,248,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 4px 14px rgba(20,30,40,.14),0 0 0 .5px rgba(20,30,40,.12);
+  font:500 11px/1 var(--sans);letter-spacing:.02em;color:var(--ink);opacity:0;pointer-events:none;transition:opacity .2s, transform .25s var(--ease)}
+.hs:hover .tip{opacity:1;transform:translate(-50%,0)}
+#book.turning .hs, body.hide-notes .hs{opacity:0;pointer-events:none}
+
+/* ---------- chrome ---------- */
+header{position:fixed;top:0;left:0;right:0;height:66px;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:0 26px 0 28px;
+  background:linear-gradient(180deg, rgba(247,247,244,.62), rgba(247,247,244,.0));}
+.brand{display:flex;align-items:center;gap:11px}
+.brand svg{opacity:.82}
+.brand b{font:600 13px/1 var(--display);letter-spacing:.015em}
+.brand span{font:400 12px/1 var(--sans);color:var(--muted);padding-left:11px;border-left:1px solid var(--hair)}
+.title{position:absolute;left:50%;transform:translateX(-50%);text-align:center;transition:left .7s var(--ease)}
+.title .t1{font:500 11px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase}
+.title .t2{font:400 11.5px/1 var(--sans);color:var(--muted);margin-top:6px;letter-spacing:.01em}
+.tools{display:flex;gap:4px}
+.ib{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:rgba(31,37,41,.72);transition:background .2s,color .2s}
+.ib:hover{background:rgba(255,255,255,.55);color:var(--ink)}
+.ib svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.35;stroke-linecap:round;stroke-linejoin:round}
+
+#bar{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:5;height:60px;display:flex;align-items:center;gap:6px;padding:0 10px 0 18px;border-radius:16px;
+  background:var(--glass);backdrop-filter:blur(24px) saturate(1.4);-webkit-backdrop-filter:blur(24px) saturate(1.4);
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.8),0 0 0 .5px rgba(30,40,50,.10),0 12px 34px rgba(30,40,50,.16),0 2px 6px rgba(30,40,50,.08);
+  transition:left .7s var(--ease)}
+.loc{width:150px;padding-right:8px}
+.loc .a{font:500 12px/1.1 var(--sans);letter-spacing:.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.loc .b{font:400 10.5px/1 var(--sans);color:var(--muted);margin-top:5px;letter-spacing:.06em;text-transform:uppercase}
+.sep{width:1px;height:28px;background:var(--hair);margin:0 6px}
+.thumbs{position:relative;display:flex;gap:7px;padding:0 4px;height:60px;align-items:center}
+.th{position:relative;height:34px;border-radius:3px;cursor:pointer;opacity:.78;transition:transform .25s var(--ease),opacity .2s;
+  box-shadow:0 0 0 .5px rgba(30,30,30,.18),0 1px 2px rgba(30,30,30,.12)}
+.th canvas{display:block;height:34px;border-radius:3px}
+.th:hover{opacity:1;transform:translateY(-3px)}
+.th.on{opacity:1;box-shadow:0 0 0 1.5px var(--accent),0 2px 6px rgba(30,50,60,.2)}
+.th .dot{position:absolute;top:-3px;right:-3px;width:6px;height:6px;border-radius:50%;background:#5b8799;box-shadow:0 0 0 1.5px rgba(250,250,248,.95)}
+.track{position:absolute;left:4px;right:4px;bottom:7px;height:2px;border-radius:2px;background:rgba(31,37,41,.08)}
+.track i{position:absolute;top:0;height:2px;border-radius:2px;background:var(--accent);transition:left .5s var(--ease),width .5s var(--ease)}
+.notes-toggle{white-space:nowrap;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:10px;font:500 11.5px/1 var(--sans);color:rgba(31,37,41,.75)}
+.notes-toggle:hover{background:rgba(255,255,255,.6)}
+.notes-toggle .pip{width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(46,84,102,.5),0 0 0 4px rgba(59,98,115,.12)}
+body.hide-notes .notes-toggle .pip{background:transparent;box-shadow:0 0 0 1px rgba(31,37,41,.35)}
+
+/* ---------- panel ---------- */
+#panel{position:fixed;top:14px;right:14px;bottom:14px;width:384px;z-index:6;border-radius:18px;overflow:hidden;
+  background:rgba(250,250,248,.86);backdrop-filter:blur(28px) saturate(1.3);-webkit-backdrop-filter:blur(28px) saturate(1.3);
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.9),0 0 0 .5px rgba(30,40,50,.12),0 24px 60px rgba(25,35,45,.22),0 4px 12px rgba(25,35,45,.08);
+  transform:translateX(calc(100% + 30px));transition:transform .65s var(--ease);display:flex;flex-direction:column}
+body.panel-open #panel{transform:none}
+.p-head{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 0 24px}
+.kicker{font:600 10px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.p-body{flex:1;overflow:auto;padding:14px 24px 20px}
+.p-body h2{font:500 23px/1.18 var(--display);letter-spacing:-.012em;margin:2px 0 6px}
+.p-body .sub{font:italic 14px/1.4 var(--serif);color:var(--muted);margin-bottom:16px}
+.detail{position:relative;border-radius:10px;overflow:hidden;background:#efe9db;box-shadow:0 0 0 .5px rgba(30,30,30,.14),0 6px 18px rgba(30,30,30,.10);margin-bottom:6px}
+.detail canvas{display:block;width:100%}
+.detail .zoom{position:absolute;right:8px;bottom:8px;padding:4px 7px;border-radius:6px;background:rgba(250,250,248,.85);font:500 10px/1 var(--sans);letter-spacing:.06em;color:var(--muted)}
+.cap{font:400 11px/1.4 var(--sans);color:var(--faint);margin-bottom:18px}
+.p-body p{font:400 13.5px/1.62 var(--sans);color:rgba(31,37,41,.86);margin-bottom:12px;letter-spacing:.003em}
+.meta{margin-top:18px;border-top:1px solid var(--hair)}
+.meta div{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--hair);font:400 12px/1.3 var(--sans)}
+.meta div span:first-child{color:var(--muted)}
+.meta div span:last-child{text-align:right}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+.chips span{font:500 11px/1 var(--sans);padding:7px 10px;border-radius:20px;background:rgba(59,98,115,.08);color:#2f5262}
+.p-foot{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 14px 24px;border-top:1px solid var(--hair);font:400 11.5px/1 var(--sans);color:var(--muted)}
+.p-foot .nav{display:flex;gap:2px}
+</style>
+</head>
+<body>
+<canvas id="table"></canvas>
+<div id="stage">
+  <div id="book">
+    <div class="board"></div>
+    <div class="edge side l" id="edgeL"></div><div class="edge side r" id="edgeR"></div>
+    <div class="edge bot" id="edgeB"></div>
+    <div class="page" id="slotL"><div class="gut" id="gutL"></div></div>
+    <div class="page" id="slotR"><div class="gut" id="gutR"></div></div>
+    <div class="crease" id="crease"></div>
+  </div>
+</div>
+<canvas id="gl"></canvas>
+<div id="light"></div>
+
+<header>
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1f2529" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10 5 7 4.6 3.5 5v13c3.5-.4 6.5 0 8.5 1.5 2-1.5 5-1.9 8.5-1.5V5C17 4.6 14 5 12 6.5z"/><path d="M12 6.5v13"/></svg>
+    <b>Scriptorium</b><span>Reading Room</span>
+  </div>
+  <div class="title" id="title"><div class="t1">The Hedgerow Flora</div><div class="t2">Margaret A. Hale · London, 1872</div></div>
+  <div class="tools">
+    <button class="ib" title="Contents"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+    <button class="ib" title="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg></button>
+    <button class="ib" title="Bookmark"><svg viewBox="0 0 24 24"><path d="M7 4h10v16l-5-3.5L7 20z"/></svg></button>
+    <button class="ib" title="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+</header>
+
+<nav id="bar">
+  <div class="loc"><div class="a" id="locA">Chapter I · Plate I</div><div class="b" id="locB">pp. 2–3 of 12</div></div>
+  <button class="ib" id="prev" title="Previous (←)"><svg viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+  <div class="thumbs" id="thumbs"><div class="track"><i id="trackI"></i></div></div>
+  <button class="ib" id="next" title="Next (→)"><svg viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg></button>
+  <div class="sep"></div>
+  <button class="notes-toggle" id="notesToggle" title="Show curator notes"><span class="pip"></span><span id="notesLabel">3 notes</span></button>
+</nav>
+
+<aside id="panel" aria-hidden="true">
+  <div class="p-head"><div class="kicker" id="pKicker">Curator's note</div>
+    <button class="ib" id="pClose" title="Close (Esc)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="p-body" id="pBody"></div>
+  <div class="p-foot"><span id="pCount">1 of 3 notes</span>
+    <div class="nav"><button class="ib" id="pPrev"><svg viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></svg></button><button class="ib" id="pNext"><svg viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg></button></div></div>
+</aside>
+
+<script>
+"use strict";
+/* =====================================================================
+   Scriptorium — Direction B "Gallery daylight" look-and-feel mockup.
+   Everything is generated in this file: wood (GLSL), paper and plates
+   (2D canvas), and the page curl (WebGL2 cylinder deformation).
+   ===================================================================== */
+const PW = 1000, PH = 1375, ASPECT = PW / PH;
+const SERIF = "'Iowan Old Style','Palatino','Palatino Linotype','Book Antiqua',Georgia,serif";
+const INK = "rgba(44,35,29,0.94)", PINK = "50,38,30";
+const Q = new URLSearchParams(location.search);
+const $ = s => document.querySelector(s);
+const mk = (w, h) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
+function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const FILTER_OK = (() => { try { const c = mk(2, 2).getContext("2d"); c.filter = "blur(1px)"; return c.filter === "blur(1px)"; } catch (e) { return false; } })();
+
+/* ---------------------------------------------------------------- paper */
+const paperTile = (() => {
+  const S = 512, c = mk(S, S), x = c.getContext("2d"), id = x.createImageData(S, S), d = id.data, r = rng(11);
+  for (let i = 0; i < S * S; i++) { const v = 128 + (r() - .5) * 22 + (r() - .5) * 10; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
+  x.putImageData(id, 0, 0);
+  x.lineCap = "round";
+  for (let i = 0; i < 1400; i++) {
+    const px = r() * S, py = r() * S, a = r() * Math.PI * 2, l = 4 + r() * 18;
+    x.strokeStyle = r() < .5 ? "rgba(255,255,255,.10)" : "rgba(0,0,0,.08)"; x.lineWidth = .5 + r() * .7;
+    x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + Math.cos(a + .6) * l * .5, py + Math.sin(a + .6) * l * .5, px + Math.cos(a) * l, py + Math.sin(a) * l); x.stroke();
+  }
+  return c;
+})();
+function paper(ctx, seed, tone) {
+  const r = rng(seed);
+  ctx.fillStyle = tone || "#f4eee1"; ctx.fillRect(0, 0, PW, PH);
+  // low frequency tone variation
+  for (let i = 0; i < 9; i++) {
+    const g = ctx.createRadialGradient(r() * PW, r() * PH, 0, r() * PW, r() * PH, 200 + r() * 500);
+    g.addColorStop(0, `rgba(${r() < .5 ? "190,160,110" : "255,255,250"},${.025 + r() * .03})`); g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, PW, PH);
+  }
+  ctx.save(); ctx.globalCompositeOperation = "overlay"; ctx.globalAlpha = .32;
+  ctx.translate(-r() * 512, -r() * 512); ctx.fillStyle = ctx.createPattern(paperTile, "repeat"); ctx.fillRect(0, 0, PW + 512, PH + 512); ctx.restore();
+  // edge toning, as in a real scan
+  const e = ctx.createRadialGradient(PW / 2, PH / 2, PH * .42, PW / 2, PH / 2, PH * .78);
+  e.addColorStop(0, "rgba(170,135,80,0)"); e.addColorStop(1, "rgba(170,135,80,.10)"); ctx.fillStyle = e; ctx.fillRect(0, 0, PW, PH);
+  // a little foxing
+  for (let i = 0; i < 5; i++) {
+    const fx = r() * PW, fy = r() * PH, fr = 2 + r() * 6;
+    const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr); g.addColorStop(0, "rgba(150,100,50,.10)"); g.addColorStop(1, "rgba(150,100,50,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(fx, fy, fr, 0, 7); ctx.fill();
+  }
+}
+
+/* -------------------------------------------------------------- typography */
+function spaced(ctx, text, x, y, sp, align) {
+  let w = 0; for (const ch of text) w += ctx.measureText(ch).width + sp; w -= sp;
+  let cx = align === "center" ? x - w / 2 : align === "right" ? x - w : x;
+  for (const ch of text) { ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + sp; }
+  return w;
+}
+function tokenize(str) {
+  const words = []; let it = false;
+  for (const raw of str.split(/\s+/).filter(Boolean)) {
+    const segs = []; let buf = "";
+    for (const ch of raw) { if (ch === "_") { if (buf) segs.push({ t: buf, it }); buf = ""; it = !it; } else buf += ch; }
+    if (buf) segs.push({ t: buf, it });
+    words.push(segs);
+  }
+  return words;
+}
+function fontFor(size, it) { return `${it ? "italic " : ""}${size}px ${SERIF}`; }
+function wordW(ctx, segs, size) { let w = 0; for (const s of segs) { ctx.font = fontFor(size, s.it); w += ctx.measureText(s.t).width; } return w; }
+function drawWord(ctx, segs, x, y, size) { for (const s of segs) { ctx.font = fontFor(size, s.it); ctx.fillText(s.t, x, y); x += ctx.measureText(s.t).width; } }
+function textBlock(ctx, paras, o) {
+  const size = o.size || 24, lh = o.lh || 35, starts = [];
+  let y = o.y; ctx.fillStyle = INK; ctx.textBaseline = "alphabetic";
+  ctx.font = fontFor(size); const space = ctx.measureText(" ").width;
+  paras.forEach((para, pi) => {
+    const words = tokenize(para); const drop = o.drop && pi === 0;
+    let dropW = 0, dropLines = 3;
+    if (drop) {
+      const letter = words[0][0].t[0]; words[0][0].t = words[0][0].t.slice(1).toUpperCase();
+      if (words[1]) words[1] = words[1].map(s => ({ t: s.t.toUpperCase(), it: s.it }));
+      const ds = lh * 2.62; ctx.font = `${ds}px ${SERIF}`; dropW = ctx.measureText(letter).width + 10;
+      ctx.fillText(letter, o.x - 2, y + size + lh * 2 - 1);
+    }
+    starts.push(y);
+    const off = li => drop ? (li < dropLines ? dropW : 0) : (li === 0 ? (o.noIndent ? 0 : size * 1.4) : 0);
+    let lines = [], cur = [], curW = 0;
+    for (const w of words) {
+      const ww = wordW(ctx, w, size), avail = o.w - off(lines.length);
+      if (cur.length && curW + space + ww > avail) { lines.push({ ws: cur, w: curW }); cur = [{ s: w, w: ww }]; curW = ww; }
+      else { curW += (cur.length ? space : 0) + ww; cur.push({ s: w, w: ww }); }
+    }
+    if (cur.length) lines.push({ ws: cur, w: curW, last: true });
+    lines.forEach((ln, li) => {
+      if (y + size > o.maxY) return;
+      let x = o.x + off(li); const gaps = ln.ws.length - 1;
+      let gap = space;
+      if (!ln.last && gaps > 0) { const sum = ln.ws.reduce((a, b) => a + b.w, 0); gap = (o.w - off(li) - sum) / gaps; if (gap > space * 2.6) gap = space; }
+      if (o.center) x = o.x + (o.w - ln.w) / 2;
+      ln.ws.forEach(wd => { drawWord(ctx, wd.s, x, y + size, size); x += wd.w + gap; });
+      y += lh;
+    });
+    if (o.paraGap) y += o.paraGap;
+  });
+  return { y, starts };
+}
+function runningHead(ctx, left, title, num) {
+  ctx.fillStyle = INK; ctx.font = `17px ${SERIF}`; ctx.textBaseline = "alphabetic";
+  spaced(ctx, title, PW / 2, 108, 3.2, "center");
+  ctx.font = `20px ${SERIF}`;
+  if (left) ctx.fillText(String(num), 140, 108); else { ctx.textAlign = "right"; ctx.fillText(String(num), PW - 140, 108); ctx.textAlign = "left"; }
+}
+function chapterHead(ctx, num, title, latin, y) {
+  ctx.fillStyle = INK; ctx.textBaseline = "alphabetic";
+  ctx.font = `19px ${SERIF}`; spaced(ctx, num, PW / 2, y, 5, "center");
+  ctx.font = `38px ${SERIF}`; spaced(ctx, title, PW / 2, y + 64, 6.5, "center");
+  ctx.strokeStyle = "rgba(44,35,29,.7)"; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(PW / 2 - 40, y + 94); ctx.lineTo(PW / 2 + 40, y + 94); ctx.stroke();
+  ctx.font = `italic 23px ${SERIF}`; ctx.textAlign = "center"; ctx.fillText(latin, PW / 2, y + 132); ctx.textAlign = "left";
+  return y + 180;
+}
+
+/* ------------------------------------------------------------- drawing kit */
+const bez = (p, t) => { const u = 1 - t; return [u * u * u * p[0][0] + 3 * u * u * t * p[1][0] + 3 * u * t * t * p[2][0] + t * t * t * p[3][0], u * u * u * p[0][1] + 3 * u * u * t * p[1][1] + 3 * u * t * t * p[2][1] + t * t * t * p[3][1]]; };
+const bezD = (p, t) => { const u = 1 - t; return [3 * u * u * (p[1][0] - p[0][0]) + 6 * u * t * (p[2][0] - p[1][0]) + 3 * t * t * (p[3][0] - p[2][0]), 3 * u * u * (p[1][1] - p[0][1]) + 6 * u * t * (p[2][1] - p[1][1]) + 3 * t * t * (p[3][1] - p[2][1])]; };
+const bezA = (p, t) => { const d = bezD(p, t); return Math.atan2(d[1], d[0]); };
+function poly(pts, close = true) { const p = new Path2D(); pts.forEach((q, i) => i ? p.lineTo(q[0], q[1]) : p.moveTo(q[0], q[1])); if (close) p.closePath(); return p; }
+function wash(ctx, path, rgb, a, r) {
+  ctx.save(); if (FILTER_OK) ctx.filter = "blur(0.9px)";
+  ctx.fillStyle = `rgba(${rgb},${a})`; ctx.fill(path);
+  ctx.translate((r() - .5) * 4, (r() - .5) * 4); ctx.fillStyle = `rgba(${rgb},${a * .22})`; ctx.fill(path);
+  ctx.restore();
+  ctx.save(); ctx.clip(path); ctx.lineWidth = 5; ctx.strokeStyle = `rgba(${rgb},${a * .4})`; ctx.stroke(path); ctx.restore();
+}
+function hatch(ctx, ang, sp, R, alpha, lw) {
+  ctx.save(); ctx.rotate(ang); ctx.beginPath();
+  for (let i = -R; i <= R; i += sp) { ctx.moveTo(-R, i); ctx.lineTo(R, i); }
+  ctx.strokeStyle = `rgba(${PINK},${alpha})`; ctx.lineWidth = lw; ctx.stroke(); ctx.restore();
+}
+function inkStroke(ctx, path, lw, a = .9) { ctx.strokeStyle = `rgba(${PINK},${a})`; ctx.lineWidth = lw; ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.stroke(path); }
+function leafGeom(L, w, o) {
+  const n = 56, bend = o.bend || 0, teeth = o.teeth || 0, td = o.td || 0, sh = o.sh || .72, bl = o.bl || .8;
+  const up = [], lo = [], mid = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, x = t * L, yc = bend * L * t * t, s = 2 * bend * t, len = Math.hypot(1, s);
+    let hw = w * .5 * Math.pow(Math.max(0, Math.sin(Math.PI * Math.pow(t, sh))), bl);
+    let tooth = 0;
+    if (teeth) { const f = (t * teeth) % 1; tooth = o.crenate ? Math.abs(Math.sin(t * teeth * Math.PI)) : (f < .72 ? f / .72 : (1 - f) / .28); tooth *= td * w * .5 * Math.sin(Math.PI * Math.min(1, t * 1.15)); }
+    const h = hw + tooth;
+    mid.push([x, yc]); up.push([x + s * h / len, yc - h / len]); lo.push([x - s * h / len, yc + h / len]);
+  }
+  const full = poly(up.concat(lo.slice().reverse()));
+  const half = poly(mid.concat(lo.slice().reverse()));
+  return { full, half, up, lo, mid, n };
+}
+function leaf(ctx, x, y, ang, L, w, o, r) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  const g = leafGeom(L, w, o); const col = o.col || "112,134,86";
+  wash(ctx, g.full, col, o.a || .62, r);
+  ctx.save(); ctx.clip(g.full); ctx.fillStyle = `rgba(${o.dark || "60,80,50"},.22)`; ctx.fill(g.half);
+  ctx.clip(g.half); hatch(ctx, .55 + (r() - .5) * .2, o.hs || 4.2, L * 1.2, .38, .8); ctx.restore();
+  // veins
+  const nv = o.veins ?? Math.max(3, Math.round(L / 34));
+  ctx.beginPath();
+  for (let k = 1; k <= nv; k++) {
+    const t0 = .06 + k / (nv + 1) * .86, i0 = Math.round(t0 * g.n), i1 = Math.min(g.n, Math.round((t0 + .16) * g.n)), ic = Math.min(g.n, Math.round((t0 + .07) * g.n));
+    for (const side of [g.up, g.lo]) {
+      const m = g.mid[i0], e = side[i1], c = g.mid[ic];
+      ctx.moveTo(m[0], m[1]); ctx.quadraticCurveTo((c[0] + e[0]) / 2, (c[1] + side[ic][1]) / 2, m[0] + (e[0] - m[0]) * .9, m[1] + (e[1] - m[1]) * .9);
+    }
+  }
+  ctx.strokeStyle = `rgba(${PINK},.42)`; ctx.lineWidth = .8; ctx.stroke();
+  inkStroke(ctx, poly(g.mid, false), 1.3, .75);
+  inkStroke(ctx, g.full, 1.35, .88);
+  ctx.restore();
+}
+function stem(ctx, P, w0, w1, col, r, a = .7) {
+  const n = 60, L = [], R = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, p = bez(P, t), d = bezD(P, t), len = Math.hypot(d[0], d[1]) || 1, w = (w0 + (w1 - w0) * t) / 2;
+    L.push([p[0] - d[1] / len * w, p[1] + d[0] / len * w]); R.push([p[0] + d[1] / len * w, p[1] - d[0] / len * w]);
+  }
+  const path = poly(L.concat(R.reverse()));
+  wash(ctx, path, col, a, r);
+  ctx.save(); ctx.clip(path); ctx.beginPath();
+  for (let i = 0; i < n; i += 1) { const p = L[i]; const q = bez(P, i / n); ctx.moveTo(p[0], p[1]); ctx.lineTo(p[0] + (q[0] - p[0]) * .8, p[1] + (q[1] - p[1]) * .8 - 3); }
+  ctx.strokeStyle = `rgba(${PINK},.35)`; ctx.lineWidth = .8; ctx.stroke(); ctx.restore();
+  inkStroke(ctx, path, 1.3, .9);
+}
+function plateFrame(ctx, label, common, latin, seed) {
+  const x0 = 72, y0 = 112, x1 = PW - 72, y1 = PH - 118;
+  // plate mark: the impression left by the copper plate
+  ctx.fillStyle = "rgba(255,253,245,.18)"; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  ctx.strokeStyle = "rgba(120,100,70,.30)"; ctx.lineWidth = 2; ctx.strokeRect(x0 + 1, y0 + 1, x1 - x0 - 2, y1 - y0 - 2);
+  ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 1.5; ctx.strokeRect(x0 + 3, y0 + 3, x1 - x0 - 6, y1 - y0 - 6);
+  ctx.strokeStyle = "rgba(110,90,60,.12)"; ctx.lineWidth = 6; ctx.strokeRect(x0 - 3, y0 - 3, x1 - x0 + 6, y1 - y0 + 6);
+  ctx.fillStyle = INK; ctx.textBaseline = "alphabetic";
+  ctx.font = `19px ${SERIF}`; spaced(ctx, label, PW / 2, y0 + 56, 5, "center");
+  ctx.font = `25px ${SERIF}`; spaced(ctx, common, PW / 2, y1 - 92, 5.5, "center");
+  ctx.font = `italic 24px ${SERIF}`; ctx.textAlign = "center"; ctx.fillText(latin, PW / 2, y1 - 56);
+  ctx.font = `italic 15px ${SERIF}`; ctx.textAlign = "left"; ctx.fillText("M. A. Hale del.", x0 + 26, y1 - 18);
+  ctx.textAlign = "right"; ctx.fillText("J. Swain sc.", x1 - 26, y1 - 18); ctx.textAlign = "left";
+}
+
+/* ------------------------------------------------------------ plates */
+function bell(ctx, x, y, ang, L, w, bud, r) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  // calyx
+  const cal = new Path2D(); cal.moveTo(-2, -w * .2); cal.lineTo(L * .2, -w * .34); cal.lineTo(L * .08, -w * .08); cal.lineTo(L * .24, w * .02); cal.lineTo(L * .06, w * .12); cal.lineTo(L * .18, w * .32); cal.lineTo(-2, w * .2); cal.closePath();
+  if (bud) {
+    const p = new Path2D(); p.moveTo(0, -w * .2); p.bezierCurveTo(L * .4, -w * .55, L * .95, -w * .45, L, 0); p.bezierCurveTo(L * .95, w * .45, L * .4, w * .55, 0, w * .2); p.closePath();
+    wash(ctx, p, "150,92,120", .55, r); ctx.save(); ctx.clip(p); ctx.fillStyle = "rgba(90,40,70,.18)"; ctx.fillRect(0, 0, L, w); hatch(ctx, 0, 3.6, L, .25, .7); ctx.restore();
+    inkStroke(ctx, p, 1.2); wash(ctx, cal, "100,128,80", .7, r); inkStroke(ctx, cal, 1);
+    ctx.restore(); return;
+  }
+  const p = new Path2D();
+  p.moveTo(0, -w * .17);
+  p.bezierCurveTo(L * .35, -w * .26, L * .62, -w * .44, L * .93, -w * .58);
+  p.bezierCurveTo(L * 1.02, -w * .62, L * 1.06, -w * .42, L * 1.0, -w * .18);
+  p.bezierCurveTo(L * 1.07, w * .05, L * 1.12, w * .42, L * 1.02, w * .56);
+  p.bezierCurveTo(L * .96, w * .62, L * .9, w * .5, L * .86, w * .48);
+  p.bezierCurveTo(L * .6, w * .4, L * .32, w * .24, 0, w * .17);
+  p.closePath();
+  wash(ctx, p, "176,84,146", .62, r);
+  ctx.save(); ctx.clip(p);
+  const g = ctx.createLinearGradient(0, -w * .6, 0, w * .6); g.addColorStop(0, "rgba(255,240,250,.22)"); g.addColorStop(.45, "rgba(120,30,90,0)"); g.addColorStop(1, "rgba(90,20,70,.30)");
+  ctx.fillStyle = g; ctx.fillRect(-5, -w, L * 1.3, w * 2);
+  ctx.beginPath(); for (let i = 0; i < 9; i++) { const yy = -w * .5 + i * w * .13; ctx.moveTo(0, yy * .3); ctx.quadraticCurveTo(L * .6, yy * .75, L * 1.05, yy * 1.08); }
+  ctx.strokeStyle = `rgba(${PINK},.32)`; ctx.lineWidth = .7; ctx.stroke();
+  ctx.translate(0, w * .12); hatch(ctx, .12, 3.3, L * 1.3, .22, .7);
+  ctx.restore();
+  // throat
+  const th = new Path2D(); th.ellipse(L * .985, w * .02, w * .13, w * .47, 0, 0, Math.PI * 2);
+  ctx.save(); ctx.fillStyle = "rgba(248,225,236,.95)"; ctx.fill(th); ctx.clip(th);
+  ctx.fillStyle = "rgba(200,120,170,.35)"; ctx.fillRect(L * .985 - w * .13, -w * .5, w * .08, w);
+  for (let i = 0; i < 9; i++) {
+    const sx = L * .985 + (r() - .4) * w * .14, sy = w * (-.05 + r() * .42), sr = 1.4 + r() * 2;
+    ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.beginPath(); ctx.arc(sx, sy, sr + 1.4, 0, 7); ctx.fill();
+    ctx.fillStyle = "rgba(96,22,70,.85)"; ctx.beginPath(); ctx.arc(sx, sy, sr, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+  inkStroke(ctx, th, 1.0, .8);
+  inkStroke(ctx, p, 1.35, .9);
+  wash(ctx, cal, "100,128,80", .7, r); inkStroke(ctx, cal, 1);
+  ctx.restore();
+}
+function drawFoxglove(ctx) {
+  const r = rng(42);
+  const S = [[505, 1052], [522, 820], [452, 520], [480, 214]];
+  // basal rosette
+  const basal = [[-2.78, 330, 128, .10], [-2.42, 290, 116, .06], [-.36, 338, 130, -.10], [-.74, 286, 116, -.05], [-1.98, 206, 90, .06], [-1.18, 214, 92, -.05]];
+  basal.forEach(b => leaf(ctx, 505, 1046, b[0], b[1], b[2], { bend: b[3], teeth: 15, td: .07, crenate: true, sh: .62, bl: .7, col: "118,138,96" }, r));
+  // flowers behind the stem (left side)
+  const fl = [];
+  for (let i = 0; i < 19; i++) {
+    const t = .40 + i * .031, k = 1 - (t - .4) / .6 * .66;
+    const left = i % 4 === 2;
+    fl.push({ t, k, left, bud: t > .87 });
+  }
+  fl.filter(f => f.left).reverse().forEach(f => { const p = bez(S, f.t); bell(ctx, p[0] - 4, p[1], Math.PI - .98 + (r() - .5) * .2, 92 * f.k, 50 * f.k, f.bud, r); });
+  stem(ctx, S, 15, 5, "104,124,82", r);
+  [[.20, -.52, 176, 68, -.08], [.30, -2.62, 146, 58, .08], [.37, -.62, 104, 42, -.06]].forEach(s => { const p = bez(S, s[0]); leaf(ctx, p[0], p[1], s[1], s[2], s[3], { bend: s[4], teeth: 11, td: .07, crenate: true, sh: .6, col: "118,138,96" }, r); });
+  fl.filter(f => !f.left).forEach(f => {
+    const p = bez(S, f.t); const a = .78 + (r() - .5) * .3 + (f.bud ? -.35 : 0);
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(p[0] + Math.cos(a - .5) * 9 * f.k, p[1] + Math.sin(a - .5) * 9 * f.k); ctx.strokeStyle = `rgba(${PINK},.85)`; ctx.lineWidth = 1.2; ctx.stroke();
+    bell(ctx, p[0] + 4, p[1] + 2, a, 92 * f.k, 50 * f.k, f.bud, r);
+  });
+  // tip
+  const tp = bez(S, 1); bell(ctx, tp[0], tp[1] + 6, -1.5, 22, 12, true, r);
+}
+function pinnaGeom(L, w, bend) { return leafGeom(L, w, { bend, sh: .55, bl: .38 }); }
+function frond(ctx, P, maxL, r, opt = {}) {
+  stem(ctx, P, 6, 2, opt.stemCol || "120,110,70", r, .7);
+  const N = 22;
+  for (let i = 0; i < N; i++) {
+    const t = .10 + i / N * .88, p = bez(P, t), a = bezA(P, t);
+    const env = Math.sin(Math.PI * Math.min(1, .25 + t * 1.05)) * (1 - .55 * t * t);
+    for (const side of [-1, 1]) {
+      const tt = t + (side > 0 ? .012 : 0); const pp = bez(P, Math.min(.99, tt));
+      const L = maxL * (.42 + .58 * env) * (side > 0 ? 1 : .96), w = Math.max(10, L * .26);
+      const ang = a + side * (1.18 - .35 * t);
+      ctx.save(); ctx.translate(pp[0], pp[1]); ctx.rotate(ang);
+      const g = pinnaGeom(L, w, side * -.06);
+      wash(ctx, g.full, opt.col || "104,138,78", .62, r);
+      ctx.save(); ctx.clip(g.full); ctx.fillStyle = "rgba(50,80,40,.18)"; ctx.fill(side > 0 ? g.half : poly(g.mid.concat(g.up.slice().reverse()))); ctx.restore();
+      if (opt.sori) {
+        for (let k = 1; k < 7; k++) { const q = g.mid[Math.round(k / 7.2 * g.n)]; for (const s of [-1, 1]) { const rr = w * .13; ctx.fillStyle = "rgba(196,124,40,.85)"; ctx.beginPath(); ctx.arc(q[0], q[1] + s * w * .22, rr, 0, 7); ctx.fill(); ctx.strokeStyle = `rgba(${PINK},.6)`; ctx.lineWidth = .7; ctx.stroke(); } }
+      } else {
+        ctx.save(); ctx.clip(g.full); ctx.beginPath(); for (let k = 1; k < 9; k++) { const q = g.mid[Math.round(k / 9 * g.n)]; ctx.moveTo(q[0], q[1]); ctx.lineTo(q[0] + w * .3, q[1] - w * .5); ctx.moveTo(q[0], q[1]); ctx.lineTo(q[0] + w * .3, q[1] + w * .5); } ctx.strokeStyle = `rgba(${PINK},.3)`; ctx.lineWidth = .6; ctx.stroke(); ctx.restore();
+      }
+      inkStroke(ctx, poly(g.mid, false), .9, .6); inkStroke(ctx, g.full, 1.15, .88);
+      ctx.restore();
+    }
+  }
+}
+function drawFern(ctx) {
+  const r = rng(7);
+  // rhizome
+  const RZ = [[190, 1052], [330, 1030], [600, 1066], [820, 1036]];
+  stem(ctx, RZ, 18, 12, "130,96,60", r, .75);
+  ctx.beginPath(); for (let i = 0; i < 70; i++) { const p = bez(RZ, i / 70); ctx.moveTo(p[0], p[1] - 7); ctx.lineTo(p[0] + 6 + r() * 4, p[1] - 12 - r() * 6); } ctx.strokeStyle = `rgba(${PINK},.55)`; ctx.lineWidth = .9; ctx.stroke();
+  for (let i = 0; i < 26; i++) { const p = bez(RZ, r()); ctx.beginPath(); ctx.moveTo(p[0], p[1] + 6); ctx.quadraticCurveTo(p[0] + (r() - .5) * 30, p[1] + 25, p[0] + (r() - .5) * 50, p[1] + 34 + r() * 22); ctx.strokeStyle = `rgba(${PINK},.85)`; ctx.lineWidth = 1.2; ctx.stroke(); ctx.strokeStyle = `rgba(${PINK},.5)`; ctx.lineWidth = .8; ctx.stroke(); }
+  frond(ctx, [[330, 1036], [300, 800], [228, 520], [236, 262]], 118, r);
+  frond(ctx, [[512, 1048], [526, 770], [596, 480], [566, 218]], 128, r);
+  frond(ctx, [[694, 1046], [726, 810], [800, 570], [812, 340]], 100, r, { sori: true, col: "128,146,86" });
+  // fiddlehead
+  ctx.save(); ctx.translate(440, 1040);
+  const fp = new Path2D(); fp.moveTo(0, 0); fp.bezierCurveTo(-6, -60, -6, -120, 26, -150);
+  for (let a = 0; a < 9.5; a += .1) { const rr = 26 * Math.exp(-a * .18); fp.lineTo(26 + 18 - Math.cos(a) * rr - 18 * Math.exp(-a * .18) + 0, -150 - Math.sin(a) * rr); }
+  ctx.lineWidth = 7; ctx.strokeStyle = "rgba(128,120,70,.6)"; ctx.stroke(fp); inkStroke(ctx, fp, 1.2, .8);
+  ctx.restore();
+}
+function roseFlower(ctx, x, y, R, rot, col, r, white) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+  for (let k = 0; k < 5; k++) {
+    ctx.save(); ctx.rotate(k * Math.PI * 2 / 5 + (r() - .5) * .12);
+    const p = new Path2D(); p.moveTo(0, 0);
+    p.bezierCurveTo(R * .18, -R * .5, R * .7, -R * .78, R * .96, -R * .32);
+    p.quadraticCurveTo(R * 1.02, -R * .06, R * .88, 0);
+    p.quadraticCurveTo(R * 1.02, R * .06, R * .96, R * .32);
+    p.bezierCurveTo(R * .7, R * .78, R * .18, R * .5, 0, 0);
+    ctx.fillStyle = "rgba(252,248,240,.95)"; ctx.fill(p);
+    wash(ctx, p, col, white ? .12 : .42, r);
+    ctx.save(); ctx.clip(p); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R * .55); g.addColorStop(0, "rgba(255,255,240,.85)"); g.addColorStop(1, "rgba(255,255,240,0)"); ctx.fillStyle = g; ctx.fillRect(-R, -R, R * 2, R * 2);
+    ctx.beginPath(); for (let v = -3; v <= 3; v++) { ctx.moveTo(R * .15, 0); ctx.quadraticCurveTo(R * .5, v * R * .07, R * .9, v * R * .1); } ctx.strokeStyle = `rgba(${PINK},.22)`; ctx.lineWidth = .7; ctx.stroke();
+    if (white) { ctx.translate(0, R * .1); hatch(ctx, .3, 3.4, R, .14, .6); }
+    ctx.restore(); inkStroke(ctx, p, 1.2, .85); ctx.restore();
+  }
+  const c = new Path2D(); c.arc(0, 0, R * .2, 0, 7); wash(ctx, c, "170,170,70", .8, r); inkStroke(ctx, c, 1, .8);
+  for (let i = 0; i < 34; i++) { const a = i / 34 * Math.PI * 2 + r() * .1, d0 = R * .2, d1 = R * (.3 + r() * .08); ctx.beginPath(); ctx.moveTo(Math.cos(a) * d0, Math.sin(a) * d0); ctx.lineTo(Math.cos(a) * d1, Math.sin(a) * d1); ctx.strokeStyle = `rgba(${PINK},.5)`; ctx.lineWidth = .6; ctx.stroke(); ctx.fillStyle = "rgba(214,170,40,.95)"; ctx.beginPath(); ctx.arc(Math.cos(a) * d1, Math.sin(a) * d1, 2.2, 0, 7); ctx.fill(); ctx.strokeStyle = `rgba(${PINK},.6)`; ctx.stroke(); }
+  ctx.restore();
+}
+function compound(ctx, x, y, ang, n, L, r, o = {}) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  const len = L * (n > 3 ? 1.35 : .25);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(len * .5, -6, len, 0); ctx.strokeStyle = "rgba(100,120,70,.8)"; ctx.lineWidth = 3; ctx.stroke(); ctx.strokeStyle = `rgba(${PINK},.8)`; ctx.lineWidth = 1; ctx.stroke();
+  const pairs = (n - 1) / 2;
+  for (let i = 0; i < pairs; i++) {
+    const t = n > 3 ? (.2 + i / pairs * .7) : 1, px = len * t, sc = .78 + .22 * (i / pairs);
+    leaf(ctx, px, 0, -1.05 - .1 * i, L * sc, L * .62 * sc, { teeth: 13, td: .16, sh: .9, bl: .9, bend: .05, col: o.col || "96,128,70", veins: 6 }, r);
+    leaf(ctx, px, 0, 1.05 + .1 * i, L * sc, L * .62 * sc, { teeth: 13, td: .16, sh: .9, bl: .9, bend: -.05, col: o.col || "96,128,70", veins: 6 }, r);
+  }
+  leaf(ctx, len, 0, 0, L * 1.06, L * .66, { teeth: 14, td: .16, sh: .9, bl: .9, col: o.col || "96,128,70", veins: 6 }, r);
+  ctx.restore();
+}
+function hip(ctx, x, y, ang, s, r) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  const p = new Path2D(); p.ellipse(0, s * 1.05, s * .62, s, 0, 0, 7);
+  wash(ctx, p, "196,62,34", .8, r);
+  ctx.save(); ctx.clip(p); ctx.fillStyle = "rgba(90,10,10,.25)"; ctx.fillRect(0, 0, s, s * 3); hatch(ctx, -.7, 3.2, s * 2, .22, .7);
+  ctx.fillStyle = "rgba(255,240,220,.55)"; ctx.beginPath(); ctx.ellipse(-s * .22, s * .7, s * .12, s * .3, -.3, 0, 7); ctx.fill(); ctx.restore();
+  inkStroke(ctx, p, 1.2);
+  ctx.beginPath(); for (let i = -2; i <= 2; i++) { ctx.moveTo(0, s * 2); ctx.lineTo(i * s * .25, s * 2.5); } ctx.strokeStyle = `rgba(${PINK},.85)`; ctx.lineWidth = 1.2; ctx.stroke(); ctx.strokeStyle = `rgba(${PINK},.8)`; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+}
+function drawRose(ctx) {
+  const r = rng(3);
+  const S1 = [[230, 1070], [300, 760], [470, 520], [760, 300]], S2 = [[360, 720], [300, 600], [260, 500], [300, 400]];
+  stem(ctx, S1, 13, 6, "110,120,70", r); stem(ctx, S2, 8, 4, "110,120,70", r);
+  for (let i = 0; i < 16; i++) { const t = .05 + i * .058, p = bez(S1, t), a = bezA(S1, t) + (i % 2 ? 1 : -1) * 1.9; const q = new Path2D(); q.moveTo(p[0] + Math.cos(a + 1.3) * 5, p[1] + Math.sin(a + 1.3) * 5); q.quadraticCurveTo(p[0] + Math.cos(a) * 10, p[1] + Math.sin(a) * 10, p[0] + Math.cos(a - .5) * 15, p[1] + Math.sin(a - .5) * 15); q.lineTo(p[0] + Math.cos(a - 1.3) * 5, p[1] + Math.sin(a - 1.3) * 5); ctx.fillStyle = "rgba(150,90,60,.7)"; ctx.fill(q); inkStroke(ctx, q, .9); }
+  [[.18, -2.3, 5, 58], [.33, -.3, 5, 62], [.5, -2.6, 5, 54], [.66, .4, 5, 50], [.82, -2.1, 3, 44]].forEach(c => { const p = bez(S1, c[0]); compound(ctx, p[0], p[1], c[1], c[2], c[3], r); });
+  const q = bez(S2, .5); compound(ctx, q[0], q[1], -2.9, 5, 42, r);
+  roseFlower(ctx, 455, 540, 104, .3, "226,140,160", r);
+  roseFlower(ctx, 716, 330, 78, -.4, "226,140,160", r);
+  const sp = bez(S2, 1); hip(ctx, sp[0] - 6, sp[1] - 4, 2.7, 26, r); hip(ctx, sp[0] + 18, sp[1], 3.4, 22, r);
+  // bud
+  ctx.save(); ctx.translate(782, 286); ctx.rotate(-.9); const b = new Path2D(); b.ellipse(14, 0, 18, 10, 0, 0, 7); wash(ctx, b, "220,110,140", .6, r); inkStroke(ctx, b, 1.1); ctx.restore();
+}
+function drawStrawberry(ctx) {
+  const r = rng(19);
+  const base = [500, 1046];
+  const pets = [[[500, 1046], [470, 900], [380, 760], [330, 640]], [[500, 1046], [520, 860], [560, 640], [560, 520]], [[500, 1046], [600, 920], [690, 800], [716, 690]]];
+  // runner
+  const RN = [[505, 1046], [640, 1000], [780, 990], [880, 1062]]; ctx.beginPath(); for (let i = 0; i <= 40; i++) { const p = bez(RN, i / 40); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); } ctx.strokeStyle = "rgba(150,80,60,.8)"; ctx.lineWidth = 2.6; ctx.stroke(); ctx.strokeStyle = `rgba(${PINK},.7)`; ctx.lineWidth = .8; ctx.stroke();
+  leaf(ctx, 880, 1058, -1.9, 50, 34, { teeth: 9, td: .2, sh: .9, col: "100,134,72" }, r); leaf(ctx, 880, 1058, -1.0, 46, 32, { teeth: 9, td: .2, sh: .9, col: "100,134,72" }, r);
+  // flower and fruit stalks
+  const FS = [[500, 1046], [440, 800], [380, 520], [430, 360]], FR = [[500, 1046], [600, 900], [660, 800], [650, 770]];
+  pets.forEach(P => stem(ctx, P, 5, 3, "120,130,80", r, .6));
+  stem(ctx, FS, 4, 2.5, "120,130,80", r, .6); stem(ctx, FR, 4, 2.5, "120,130,80", r, .6);
+  pets.forEach(P => { const e = P[3], a = bezA(P, 1); for (const d of [-.95, 0, .95]) leaf(ctx, e[0], e[1], a + d, 150, 104, { teeth: 15, td: .14, sh: .95, bl: .95, col: "96,132,70", veins: 9, bend: d * -.05 }, r); });
+  roseFlower(ctx, 430, 352, 44, .5, "240,236,220", r, true);
+  roseFlower(ctx, 352, 452, 34, 1.1, "240,236,220", r, true);
+  // berries
+  [[650, 780, .4, 30], [612, 828, .9, 24], [700, 820, -.2, 22]].forEach(([x, y, a, s]) => {
+    ctx.beginPath(); ctx.moveTo(650, 770); ctx.quadraticCurveTo((650 + x) / 2 + 10, y - 20, x, y); ctx.strokeStyle = "rgba(120,130,80,.9)"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    const p = new Path2D(); p.moveTo(0, 0); p.bezierCurveTo(s * .9, 0, s * .8, s * 1.2, 0, s * 1.6); p.bezierCurveTo(-s * .8, s * 1.2, -s * .9, 0, 0, 0);
+    wash(ctx, p, "206,40,40", .85, r);
+    ctx.save(); ctx.clip(p); ctx.fillStyle = "rgba(100,0,0,.22)"; ctx.fillRect(0, 0, s, s * 2); ctx.fillStyle = "rgba(255,230,220,.5)"; ctx.beginPath(); ctx.ellipse(-s * .3, s * .5, s * .12, s * .3, .2, 0, 7); ctx.fill(); ctx.restore();
+    for (let i = 0; i < 26; i++) { const yy = r() * s * 1.45 + 3, wd = (s * .78) * Math.sin(Math.PI * Math.min(1, yy / (s * 1.6) + .15)), xx = (r() - .5) * 2 * wd * .9; ctx.fillStyle = "rgba(230,200,90,.95)"; ctx.beginPath(); ctx.ellipse(xx, yy, 1.4, 2.2, 0, 0, 7); ctx.fill(); ctx.strokeStyle = `rgba(${PINK},.5)`; ctx.lineWidth = .5; ctx.stroke(); }
+    inkStroke(ctx, p, 1.2);
+    for (let k = 0; k < 7; k++) { const aa = Math.PI + (k - 3) * .45; ctx.beginPath(); ctx.moveTo(0, 2); ctx.quadraticCurveTo(Math.cos(aa) * s * .3, Math.sin(aa) * s * .2, Math.cos(aa) * s * .6, Math.sin(aa) * s * .4 - 2); ctx.strokeStyle = "rgba(90,130,60,.9)"; ctx.lineWidth = 3; ctx.stroke(); ctx.strokeStyle = `rgba(${PINK},.7)`; ctx.lineWidth = .8; ctx.stroke(); }
+    ctx.restore();
+  });
+}
+function ornament(ctx, cx, cy, s) {
+  const r = rng(5); ctx.save(); ctx.translate(cx, cy);
+  for (const m of [-1, 1]) {
+    ctx.save(); ctx.scale(m, 1);
+    const g = leafGeom(46 * s, 18 * s, { bend: -.18, sh: .7 });
+    ctx.save(); ctx.translate(8 * s, 0); ctx.rotate(-.12);
+    ctx.fillStyle = `rgba(${PINK},.85)`; ctx.fill(g.full);
+    ctx.strokeStyle = "rgba(244,238,225,.9)"; ctx.lineWidth = 1; ctx.stroke(poly(g.mid, false)); ctx.restore();
+    ctx.beginPath(); ctx.moveTo(56 * s, -4 * s); ctx.bezierCurveTo(70 * s, -16 * s, 86 * s, -6 * s, 80 * s, 4 * s); ctx.strokeStyle = `rgba(${PINK},.85)`; ctx.lineWidth = 1.3; ctx.stroke();
+    ctx.restore();
+  }
+  ctx.fillStyle = `rgba(${PINK},.9)`; ctx.beginPath(); ctx.arc(0, 0, 4 * s, 0, 7); ctx.fill();
+  ctx.restore(); void r;
+}
+
+/* ------------------------------------------------------------ the book */
+const TXT = {
+  fox1: [
+    "Of all the flowers that adorn our English lanes in the height of summer, there is none more stately than the Foxglove. It rises from the hedge-bank in a tall and tapering spire, often to the height of four or five feet, and bears upon one side of its stem a long succession of drooping bells, of a rich purple-crimson, each spotted within as though some careful hand had touched it with drops of darker wine.",
+    "The country people have many names for it. In the western counties it is _Folk's-glove_ and _Fairy-thimbles;_ in Wales it is _Menyg Ellyllon,_ or goblin's gloves; and in the north the children call it _Bloody-fingers,_ and will tell you gravely that a bee which creeps into the bell is trying on the fairy's glove.",
+    "The plant is a biennial. In its first year it forms only a broad rosette of soft and downy leaves, wrinkled above and pale beneath, which lie close against the earth through the winter. In this state the plant is easily overlooked, for the leaves are then of a dull and sober green, and might be taken by the careless for those of the common mullein; but the foxglove leaf is more deeply veined, and its edge finely notched, while that of the mullein is entire and thickly clothed with wool.",
+    "Where the soil suits it, and especially upon land lately cleared of wood, it will spring up in thousands, so that a whole hillside is coloured with it for a season."
+  ],
+  fox2: [
+    "It is not until the second summer that the flowering stem is sent up from their midst. The flowers open in regular order from the bottom of the spike upwards, so that a single plant may continue in bloom for six weeks together, the lowest bells having already fallen and set their seed while the topmost are still green and closed. Each corolla is so placed that the bee, alighting upon the broad lower lip, must brush against the anthers in the roof of the tube as it creeps inward to the nectar.",
+    "It would be wrong to pass from this plant without some notice of its virtues in medicine, which are very great, though not to be trifled with. Dr. Withering of Birmingham, having learnt from an old woman of Shropshire that a decoction of the leaves had cured a dropsy which the physicians had abandoned, made trial of it for ten years together, and published in 1785 his celebrated _Account of the Foxglove._ Its action upon the heart is now well established; but the whole plant is poisonous, and no part of it should ever be gathered by the unlearned for use.",
+    "The white variety is not uncommon in gardens, and is sometimes met with wild upon the edges of woods, where the soil is light and sandy."
+  ],
+  poly1: [
+    "Upon the mossy stumps of old pollard trees, along the tops of walls, and in the crevices of shaded banks, there grows a fern so common that it is passed by without a second glance, and yet so graceful that, were it rare, it would be sought after by every collector in the kingdom. This is the Common Polypody, the _wall-fern_ of the old herbalists.",
+    "Its creeping root-stock, thick as a quill and clothed with brown chaffy scales, runs just beneath the surface of the moss, and sends up its fronds singly at short intervals, so that a large patch has the appearance of a little forest in miniature. The fronds are evergreen, and are at their greatest beauty in late autumn."
+  ],
+  poly2: [
+    "At that season the round golden heaps of seed-cases upon the under surface are fully ripe. These heaps, or _sori,_ as the botanist calls them, are arranged in two neat rows upon each segment of the frond, one on either side of the midrib, and are without any covering, which character at once distinguishes the Polypody from all our other native ferns. If a ripe frond be laid upon a sheet of white paper overnight, a fine brown dust will be found beneath it in the morning, each grain of which is capable of producing a new plant.",
+    "The root has a sweetish taste, not unlike liquorice, and was formerly given to children as a remedy for coughs. Gerarde tells us that the Polypody which grows upon the oak is to be preferred above all others, though he confesses he can find no difference between them; and in this the modern botanist will heartily agree with him.",
+    "There are several varieties of this fern, of which the most remarkable is the Welsh Polypody, whose fronds are cut and divided again into the most delicate lace-work."
+  ],
+  straw: [
+    "No one who has wandered along a sunny hedge-bank in the month of June can have failed to notice the little white stars of the Wild Strawberry, peeping out from among its bright trifoliate leaves, nor the scarlet fruit which follows them, hanging like drops of coral upon their slender stalks.",
+    "The plant increases chiefly by its runners, long thread-like shoots which creep outward over the ground and root at every joint, so that a single crown will in a few seasons cover a considerable space. The fruit, so much smaller than that of our garden kinds, is generally allowed to surpass them all in fragrance; and Izaak Walton records the saying of a certain doctor, that doubtless God could have made a better berry, but doubtless God never did."
+  ],
+  notes: [
+    "FRONTISPIECE. The Dog-Rose, _Rosa canina._ Drawn from a spray gathered near Dorking in July, 1869; the hips added in October from the same bush.",
+    "PLATE I. The Foxglove, _Digitalis purpurea._ From a plant some two feet in height, the lower leaves somewhat reduced, and the spike shewn in its first week of flowering.",
+    "PLATE II. The Common Polypody, _Polypodium vulgare._ The right-hand frond is shewn from beneath, to display the naked sori; a young frond unrolling at the base.",
+    "PLATE III. The Wild Strawberry, _Fragaria vesca._ Flower, fruit, and runner, of the natural size.",
+    "The plates were engraved upon copper by Mr. J. Swain, and coloured by hand under the direction of the author."
+  ]
+};
+const META = {}; // per page records (paragraph starts etc.)
+function buildPages() {
+  const pages = [];
+  const make = (i, fn) => { const c = mk(PW, PH), x = c.getContext("2d"); paper(x, 100 + i * 17); fn(x, i); pages.push(c); };
+  const body = { size: 24, lh: 35.5, maxY: 1262 };
+  const leftX = 138, rightX = 122, tw = 740;
+  make(0, x => { plateFrame(x, "FRONTISPIECE.", "THE DOG-ROSE.", "Rosa canina, Linn."); drawRose(x); });
+  make(1, x => {
+    x.fillStyle = INK; x.textBaseline = "alphabetic";
+    x.font = `22px ${SERIF}`; spaced(x, "THE", PW / 2, 250, 8, "center");
+    x.font = `56px ${SERIF}`; spaced(x, "HEDGEROW FLORA", PW / 2, 330, 7, "center");
+    x.font = `19px ${SERIF}`; spaced(x, "BEING AN ACCOUNT OF THE WILD PLANTS", PW / 2, 400, 3.5, "center"); spaced(x, "OF LANE, BANK, AND COPSE", PW / 2, 432, 3.5, "center");
+    x.font = `italic 22px ${SERIF}`; x.textAlign = "center"; x.fillText("With Plates coloured by Hand.", PW / 2, 500); x.textAlign = "left";
+    x.strokeStyle = "rgba(44,35,29,.6)"; x.lineWidth = 1; x.beginPath(); x.moveTo(PW / 2 - 60, 560); x.lineTo(PW / 2 + 60, 560); x.stroke();
+    x.font = `18px ${SERIF}`; spaced(x, "BY", PW / 2, 630, 5, "center");
+    x.font = `27px ${SERIF}`; spaced(x, "MARGARET A. HALE, F.L.S.", PW / 2, 676, 4, "center");
+    ornament(x, PW / 2, 820, 1.25);
+    x.font = `19px ${SERIF}`; spaced(x, "LONDON:", PW / 2, 1040, 4, "center"); spaced(x, "PRINTED FOR THE AUTHOR BY J. SWAIN & SONS,", PW / 2, 1074, 2.5, "center"); spaced(x, "FLEET STREET.", PW / 2, 1106, 3, "center");
+    x.font = `20px ${SERIF}`; spaced(x, "MDCCCLXXII.", PW / 2, 1160, 4, "center");
+  });
+  make(2, (x, i) => { const y = chapterHead(x, "CHAPTER I.", "THE FOXGLOVE.", "(Digitalis purpurea.)", 250); META[i] = textBlock(x, TXT.fox1, { ...body, x: leftX, y: y + 6, w: tw, drop: true }); x.font = `18px ${SERIF}`; x.textAlign = "center"; x.fillText("2", PW / 2, 1318); x.textAlign = "left"; });
+  make(3, x => { plateFrame(x, "PLATE I.", "THE FOXGLOVE.", "Digitalis purpurea, Linn."); drawFoxglove(x); });
+  make(4, (x, i) => { runningHead(x, true, "THE HEDGEROW FLORA.", 4); META[i] = textBlock(x, TXT.fox2, { ...body, x: leftX, y: 160, w: tw }); ornament(x, PW / 2, Math.min(1230, META[i].y + 40), .7); });
+  make(5, (x, i) => { const y = chapterHead(x, "CHAPTER II.", "THE COMMON POLYPODY.", "(Polypodium vulgare.)", 250); META[i] = textBlock(x, TXT.poly1, { ...body, x: rightX + 18, y: y + 6, w: tw, drop: true }); x.font = `18px ${SERIF}`; x.textAlign = "center"; x.fillText("5", PW / 2, 1318); x.fillText("B", PW - 170, 1318); x.textAlign = "left"; });
+  make(6, x => { plateFrame(x, "PLATE II.", "THE COMMON POLYPODY.", "Polypodium vulgare, Linn."); drawFern(x); });
+  make(7, (x, i) => { runningHead(x, false, "THE COMMON POLYPODY.", 7); META[i] = textBlock(x, TXT.poly2, { ...body, x: rightX + 18, y: 160, w: tw }); ornament(x, PW / 2, Math.min(1230, META[i].y + 40), .7); });
+  make(8, (x, i) => { const y = chapterHead(x, "CHAPTER III.", "THE WILD STRAWBERRY.", "(Fragaria vesca.)", 250); META[i] = textBlock(x, TXT.straw, { ...body, x: leftX, y: y + 6, w: tw, drop: true }); x.font = `18px ${SERIF}`; x.textAlign = "center"; x.fillText("8", PW / 2, 1318); x.textAlign = "left"; });
+  make(9, x => { plateFrame(x, "PLATE III.", "THE WILD STRAWBERRY.", "Fragaria vesca, Linn."); drawStrawberry(x); });
+  make(10, (x, i) => { runningHead(x, true, "NOTES ON THE PLATES.", 10); x.fillStyle = INK; x.font = `30px ${SERIF}`; spaced(x, "NOTES ON THE PLATES.", PW / 2, 250, 5, "center"); META[i] = textBlock(x, TXT.notes, { ...body, size: 22, lh: 33, x: leftX, y: 320, w: tw, paraGap: 20 }); });
+  make(11, x => {
+    x.fillStyle = INK; ornament(x, PW / 2, 520, 1);
+    x.font = `22px ${SERIF}`; spaced(x, "END OF THE FIRST VOLUME.", PW / 2, 620, 4, "center");
+    x.strokeStyle = "rgba(44,35,29,.5)"; x.lineWidth = 1; x.beginPath(); x.moveTo(PW / 2 - 30, 1080); x.lineTo(PW / 2 + 30, 1080); x.stroke();
+    x.font = `16px ${SERIF}`; spaced(x, "LONDON:", PW / 2, 1118, 3, "center"); spaced(x, "PRINTED BY J. SWAIN AND SONS, FLEET STREET.", PW / 2, 1146, 2, "center");
+  });
+  return pages;
+}
+
+/* ------------------------------------------------------------ notes data */
+const SPREADS = ["Frontispiece · Title", "Chapter I · Plate I", "The Foxglove · Ch. II", "Plate II · Polypody", "Chapter III · Plate III", "Notes · Colophon"];
+const NOTES = [
+  { id: "names", page: 2, x: .085, y: 0, label: "Folk names", kicker: "Language", title: "Folk's-glove and fairy thimbles",
+    sub: "Dialect names recorded in the text, 1872", crop: [100, 600, 800, 330], cap: "Detail, p. 2 — the second paragraph",
+    body: ["Hale gathered these names from correspondents across England and Wales. Most of them tie the flower to the “good folk” — fairies — rather than to foxes. Her own copy of the book has two more names pencilled in the margin.",
+      "Old English writers already used the word <i>foxes glofa</i>, so the fox in the name is probably as old as the fairy."],
+    meta: [["Reference", "Prior, <i>Popular Names of British Plants</i>, 1863"], ["Annotation", "Pencil, author’s hand"], ["Location", "p. 2, para. 2"]], chips: ["Etymology", "Folklore", "Wales"] },
+  { id: "spike", page: 3, x: .515, y: .45, label: "The flower spike", kicker: "Botany", title: "A one-sided spire",
+    sub: "Digitalis purpurea L., drawn in its first week of flowering", crop: [430, 330, 420, 380], cap: "Detail, Plate I — lower flowers of the raceme",
+    body: ["The bells open from the bottom of the spike upwards, so one plant can bloom for six weeks. Hale drew this specimen early in the season: the lowest flowers are fully open and the top of the spike is still in tight green bud.",
+      "In 1785 William Withering published his study of foxglove leaves for treating “dropsy”, a swelling now understood as heart failure. Digoxin, which comes from the plant’s relative <i>D. lanata</i>, is still prescribed today."],
+    meta: [["Specimen", "Near Dorking, Surrey"], ["Drawn", "June 1869"], ["Plate", "I, facing p. 2"]], chips: ["Withering, 1785", "Digoxin", "Pollination"] },
+  { id: "colour", page: 3, x: .832, y: .888, label: "Coloured by hand", kicker: "Making the book", title: "Engraved in line, coloured by hand",
+    sub: "The colourists’ work, plate by plate", crop: [585, 380, 260, 230], cap: "Detail, Plate I — watercolour sitting slightly off the engraved line",
+    body: ["J. Swain engraved the drawing in line on copper. Every copy was then coloured by hand with watercolour, working from a master copy that Hale had approved.",
+      "Look closely at the bells. In places the wash sits a hair outside the line, and the throat spots were added last with the tip of a fine brush. No two copies of this edition match exactly."],
+    meta: [["Process", "Copper engraving, hand colour"], ["Engraver", "J. Swain, Fleet Street"], ["Copy", "Gallery copy, no. 214 of 500"]], chips: ["Intaglio", "Watercolour", "Edition of 500"] }
+];
+
+/* ------------------------------------------------------------ state + DOM */
+const pageCanvases = buildPages();
+const N_PAGES = pageCanvases.length, N_SPREADS = N_PAGES / 2;
+let spread = Math.max(0, Math.min(N_SPREADS - 1, +(Q.get("spread") ?? 1)));
+const book = $("#book"), slotL = $("#slotL"), slotR = $("#slotR");
+pageCanvases.forEach((c, i) => { c.className = "pg"; (i % 2 ? slotR : slotL).insertBefore(c, (i % 2 ? slotR : slotL).firstChild); });
+// the note on p. 2 sits at the start of paragraph 2
+NOTES[0].y = (META[2].starts[1] + 14) / PH; NOTES[0].crop[1] = META[2].starts[1] - 26;
+const hsEls = NOTES.map((n, i) => {
+  const el = document.createElement("div"); el.className = "hs d" + i; el.style.left = n.x * 100 + "%"; el.style.top = n.y * 100 + "%";
+  el.innerHTML = `<span class="tip">${n.label}</span>`; el.dataset.page = n.page;
+  el.addEventListener("pointerdown", e => e.stopPropagation());
+  el.addEventListener("click", e => { e.stopPropagation(); openNote(i); });
+  (n.page % 2 ? slotR : slotL).appendChild(el); return el;
+});
+
+/* gutter shading: one function shared by the DOM overlay and the GL shader */
+function gutterVA(t) {
+  const ad = Math.min(.9, .34 * Math.exp(-t / .016) + .13 * Math.exp(-t / .075) + .05 * Math.exp(-(1 - t) / .012));
+  const al = .07 * Math.exp(-Math.pow((t - .16) / .07, 2));
+  const a = 1 - (1 - ad) * (1 - al); return [a > 0 ? al / a : 0, a];
+}
+(function gutters() {
+  for (const [el, left] of [[$("#gutL"), true], [$("#gutR"), false]]) {
+    const c = mk(512, 1), x = c.getContext("2d"), id = x.createImageData(512, 1);
+    for (let i = 0; i < 512; i++) { const u = (i + .5) / 512, t = left ? 1 - u : u, [v, a] = gutterVA(t); id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = Math.round(v * 255); id.data[i * 4 + 3] = Math.round(a * 255); }
+    x.putImageData(id, 0, 0); el.style.backgroundImage = `url(${c.toDataURL()})`;
+  }
+})();
+(function cloth() {
+  const c = mk(160, 160), x = c.getContext("2d"), id = x.createImageData(160, 160), r = rng(2);
+  for (let yy = 0; yy < 160; yy++) for (let xx = 0; xx < 160; xx++) {
+    const i = (yy * 160 + xx) * 4, warp = (xx % 3 === 0) ? -14 : 0, weft = (yy % 3 === 0) ? -10 : 0, slub = Math.sin(yy * .7 + Math.sin(xx * .13) * 3) * 4;
+    const v = 128 + warp + weft + slub + (r() - .5) * 26; id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = 46;
+  }
+  x.putImageData(id, 0, 0); document.querySelector(".board").style.backgroundImage = `url(${c.toDataURL()})`;
+  document.querySelector(".board").style.backgroundSize = "80px 80px";
+})();
+
+let showing = [-1, -1];
+function showPages(l, r) {
+  if (showing[0] === l && showing[1] === r) return;
+  pageCanvases.forEach((c, i) => c.classList.toggle("on", i === l || i === r));
+  hsEls.forEach(el => el.style.display = (+el.dataset.page === l || +el.dataset.page === r) ? "" : "none");
+  showing = [l, r];
+}
+
+let panelOpen = false, geo = { W: 0, H: 0 };
+function layout() {
+  const vw = innerWidth, vh = innerHeight, panelW = panelOpen ? Math.min(412, vw * .36) : 0;
+  const top = 74, bottom = 104, side = 70;
+  const availW = vw - panelW - side * 2, availH = vh - top - bottom;
+  const H = Math.max(200, Math.min(availH / 1.05, availW / (2 * ASPECT + .09)));
+  const W = H * ASPECT, cx = (vw - panelW) / 2, cy = top + availH / 2 + 4;
+  Object.assign(book.style, { left: cx - W + "px", top: cy - H / 2 + "px", width: 2 * W + "px", height: H + "px" });
+  slotL.style.left = "0px"; slotL.style.width = W + "px"; slotR.style.left = W + "px"; slotR.style.width = W + "px";
+  $("#crease").style.left = W + "px";
+  const m = H * .022, mo = H * .03;
+  Object.assign(document.querySelector(".board").style, { left: -mo + "px", right: -mo + "px", top: -m + "px", bottom: -m * 1.25 + "px" });
+  $("#bar").style.left = cx + "px"; $("#title").style.left = cx + "px";
+  geo = { W, H };
+  updateEdges();
+}
+function updateEdges() {
+  const f = spread / (N_SPREADS - 1), H = geo.H || 600, k = H / 700;
+  const tl = (3 + 9 * f) * k, tr = (3 + 9 * (1 - f)) * k;
+  Object.assign($("#edgeL").style, { left: -tl + "px", width: tl + 1 + "px" });
+  Object.assign($("#edgeR").style, { right: -tr + "px", width: tr + 1 + "px" });
+  Object.assign($("#edgeB").style, { left: -tl * .6 + "px", right: -tr * .6 + "px", bottom: -3 * k + "px", height: 3.5 * k + "px" });
+}
+
+/* thumbnails */
+const thumbs = $("#thumbs");
+const thEls = [];
+for (let s = 0; s < N_SPREADS; s++) {
+  const d = document.createElement("div"); d.className = "th"; d.title = SPREADS[s];
+  const c = mk(104, 68), x = c.getContext("2d"); x.drawImage(pageCanvases[2 * s], 0, 0, 52, 68 * 1); x.drawImage(pageCanvases[2 * s + 1], 52, 0, 52, 68);
+  const g = x.createLinearGradient(44, 0, 60, 0); g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(.5, "rgba(60,40,20,.25)"); g.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g; x.fillRect(44, 0, 16, 68);
+  c.style.width = "50px"; d.appendChild(c);
+  if (NOTES.some(n => n.page === 2 * s || n.page === 2 * s + 1)) { const dot = document.createElement("i"); dot.className = "dot"; d.appendChild(dot); }
+  d.addEventListener("click", () => goTo(s));
+  thumbs.appendChild(d); thEls.push(d);
+}
+function updateUI() {
+  thEls.forEach((t, i) => t.classList.toggle("on", i === spread));
+  const t = thEls[spread]; $("#trackI").style.left = t.offsetLeft + "px"; $("#trackI").style.width = t.offsetWidth + "px";
+  $("#locA").textContent = SPREADS[spread];
+  $("#locB").textContent = spread === 0 ? "Frontispiece · title" : `pp. ${2 * spread}–${2 * spread + 1} of ${N_PAGES}`;
+  const n = NOTES.filter(n => n.page >> 1 === spread).length;
+  $("#notesLabel").textContent = n ? `${n} note${n > 1 ? "s" : ""} here` : `${NOTES.length} notes`;
+}
+
+/* panel */
+let activeNote = -1;
+function openNote(i) {
+  activeNote = i; const n = NOTES[i];
+  hsEls.forEach((el, k) => el.classList.toggle("active", k === i));
+  $("#pKicker").textContent = `Curator's note · ${n.kicker}`;
+  const c = mk(672, Math.round(672 * n.crop[3] / n.crop[2])), x = c.getContext("2d");
+  x.imageSmoothingQuality = "high"; x.drawImage(pageCanvases[n.page], n.crop[0], n.crop[1], n.crop[2], n.crop[3], 0, 0, c.width, c.height);
+  const zoom = (672 / 2 / n.crop[2] * PW / (geo.W || 500) * (geo.W || 500) / PW * 2).toFixed(1);
+  $("#pBody").innerHTML = `<h2>${n.title}</h2><div class="sub">${n.sub}</div>
+    <div class="detail" id="det"><span class="zoom">${(PW / n.crop[2]).toFixed(1)}×</span></div><div class="cap">${n.cap}</div>
+    ${n.body.map(p => `<p>${p}</p>`).join("")}
+    <div class="meta">${n.meta.map(m => `<div><span>${m[0]}</span><span>${m[1]}</span></div>`).join("")}</div>
+    <div class="chips">${n.chips.map(c => `<span>${c}</span>`).join("")}</div>`;
+  $("#det").prepend(c); void zoom;
+  $("#pCount").textContent = `${i + 1} of ${NOTES.length} notes`;
+  if (!panelOpen) { panelOpen = true; document.body.classList.add("panel-open"); layout(); }
+}
+function closeNote() { activeNote = -1; hsEls.forEach(el => el.classList.remove("active")); panelOpen = false; document.body.classList.remove("panel-open"); layout(); }
+$("#pClose").onclick = closeNote;
+$("#pNext").onclick = () => { const i = (activeNote + 1) % NOTES.length; const s = NOTES[i].page >> 1; if (s !== spread) goTo(s); openNote(i); };
+$("#pPrev").onclick = () => { const i = (activeNote + NOTES.length - 1) % NOTES.length; const s = NOTES[i].page >> 1; if (s !== spread) goTo(s); openNote(i); };
+$("#notesToggle").onclick = () => document.body.classList.toggle("hide-notes");
+$("#prev").onclick = () => goTo(spread - 1);
+$("#next").onclick = () => goTo(spread + 1);
+
+/* =====================================================================
+   WebGL: procedural table
+   ===================================================================== */
+const tableCanvas = $("#table");
+const tgl = tableCanvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: true });
+const VS_FULL = `#version 300 es
+out vec2 vUv; void main(){ vec2 p = vec2((gl_VertexID<<1)&2, gl_VertexID&2); vUv = p; gl_Position = vec4(p*2.-1., 0., 1.); }`;
+const FS_WOOD = `#version 300 es
+precision highp float;
+uniform vec2 uRes; uniform float uDpr; uniform float uScale;
+out vec4 o;
+float h21(vec2 p){ vec3 p3 = fract(vec3(p.xyx)*.1031); p3 += dot(p3, p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
+float vn(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.-2.*f);
+  return mix(mix(h21(i),h21(i+vec2(1,0)),u.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),u.x), u.y); }
+float fbm(vec2 p){ float s=0., a=.5; mat2 m=mat2(1.6,1.2,-1.2,1.6); for(int i=0;i<5;i++){ s+=a*vn(p); p=m*p+3.1; a*=.5; } return s; }
+vec3 wood(vec2 p, out float seamOut){
+  float plankW = 205.;
+  float row = floor(p.y/plankW);
+  float v = p.y - row*plankW;
+  float s1 = h21(vec2(row,1.7)), s2 = h21(vec2(row,9.1)), s3 = h21(vec2(row,4.4));
+  float x = p.x + s1*7000.;
+  float w1 = fbm(vec2(x*.0013, v*.0045 + s2*10.));
+  float w2 = fbm(vec2(x*.005, v*.025 + s3*7.));
+  float vw = v + (w1-.5)*46. + (w2-.5)*7.;
+  float pith = mix(-.35, 1.35, s2)*plankW;
+  float hgt = 30. + 150.*s3 + 110.*sin(x*.0009 + s1*6.28) + 80.*(fbm(vec2(x*.0007, s1*20.))-.5);
+  float r = sqrt((vw-pith)*(vw-pith) + hgt*hgt);
+  float rw = 7.5 + 4.5*s1;
+  float ring = r/rw + (w2-.5)*.8;
+  float f = fract(ring), id = floor(ring);
+  float rv = h21(vec2(id, row*3.1));
+  float late = smoothstep(.55, .93, f) * (1. - smoothstep(.95, 1., f));
+  float line = smoothstep(.86, .95, f) * (1. - smoothstep(.96, 1., f));
+  float sub = smoothstep(.6, 1., vn(vec2(x*.004, ring*3.1))) * (.5 + .5*sin(ring*6.2832*3.));
+  float early = 1. - smoothstep(.0, .25, f);
+  float pn = vn(vec2(x*.20, vw*1.7)) * .65 + vn(vec2(x*.5, vw*3.1)) * .35;
+  float pores = smoothstep(.60, .84, pn) * (.20 + .80*early);
+  float fib = vn(vec2(x*.010, vw*.70))*.55 + vn(vec2(x*.035, vw*2.2))*.30 + vn(vec2(x*.09, vw*5.))*.15;
+  float ray = smoothstep(.78, .95, vn(vec2(x*.06, vw*.35))) * smoothstep(.55,.9, vn(vec2(x*.004, vw*.02 + 4.)));
+  float tone = late*(.40 + .60*rv) + line*.35*rv + sub*.06 + (fib-.5)*.55 + (w1-.5)*.35;
+  vec3 light = vec3(.900,.812,.672);
+  vec3 dark  = vec3(.690,.548,.388);
+  vec3 col = mix(light, dark, clamp(tone*.75 + .16, 0., 1.));
+  col *= 1. - pores*.22;
+  col = mix(col, col*1.06 + .01, ray*.5);
+  col *= .95 + .09*s1;
+  col = mix(col, col*vec3(1.025,.995,.955), s2*.7);
+  float d = min(v, plankW - v);
+  seamOut = d;
+  col *= 1. - .62*exp(-d*d/.9);
+  col *= 1. - .07*exp(-d/4.);
+  col += .045*exp(-pow(v-1.8,2.)/1.6);
+  return col;
+}
+void main(){
+  vec2 frag = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 css = frag/uDpr;
+  vec2 p = css/uScale;
+  float seam;
+  vec3 col = wood(p, seam);
+  vec2 uv = frag/uRes; float asp = uRes.x/uRes.y;
+  vec2 q = uv - vec2(.10, -.20); q.x *= asp;
+  col *= mix(1.10, .80, smoothstep(.0, 1.9, length(q)));
+  // soft window light falling across the table
+  vec2 w = uv; w.x *= asp; w = mat2(.94,-.34,.34,.94) * (w - vec2(.15,.05));
+  float pane = smoothstep(.00,.12,w.x)*(1.-smoothstep(.55,.75,w.x))*smoothstep(-.05,.10,w.y)*(1.-smoothstep(.42,.62,w.y));
+  float mull = 1. - .35*(exp(-pow((w.x-.29)/.025,2.)) + exp(-pow((w.y-.20)/.025,2.)));
+  col *= 1. + .055*pane*mull;
+  float lum = dot(col, vec3(.299,.587,.114));
+  col = mix(col, vec3(lum), .12);
+  col *= vec3(.982, 1.0, 1.03);
+  col += (fbm(css*.0022)-.5)*.035;
+  col += (h21(gl_FragCoord.xy)-.5)/255.;
+  o = vec4(col, 1.);
+}`;
+function compile(g, vs, fs) {
+  const p = g.createProgram();
+  for (const [type, src] of [[g.VERTEX_SHADER, vs], [g.FRAGMENT_SHADER, fs]]) {
+    const s = g.createShader(type); g.shaderSource(s, src); g.compileShader(s);
+    if (!g.getShaderParameter(s, g.COMPILE_STATUS)) throw new Error(g.getShaderInfoLog(s));
+    g.attachShader(p, s);
+  }
+  g.linkProgram(p); if (!g.getProgramParameter(p, g.LINK_STATUS)) throw new Error(g.getProgramInfoLog(p));
+  const u = {}; const n = g.getProgramParameter(p, g.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const info = g.getActiveUniform(p, i); u[info.name] = g.getUniformLocation(p, info.name); }
+  return { p, u };
+}
+const woodProg = compile(tgl, VS_FULL, FS_WOOD);
+function drawTable() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  tableCanvas.width = Math.round(innerWidth * dpr); tableCanvas.height = Math.round(innerHeight * dpr);
+  tgl.viewport(0, 0, tableCanvas.width, tableCanvas.height);
+  tgl.useProgram(woodProg.p);
+  tgl.uniform2f(woodProg.u.uRes, tableCanvas.width, tableCanvas.height);
+  tgl.uniform1f(woodProg.u.uDpr, dpr);
+  tgl.uniform1f(woodProg.u.uScale, Math.max(.7, Math.min(innerWidth, innerHeight * 1.5) / 1300));
+  tgl.drawArrays(tgl.TRIANGLES, 0, 3);
+}
+
+/* =====================================================================
+   WebGL: page curl
+   The turning leaf is a 64x88 grid. Each vertex is wrapped around a
+   cylinder whose axis lies on the page; past half a turn it lies flat
+   again, upside down. Lighting comes from the analytic normal. Cast
+   shadow is the deformed leaf projected along the light, blurred at
+   quarter resolution.
+   ===================================================================== */
+const glc = $("#gl");
+const gl = glc.getContext("webgl2", { antialias: true, alpha: true, premultipliedAlpha: true });
+const VS_SHEET = `#version 300 es
+precision highp float;
+in vec2 aUV;
+uniform vec2 uPage, uSpine, uView, uA, uN, uShadowOff;
+uniform float uMirror, uR, uCam, uShadow;
+out vec2 vUV; out vec3 vNrm; out float vZ; out float vDist; out vec2 vPos;
+void main(){
+  vec2 p = aUV*uPage;
+  float d = dot(p-uA, uN);
+  vec2 q = p; float z = 0.; vec2 nz = vec2(0.,1.);
+  if(d > 0.){
+    float arc = 3.14159265*uR;
+    if(d < arc){ float th = d/uR; q = p - uN*d + uN*(uR*sin(th)); z = uR*(1.-cos(th)); nz = vec2(-sin(th), cos(th)); }
+    else { q = p - uN*d - uN*(d-arc); z = 2.*uR; nz = vec2(0.,-1.); }
+  }
+  vec3 n = vec3(uN*nz.x, nz.y); n.x *= uMirror;
+  vec3 w = vec3(uSpine.x + uMirror*q.x, uSpine.y + q.y, z);
+  vPos = w.xy; vZ = z; vDist = d; vNrm = n; vUV = aUV;
+  if(uShadow > .5){ w.xy += uShadowOff*z; w.z = 0.; }
+  vec2 c = w.xy - uView*.5;
+  float wv = uCam - w.z;
+  gl_Position = vec4(c.x*2./uView.x*uCam, -c.y*2./uView.y*uCam, -w.z/3000.*wv, wv);
+}`;
+const GUTTER_GLSL = `
+vec2 gutter(float t){
+  float ad = min(.9, .34*exp(-t/.016) + .13*exp(-t/.075) + .05*exp(-(1.-t)/.012));
+  float al = .07*exp(-pow((t-.16)/.07, 2.));
+  float a = 1. - (1.-ad)*(1.-al); return vec2(a > 0. ? al/a : 0., a);
+}`;
+const FS_SHEET = `#version 300 es
+precision highp float;
+in vec2 vUV; in vec3 vNrm; in float vZ; in float vDist; in vec2 vPos;
+uniform sampler2D uFront, uBack;
+uniform float uMirror, uFaceFlip, uR;
+uniform vec2 uPage, uSpine;
+out vec4 o;
+${GUTTER_GLSL}
+void main(){
+  bool front = (gl_FrontFacing == (uFaceFlip > 0.));
+  float uf = uMirror > 0. ? vUV.x : 1. - vUV.x;
+  vec2 uvF = vec2(uf, vUV.y), uvB = vec2(1. - uf, vUV.y);
+  vec3 col, N; float lifted = smoothstep(0., 18., vZ);
+  if(front){ col = texture(uFront, uvF).rgb; N = normalize(vNrm);
+    vec3 other = texture(uBack, uvB).rgb; col *= 1. - .03*lifted*clamp((.86 - dot(other, vec3(.333)))*1.6, 0., 1.); }
+  else { col = texture(uBack, uvB).rgb; N = -normalize(vNrm);
+    vec3 other = texture(uFront, uvF).rgb; col *= 1. - .03*lifted*clamp((.86 - dot(other, vec3(.333)))*1.6, 0., 1.); }
+  vec3 L = normalize(vec3(-.42, -.58, 1.));
+  vec3 V = vec3(0., 0., 1.);
+  float dif = max(dot(N, L), 0.);
+  float shade = .40 + .60*dif/L.z;
+  vec3 Hh = normalize(L + V);
+  float spec = max(pow(max(dot(N, Hh), 0.), 26.) - pow(Hh.z, 26.), 0.);
+  col = col*shade + vec3(.97,.99,1.)*spec*.20;
+  // translucency: the lifted leaf glows faintly where daylight passes through it
+  if(dot(N, L) < 0.) col += vec3(.035,.03,.02)*lifted;
+  // self shadow under the curl
+  if(front && vDist < 0.) col *= 1. - .26*exp(vDist/(uR*.9 + 5.))*smoothstep(1., 8., uR);
+  float flatW = 1. - smoothstep(0., 22., vZ);
+  float t = clamp(abs(vPos.x - uSpine.x)/uPage.x, 0., 1.);
+  vec2 g = gutter(t);
+  col = mix(col, col*(1.-g.y) + g.x*g.y, flatW);
+  vec2 e = min(vUV, 1. - vUV)*uPage; float edge = min(e.x, e.y);
+  col *= mix(1., mix(.80, 1., smoothstep(0., 1.8, edge)), 1. - flatW*.85);
+  o = vec4(col, 1.);
+}`;
+const FS_SHADOW = `#version 300 es
+precision highp float;
+in float vZ; in vec2 vUV; in vec3 vNrm; in float vDist; in vec2 vPos;
+out vec4 o;
+void main(){ float a = .62*smoothstep(0., 9., vZ)*(1. - .5*smoothstep(0., 360., vZ)); o = vec4(0., 0., 0., a); }`;
+const FS_BLUR = `#version 300 es
+precision highp float;
+in vec2 vUv; uniform sampler2D uTex; uniform vec2 uDir; out vec4 o;
+void main(){
+  float w[7] = float[](.1974,.1747,.1210,.0656,.0279,.0093,.0024);
+  float a = texture(uTex, vUv).a*w[0];
+  for(int i = 1; i < 7; i++){ a += (texture(uTex, vUv + uDir*float(i)).a + texture(uTex, vUv - uDir*float(i)).a)*w[i]; }
+  o = vec4(0., 0., 0., a);
+}`;
+const FS_COMP = `#version 300 es
+precision highp float;
+in vec2 vUv; uniform sampler2D uTex;
+uniform vec2 uView, uSpine, uPage, uA, uN; uniform float uMirror, uR;
+out vec4 o;
+void main(){
+  float a = texture(uTex, vUv).a;
+  vec2 css = vec2(vUv.x*uView.x, (1. - vUv.y)*uView.y);
+  vec2 lp = vec2((css.x - uSpine.x)*uMirror, css.y - uSpine.y);
+  float d = dot(lp - uA, uN);
+  float inside = step(0., lp.x)*step(lp.x, uPage.x)*step(0., lp.y)*step(lp.y, uPage.y);
+  float ao = inside*step(0., d)*.42*exp(-max(d - uR, 0.)/(uR*.55 + 7.))*smoothstep(1., 10., uR);
+  float A = 1. - (1. - a)*(1. - ao);
+  o = vec4(vec3(.07, .09, .12)*A, A);
+}`;
+const sheetProg = compile(gl, VS_SHEET, FS_SHEET);
+const shadowProg = compile(gl, VS_SHEET, FS_SHADOW);
+const blurProg = compile(gl, VS_FULL, FS_BLUR);
+const compProg = compile(gl, VS_FULL, FS_COMP);
+const MX = 64, MY = 88;
+const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+{
+  const uv = new Float32Array((MX + 1) * (MY + 1) * 2); let k = 0;
+  for (let j = 0; j <= MY; j++) for (let i = 0; i <= MX; i++) { uv[k++] = i / MX; uv[k++] = j / MY; }
+  const idx = new Uint16Array(MX * MY * 6); k = 0;
+  for (let j = 0; j < MY; j++) for (let i = 0; i < MX; i++) { const a = j * (MX + 1) + i, b = a + 1, c = a + MX + 1, d = c + 1; idx.set([a, b, c, b, d, c], k); k += 6; }
+  const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, uv, gl.STATIC_DRAW);
+  for (const prog of [sheetProg, shadowProg]) { const loc = gl.getAttribLocation(prog.p, "aUV"); if (loc >= 0) { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0); } }
+  const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+}
+gl.bindVertexArray(null);
+const emptyVao = gl.createVertexArray();
+const aniso = gl.getExtension("EXT_texture_filter_anisotropic");
+const pageTex = pageCanvases.map(c => {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, 8);
+  return t;
+});
+let fbo = [], dpr = 1;
+function makeTarget(w, h) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); return { t, f, w, h };
+}
+function resizeGL() {
+  dpr = Math.min(devicePixelRatio || 1, 2);
+  glc.width = Math.round(innerWidth * dpr); glc.height = Math.round(innerHeight * dpr);
+  fbo.forEach(o => { gl.deleteTexture(o.t); gl.deleteFramebuffer(o.f); });
+  const w = Math.ceil(glc.width / 4), h = Math.ceil(glc.height / 4);
+  fbo = [makeTarget(w, h), makeTarget(w, h)];
+}
+
+/* ------------------------------------------------------------ turn model */
+let T = null, raf = 0, queued = 0;
+function bookGeom() {
+  const r = book.getBoundingClientRect();
+  return { sx: r.left + r.width / 2, ty: r.top, W: r.width / 2, H: r.height };
+}
+function constrain(P, C, G) {
+  for (const S of [[0, 0], [0, G.H]]) {
+    const rr = Math.hypot(C.x - S[0], C.y - S[1]), dx = P.x - S[0], dy = P.y - S[1], dd = Math.hypot(dx, dy);
+    if (dd > rr) { P.x = S[0] + dx / dd * rr; P.y = S[1] + dy / dd * rr; }
+  }
+  return P;
+}
+function fold(C, P, G) {
+  const dx = C.x - P.x, dy = C.y - P.y, d = Math.hypot(dx, dy);
+  if (d < .5) return { A: [G.W + 50, 0], N: [1, 0], R: .5 };
+  const nx = dx / d, ny = dy / d, t = Math.min(d / (2 * G.W), 1);
+  const R = Math.min(.4 + G.W * .19 * Math.pow(Math.sin(Math.PI * t), .8), .4 + d * .22);
+  const off = (d - Math.PI * R) / 2;
+  return { A: [P.x + nx * off, P.y + ny * off], N: [nx, ny], R };
+}
+function canTurn(dir) { return dir > 0 ? spread < N_SPREADS - 1 : spread > 0; }
+function beginTurn(dir, to, C, mode) {
+  const from = spread;
+  T = { dir, from, to, C: { ...C }, P: { ...C }, target: { ...C }, mode, swapPending: true, last: performance.now() };
+  if (dir > 0) { T.front = pageTex[2 * from + 1]; T.back = pageTex[2 * to]; T.under = [2 * from, 2 * to + 1]; }
+  else { T.front = pageTex[2 * from]; T.back = pageTex[2 * to + 1]; T.under = [2 * to, 2 * from + 1]; }
+  book.classList.add("turning");
+  kick();
+}
+function animateTo(complete, speed = 1) {
+  const G = bookGeom();
+  T.mode = "anim"; T.complete = complete; T.t0 = performance.now(); T.P0 = { ...T.P };
+  T.E = complete ? { x: -G.W, y: T.C.y } : { ...T.C };
+  const frac = Math.abs(T.P.x - T.E.x) / (2 * G.W);
+  T.dur = (complete ? 420 + 640 * frac : 240 + 320 * frac) / speed;
+  T.lift = complete ? (T.C.y > G.H * .6 ? -1 : T.C.y < G.H * .4 ? 1 : 0) * G.H * .045 * frac : 0;
+}
+function endTurn(done) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, glc.width, glc.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  if (done) spread = T.to;
+  showPages(2 * spread, 2 * spread + 1);
+  book.classList.remove("turning");
+  T = null; updateUI(); updateEdges();
+  if (queued) { const q = queued; queued = 0; goTo(spread + q, 1.6); }
+}
+const ease = s => s < .5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2;
+function kick() { if (!raf) raf = requestAnimationFrame(tick); }
+function tick(now) {
+  raf = 0; if (!T) return;
+  const G = bookGeom(), dt = Math.min(64, now - T.last); T.last = now;
+  if (T.mode === "anim") {
+    const s = Math.min(1, (now - T.t0) / T.dur), e = ease(s);
+    T.P.x = T.P0.x + (T.E.x - T.P0.x) * e; T.P.y = T.P0.y + (T.E.y - T.P0.y) * e + T.lift * Math.sin(Math.PI * e);
+    constrain(T.P, T.C, G);
+    if (s >= 1) { T.P = { ...T.E }; render(G); return endTurn(T.complete); }
+  } else if (T.mode !== "frozen") {
+    const k = 1 - Math.pow(1 - (T.mode === "drag" ? .32 : .16), dt / 16.67);
+    T.P.x += (T.target.x - T.P.x) * k; T.P.y += (T.target.y - T.P.y) * k; constrain(T.P, T.C, G);
+    if (T.mode === "peek" && T.leaving && Math.hypot(T.P.x - T.C.x, T.P.y - T.C.y) < .6) { return endTurn(false); }
+  }
+  render(G);
+  if (T && T.mode !== "frozen") kick();
+}
+function setSheetUniforms(prog, G, F) {
+  const u = prog.u;
+  gl.uniform2f(u.uPage, G.W, G.H); gl.uniform2f(u.uSpine, G.sx, G.ty); gl.uniform2f(u.uView, innerWidth, innerHeight);
+  gl.uniform2f(u.uA, F.A[0], F.A[1]); gl.uniform2f(u.uN, F.N[0], F.N[1]); gl.uniform1f(u.uR, F.R);
+  gl.uniform1f(u.uMirror, T.dir); gl.uniform1f(u.uCam, Math.max(innerWidth, innerHeight) * 2.8);
+  if (u.uShadowOff) gl.uniform2f(u.uShadowOff, .20, .28);
+}
+function render(G) {
+  const F = fold(T.C, T.P, G);
+  // 1. projected shadow into a quarter-res target
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[0].f); gl.viewport(0, 0, fbo[0].w, fbo[0].h);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+  gl.enable(gl.BLEND); gl.blendEquation(gl.MAX); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.useProgram(shadowProg.p); setSheetUniforms(shadowProg, G, F); gl.uniform1f(shadowProg.u.uShadow, 1);
+  gl.bindVertexArray(vao); gl.drawElements(gl.TRIANGLES, MX * MY * 6, gl.UNSIGNED_SHORT, 0);
+  gl.blendEquation(gl.FUNC_ADD); gl.disable(gl.BLEND);
+  // 2. separable blur
+  gl.bindVertexArray(emptyVao); gl.useProgram(blurProg.p); gl.activeTexture(gl.TEXTURE0); gl.uniform1i(blurProg.u.uTex, 0);
+  const bs = 1.5 + F.R / G.W * 6;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[1].f); gl.bindTexture(gl.TEXTURE_2D, fbo[0].t); gl.uniform2f(blurProg.u.uDir, bs / fbo[0].w, 0); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[0].f); gl.bindTexture(gl.TEXTURE_2D, fbo[1].t); gl.uniform2f(blurProg.u.uDir, 0, bs / fbo[0].h); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  // 3. composite shadow + contact occlusion onto the screen
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, glc.width, glc.height);
+  gl.clearColor(0, 0, 0, 0); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(compProg.p); gl.bindTexture(gl.TEXTURE_2D, fbo[0].t); gl.uniform1i(compProg.u.uTex, 0);
+  gl.uniform2f(compProg.u.uView, innerWidth, innerHeight); gl.uniform2f(compProg.u.uSpine, G.sx, G.ty); gl.uniform2f(compProg.u.uPage, G.W, G.H);
+  gl.uniform2f(compProg.u.uA, F.A[0], F.A[1]); gl.uniform2f(compProg.u.uN, F.N[0], F.N[1]); gl.uniform1f(compProg.u.uMirror, T.dir); gl.uniform1f(compProg.u.uR, F.R);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.disable(gl.BLEND);
+  // 4. the leaf itself
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  gl.useProgram(sheetProg.p); setSheetUniforms(sheetProg, G, F); gl.uniform1f(sheetProg.u.uShadow, 0);
+  gl.uniform1f(sheetProg.u.uFaceFlip, -T.dir);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, T.front); gl.uniform1i(sheetProg.u.uFront, 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, T.back); gl.uniform1i(sheetProg.u.uBack, 1);
+  gl.bindVertexArray(vao); gl.drawElements(gl.TRIANGLES, MX * MY * 6, gl.UNSIGNED_SHORT, 0);
+  gl.bindVertexArray(null); gl.activeTexture(gl.TEXTURE0); gl.disable(gl.DEPTH_TEST);
+  // swap the page underneath in the same frame the leaf first appears
+  if (T.swapPending) { showPages(T.under[0], T.under[1]); T.swapPending = false; }
+}
+function goTo(s, speed = 1) {
+  if (s < 0 || s >= N_SPREADS || s === spread) return;
+  if (T) { if (T.mode === "anim") queued = Math.sign(s - spread); return; }
+  const dir = Math.sign(s - spread), G = bookGeom();
+  beginTurn(dir, s, { x: G.W, y: G.H * .985 }, "anim"); animateTo(true, speed);
+}
+
+/* ------------------------------------------------------------ pointer */
+let down = null;
+function local(e, dir, G) { return { x: (e.clientX - G.sx) * dir, y: e.clientY - G.ty }; }
+book.addEventListener("pointerdown", e => {
+  if (e.button !== 0) return;
+  const G = bookGeom(), dir = e.clientX >= G.sx ? 1 : -1;
+  if (T && T.mode === "anim") return;
+  if (T && T.dir !== dir) endTurn(false);
+  if (!T && !canTurn(dir)) return;
+  book.setPointerCapture(e.pointerId);
+  const l = local(e, dir, G);
+  down = { dir, x: e.clientX, y: e.clientY, l, t: performance.now(), moved: false, vx: 0, lastX: e.clientX, lastT: performance.now() };
+});
+book.addEventListener("pointermove", e => {
+  const G = bookGeom();
+  if (down) {
+    const dist = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+    if (!down.moved && dist > 5) {
+      down.moved = true;
+      if (!T) { const gy = down.l.y > G.H * .8 ? G.H : down.l.y < G.H * .2 ? 0 : down.l.y; beginTurn(down.dir, spread + down.dir, { x: G.W, y: gy }, "drag"); }
+      T.mode = "drag"; T.leaving = false; T.grab = { x: T.P.x - down.l.x, y: T.P.y - down.l.y };
+    }
+    if (down.moved && T) {
+      const l = local(e, down.dir, G); T.target = { x: l.x + T.grab.x, y: l.y + T.grab.y };
+      const now = performance.now(); down.vx = ((e.clientX - down.lastX) * down.dir) / Math.max(1, now - down.lastT); down.lastX = e.clientX; down.lastT = now;
+      kick();
+    }
+    return;
+  }
+  // hover: lift the corner a little to invite a turn
+  if (T && T.mode !== "peek") return;
+  const dir = e.clientX >= G.sx ? 1 : -1, l = local(e, dir, G);
+  const zone = G.W * .16;
+  let C = null;
+  for (const cy of [G.H, 0]) if (Math.hypot(G.W - l.x, cy - l.y) < zone && l.x <= G.W + 4) C = { x: G.W, y: cy };
+  if (C && !T && canTurn(dir)) beginTurn(dir, spread + dir, C, "peek");
+  if (T && T.mode === "peek") {
+    if (C && T.dir === dir && C.y === T.C.y) {
+      const v = { x: l.x - C.x, y: l.y - C.y }, len = Math.hypot(v.x, v.y), m = Math.max(len, 58) / (len || 1);
+      T.target = { x: C.x + (len ? v.x * m : -26), y: C.y + (len ? v.y * m : (C.y ? -22 : 22)) }; T.leaving = false;
+    } else { T.target = { ...T.C }; T.leaving = true; }
+    kick();
+  }
+});
+book.addEventListener("pointerleave", () => { if (T && T.mode === "peek") { T.target = { ...T.C }; T.leaving = true; kick(); } });
+function release(e) {
+  if (!down) return; const d = down; down = null;
+  const G = bookGeom();
+  if (!d.moved) {
+    if (T && T.mode === "peek") { animateTo(true); return; }
+    if (canTurn(d.dir)) { const l = d.l; beginTurn(d.dir, spread + d.dir, { x: G.W, y: l.y < G.H * .5 ? 0 : G.H }, "anim"); animateTo(true); }
+    return;
+  }
+  if (!T) return;
+  const complete = T.P.x < G.W * .35 || d.vx < -.45;
+  animateTo(complete && !(d.vx > .45));
+}
+book.addEventListener("pointerup", release);
+book.addEventListener("pointercancel", release);
+addEventListener("keydown", e => {
+  if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { e.preventDefault(); goTo(spread + 1); }
+  else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); goTo(spread - 1); }
+  else if (e.key === "Escape" && panelOpen) closeNote();
+});
+
+/* ------------------------------------------------------------ boot */
+let rt = 0;
+function onResize() { layout(); resizeGL(); clearTimeout(rt); rt = setTimeout(drawTable, 60); updateUI(); if (T) kick(); }
+addEventListener("resize", onResize);
+layout(); resizeGL(); drawTable(); showPages(2 * spread, 2 * spread + 1); updateUI();
+
+// review hooks: ?turn=0.45 freezes a page mid-turn, ?note=1 opens a curator note
+if (Q.has("note")) openNote(+Q.get("note"));
+if (Q.has("turn")) {
+  requestAnimationFrame(() => {
+    const G = bookGeom(), s = +Q.get("turn"), back = Q.get("dir") === "back";
+    const dir = back ? -1 : 1;
+    beginTurn(dir, spread + dir, { x: G.W, y: Q.get("corner") === "top" ? 0 : G.H }, "frozen");
+    const e = ease(s), lift = (Q.get("corner") === "top" ? 1 : -1) * G.H * .045;
+    T.P = constrain({ x: G.W + (-2 * G.W) * e, y: T.C.y + lift * Math.sin(Math.PI * e) }, T.C, G);
+    render(G);
+  });
+}
+</script>
+</body>
+</html>

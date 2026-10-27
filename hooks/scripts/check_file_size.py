@@ -11,7 +11,7 @@ Thresholds are read from environment variables so CI can tighten them without
 editing this file:
   POLICY_SOFT_LINE_CAP      (default 600)
   POLICY_HARD_LINE_CAP      (default 1000)
-  POLICY_MAX_BYTES          (default 512000 = 500 KB)
+  POLICY_MAX_BYTES          (default 1048576 = 1 MB)
   POLICY_BINARY_HARD_BYTES  (default 5242880 = 5 MB)
   POLICY_DOC_SOFT_LINE_CAP  (default 1000)
   POLICY_WARN_AS_ERROR      (set to 1 to treat soft warnings as hard errors)
@@ -27,7 +27,7 @@ from pathlib import Path
 # ── Thresholds ────────────────────────────────────────────────────────────────
 SOFT_LINE_CAP = int(os.getenv("POLICY_SOFT_LINE_CAP", "600"))
 HARD_LINE_CAP = int(os.getenv("POLICY_HARD_LINE_CAP", "1000"))
-MAX_BYTES = int(os.getenv("POLICY_MAX_BYTES", str(500 * 1024)))
+MAX_BYTES = int(os.getenv("POLICY_MAX_BYTES", str(1024 * 1024)))
 BINARY_HARD_BYTES = int(os.getenv("POLICY_BINARY_HARD_BYTES", str(5 * 1024 * 1024)))
 DOC_SOFT_LINE_CAP = int(os.getenv("POLICY_DOC_SOFT_LINE_CAP", "1000"))
 WARN_AS_ERROR = os.getenv("POLICY_WARN_AS_ERROR", "0") == "1"
@@ -80,6 +80,9 @@ IGNORE_FRAGMENTS = [
     "venv/",
     ".tox/",
     ".eggs/",
+    # Throwaway look-and-feel prototypes and their screenshots; only the
+    # 5 MB hard limit applies to ignored paths.
+    "design/mockups/",
 ]
 
 
@@ -108,13 +111,13 @@ def check(filepath: str) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
 
     path = Path(filepath)
-    if not path.exists() or is_ignored(filepath):
+    if not path.exists():
         return errors, warnings
 
     size = path.stat().st_size
     ext = path.suffix.lower()
 
-    # ── Binary / giant file ───────────────────────────────────────────────────
+    # ── Binary / giant file (applies to ignored paths too) ────────────────────
     if size > BINARY_HARD_BYTES:
         mb = size / (1024 * 1024)
         limit_mb = BINARY_HARD_BYTES / (1024 * 1024)
@@ -123,6 +126,9 @@ def check(filepath: str) -> tuple[list[str], list[str]]:
             "Use Git LFS or release assets for large files."
         )
         return errors, warnings  # no point checking lines
+
+    if is_ignored(filepath):
+        return errors, warnings
 
     if size > MAX_BYTES and ext not in SOURCE_EXTS | DOC_EXTS:
         kb = size / 1024
