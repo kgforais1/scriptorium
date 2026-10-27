@@ -44,7 +44,8 @@ Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to
   Do **not** add them to `audit.toml` — that file is for vulnerabilities with a dated excuse,
   and ignoring a warning changes nothing. Re-check when those parents drop them.
 - **cargo Dependabot cooldown** — keep cargo `cooldown.default-days: 7` (version updates only;
-  security updates ignore cooldown) and the weekly Thursday schedule. Daily
+  security updates ignore cooldown). Version updates moved to a monthly, grouped schedule
+  for all ecosystems on 2026-10-27. Daily
   `schedule.interval` rejected 2026-10-24 as too noisy for version-update PRs. Revisit only if
   another RustSec advisory turns `Dependency audit` red before a Dependabot security PR exists.
   Manual path: [CI & hooks → when audit goes red](docs/ci-and-hooks.md#when-dependency-audit-goes-red)
