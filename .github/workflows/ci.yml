@@ -181,21 +181,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Tauri Linux system deps
-        # Job default cwd is src-tauri; apt needs the runner root (any cwd is fine).
         # https://v2.tauri.app/start/prerequisites/#linux
-        working-directory: .
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
+        # Cached .debs skip the slow apt download (often 2-6 min). build-essential,
+        # curl, wget and file ship with ubuntu-latest. Bump `version` to refresh.
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
+        with:
+          packages: >-
+            libwebkit2gtk-4.1-dev
+            libxdo-dev
+            libssl-dev
+            libayatana-appindicator3-dev
             librsvg2-dev
+          version: "1"
 
       - name: Install Rust toolchain
         run: |
