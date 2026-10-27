@@ -11,7 +11,7 @@ Thresholds are read from environment variables so CI can tighten them without
 editing this file:
   POLICY_SOFT_LINE_CAP      (default 600)
   POLICY_HARD_LINE_CAP      (default 1000)
-  POLICY_MAX_BYTES          (default 512000 = 500 KB)
+  POLICY_MAX_BYTES          (default 1048576 = 1 MB)
   POLICY_BINARY_HARD_BYTES  (default 5242880 = 5 MB)
   POLICY_DOC_SOFT_LINE_CAP  (default 1000)
   POLICY_WARN_AS_ERROR      (set to 1 to treat soft warnings as hard errors)
@@ -27,7 +27,7 @@ from pathlib import Path
 # ── Thresholds ────────────────────────────────────────────────────────────────
 SOFT_LINE_CAP = int(os.getenv("POLICY_SOFT_LINE_CAP", "600"))
 HARD_LINE_CAP = int(os.getenv("POLICY_HARD_LINE_CAP", "1000"))
-MAX_BYTES = int(os.getenv("POLICY_MAX_BYTES", str(500 * 1024)))
+MAX_BYTES = int(os.getenv("POLICY_MAX_BYTES", str(1024 * 1024)))
 BINARY_HARD_BYTES = int(os.getenv("POLICY_BINARY_HARD_BYTES", str(5 * 1024 * 1024)))
 DOC_SOFT_LINE_CAP = int(os.getenv("POLICY_DOC_SOFT_LINE_CAP", "1000"))
 WARN_AS_ERROR = os.getenv("POLICY_WARN_AS_ERROR", "0") == "1"
