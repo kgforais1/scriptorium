@@ -15,8 +15,9 @@ thumbnail scrubber, a header with tools, and a right-hand notes panel.
 
 The reader supports **multiple skins** from the start. Lamplit is the first and default skin.
 Gallery Daylight (mockup B) is the planned second skin. B shares E's layout and most of its CSS
-variable names. B's WebGL scene uses window light, not a lamp, so the spike must show the
-shared scene keys can express it.
+variable names. B's WebGL scene uses window light, not a lamp. So `scene.json` has a typed light: `point`
+for a lamp with a pool, or `directional` for window light. The engine must support both
+before M1 starts (spike gate G6).
 
 Mockups stay reference only. Porting E's engine means re-implementing its curl and lighting
 against scan textures, not copying the mockup file.
@@ -42,7 +43,7 @@ not need engine or component code changes.
 | Page-turn engine (geometry, curl, picking, input) | Shared | App code, chosen by the spike ADR |
 | Layout (header, bottom bar, notes panel) | Shared | React components |
 | UI theme (colour, type, radius, blur, motion) | Per skin | `skins/<id>/tokens.json` |
-| Scene (lamp, ambient, camera, background) | Per skin | `skins/<id>/scene.json` |
+| Scene (light, ambient, camera, background) | Per skin | `skins/<id>/scene.json` |
 | Book material (cover, gilt, ribbon, page edges) | Per skin | `skins/<id>/scene.json` |
 
 Rules:

@@ -95,7 +95,7 @@ except optional trivial edge trim documented later.
 | G3 | StrictMode | No double-mount crash / blank book on remount |
 | G4 | Asset load | Pages load from disk via Tauri asset URL on macOS (Windows noted if available) |
 | G5 | ADR | Committed ADR answers all bullets in Phase 3 |
-| G6 | Skin-ready | Swapping `scene.json` changes lamp, background, and materials with no engine code change. The ADR states whether B's daylight look fits the final keys, or which engine capability is missing |
+| G6 | Skin-ready | Swapping `scene.json` changes light, background, and materials with no engine code change. A placeholder daylight scene with a `directional` light renders through data alone. If it cannot, G6 fails |
 
 **On fail:** Status → `blocked` or `abandoned`; report to user; do not begin M1 Phase 1.
 

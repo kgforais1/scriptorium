@@ -185,6 +185,8 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
       `design/skins/lamplit/tokens.json` into CSS custom properties; engine reads `scene.json`
 - [ ] No hard-coded colours, fonts, or scene values in reader components (lamplit is the only
       skin; no picker yet)
+- [ ] Every control works by keyboard, has a visible focus state, and has an accessible name
+- [ ] With `prefers-reduced-motion`, pulses stop and page turns shorten or cross-fade
 
 ### Phase 4 — Docs & release
 
@@ -195,6 +197,7 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 ## Verification
 
 - [ ] All acceptance IDs A1–A9 checked
+- [ ] Keyboard, accessible-name, and reduced-motion checks above pass in the manual script
 - [ ] `cargo test` / `clippy` / `fmt` green in CI
 - [ ] Manual script executed once on reference machine; results noted in PR or README
 - [ ] No absolute user home paths in committed fixtures or sample `meta.json`
