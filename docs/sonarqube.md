@@ -66,7 +66,9 @@ finish the analysis and writes these gitignored files:
 - `tmp/sonar-issues/<UTC>.{json,md}` keeps the last 20 dumps for comparison.
 - `tmp/sonar-state.json` records the scanned commit for the freshness gate.
 
-A failed analysis or API error leaves the previous state untouched.
+A failed analysis or API error leaves the previous state untouched. So does a tree that
+changed during the scan: the scan fingerprints HEAD, uncommitted changes, and untracked
+files before it starts, and records the state only if that fingerprint still matches.
 
 ## Read the issues
 

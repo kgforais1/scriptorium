@@ -23,6 +23,7 @@ Example:
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import sys
@@ -121,19 +122,22 @@ def stream(url: str, max_bytes: int) -> Iterator[bytes]:
     req = urllib.request.Request(check_url(url), headers={"User-Agent": USER_AGENT})
     deadline = time.monotonic() + DOWNLOAD_DEADLINE_S
     received = 0
-    with _OPENER.open(req, timeout=SOCKET_TIMEOUT_S) as resp:
-        declared = resp.headers.get("Content-Length")
-        if declared and declared.isdigit() and int(declared) > max_bytes:
-            raise FetchError(f"response too large: {declared} bytes")
-        # read1 returns after at most one socket read, so the deadline is checked even when a
-        # server trickles bytes slowly enough to dodge the socket timeout.
-        while chunk := resp.read1(CHUNK):
-            received += len(chunk)
-            if received > max_bytes:
-                raise FetchError(f"response exceeded {max_bytes} bytes")
-            if time.monotonic() > deadline:
-                raise FetchError(f"download exceeded {DOWNLOAD_DEADLINE_S} s")
-            yield chunk
+    try:
+        with _OPENER.open(req, timeout=SOCKET_TIMEOUT_S) as resp:
+            declared = resp.headers.get("Content-Length")
+            if declared and declared.isdigit() and int(declared) > max_bytes:
+                raise FetchError(f"response too large: {declared} bytes")
+            # read1 returns after at most one socket read, so the deadline is checked even
+            # when a server trickles bytes slowly enough to dodge the socket timeout.
+            while chunk := resp.read1(CHUNK):
+                received += len(chunk)
+                if received > max_bytes:
+                    raise FetchError(f"response exceeded {max_bytes} bytes")
+                if time.monotonic() > deadline:
+                    raise FetchError(f"download exceeded {DOWNLOAD_DEADLINE_S} s")
+                yield chunk
+    except http.client.HTTPException as exc:  # e.g. IncompleteRead; not an OSError
+        raise FetchError(f"broken response: {exc!r}") from exc
 
 
 def fetch_manifest(url: str, attempts: int = 4) -> dict:

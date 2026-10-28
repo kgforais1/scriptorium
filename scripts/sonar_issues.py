@@ -127,13 +127,17 @@ def _git_out(*args: str) -> bytes:
 def tree_fingerprint() -> str:
     """Hash of HEAD plus every uncommitted change, so a scan can prove nothing moved."""
     digest = hashlib.sha256()
-    for args in (
-        ("rev-parse", "HEAD"),
-        ("diff", "HEAD", "--binary"),
-        ("ls-files", "--others", "--exclude-standard", "-z"),
-    ):
+    for args in (("rev-parse", "HEAD"), ("diff", "HEAD", "--binary")):
         digest.update(_git_out(*args))
         digest.update(b"\0")
+    untracked = _git_out("ls-files", "--others", "--exclude-standard", "-z")
+    for name in sorted(filter(None, untracked.split(b"\0"))):
+        digest.update(name + b"\0")
+        path = ROOT / os.fsdecode(name)
+        try:
+            digest.update(hashlib.sha256(path.read_bytes()).digest())
+        except OSError:  # vanished or unreadable: still part of the state
+            digest.update(b"<unreadable>")
     return digest.hexdigest()
 
 
