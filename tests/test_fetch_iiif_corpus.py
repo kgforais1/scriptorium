@@ -95,9 +95,34 @@ class ManifestParsingTests(unittest.TestCase):
         }
         self.assertEqual(fetch.canvas_url(v2_canvas), "https://h/s/full/max/0/default.jpg")
         v2_service = {
-            "images": [{"resource": {"@id": "https://h/a", "service": {"@id": "https://h/s/"}}}]
+            "images": [
+                {
+                    "resource": {
+                        "@id": "https://h/a",
+                        "service": {
+                            "@id": "https://h/s/",
+                            "profile": "http://iiif.io/api/image/2/level1.json",
+                        },
+                    }
+                }
+            ]
         }
         self.assertEqual(fetch.canvas_url(v2_service), "https://h/s/full/full/0/default.jpg")
+
+    def test_non_image_services_are_skipped(self) -> None:
+        auth = {"id": "https://h/auth", "type": "AuthCookieService1"}
+        image = {"id": "https://h/img", "type": "ImageService2"}
+        body = {"id": "https://h/p.jpg", "service": [auth, image]}
+        self.assertEqual(fetch.canvas_url(v3_canvas(body)), "https://h/img/full/full/0/default.jpg")
+        only_auth = {"id": "https://h/p.jpg", "service": [auth]}
+        self.assertEqual(fetch.canvas_url(v3_canvas(only_auth)), "https://h/p.jpg")
+        by_profile = {"@id": "https://h/s", "profile": "http://iiif.io/api/image/2/level2.json"}
+        self.assertEqual(
+            fetch.canvas_url(
+                {"images": [{"resource": {"@id": "https://h/a", "service": by_profile}}]}
+            ),
+            "https://h/s/full/full/0/default.jpg",
+        )
 
     def test_jpeg_body_without_format_or_with_query(self) -> None:
         self.assertEqual(
@@ -157,6 +182,23 @@ class StateTests(unittest.TestCase):
             self.assertEqual(fetch.load_state(out, "https://h/m1"), {"0000.jpg": "https://h/p0"})
             with self.assertRaises(fetch.FetchError):
                 fetch.load_state(out, "https://h/m2")
+
+    def test_malformed_state_is_refused(self) -> None:
+        for content in ("[]", '{"manifest": "https://h/m1", "pages": []}', "not json"):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp) / fetch.STATE_FILE).write_text(content)
+                with self.assertRaises(fetch.FetchError):
+                    fetch.load_state(Path(tmp), "https://h/m1")
+
+    def test_atomic_write_cleans_up_on_failed_check(self) -> None:
+        def reject(_path: Path) -> None:
+            raise fetch.FetchError("bad")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "0000.jpg"
+            with self.assertRaises(fetch.FetchError):
+                fetch.atomic_write(dest, iter([b"x"]), reject)
+            self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_pages_without_state_are_refused(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

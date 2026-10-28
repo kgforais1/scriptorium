@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -124,7 +125,9 @@ def stream(url: str, max_bytes: int) -> Iterator[bytes]:
         declared = resp.headers.get("Content-Length")
         if declared and declared.isdigit() and int(declared) > max_bytes:
             raise FetchError(f"response too large: {declared} bytes")
-        while chunk := resp.read(CHUNK):
+        # read1 returns after at most one socket read, so the deadline is checked even when a
+        # server trickles bytes slowly enough to dodge the socket timeout.
+        while chunk := resp.read1(CHUNK):
             received += len(chunk)
             if received > max_bytes:
                 raise FetchError(f"response exceeded {max_bytes} bytes")
@@ -157,18 +160,31 @@ def _first(value: object) -> object:
     return value[0] if isinstance(value, list) and value else value
 
 
-def _service_url(service: object) -> str | None:
-    """Full-size JPEG request for an Image API service, using that service's own version."""
-    service = _first(service)
-    if not isinstance(service, dict):
-        return None
-    base = service.get("@id") or service.get("id")
-    if not isinstance(base, str):
-        return None
+IMAGE_SERVICE_TYPES = {"ImageService1", "ImageService2", "ImageService3"}
+
+
+def _image_service_version(service: dict) -> int | None:
+    """2 or 3 for an IIIF Image API service, None for any other kind of service."""
     kind = str(service.get("type") or service.get("@type") or "")
-    context = json.dumps(service.get("@context", ""))
-    v3 = kind == "ImageService3" or "/image/3" in context
-    return f"{base.rstrip('/')}/full/{'max' if v3 else 'full'}/0/default.jpg"
+    marks = json.dumps([service.get("@context"), service.get("profile")])
+    if kind == "ImageService3" or "iiif.io/api/image/3" in marks:
+        return 3
+    if kind in IMAGE_SERVICE_TYPES or "iiif.io/api/image/" in marks:
+        return 2
+    return None
+
+
+def _service_url(services: object) -> str | None:
+    """Full-size JPEG request for the first Image API service, in that service's version."""
+    for service in services if isinstance(services, list) else [services]:
+        if not isinstance(service, dict):
+            continue
+        base = service.get("@id") or service.get("id")
+        version = _image_service_version(service)
+        if isinstance(base, str) and version:
+            size = "max" if version == 3 else "full"
+            return f"{base.rstrip('/')}/full/{size}/0/default.jpg"
+    return None
 
 
 def _jpeg_id(body: dict) -> str | None:
@@ -258,20 +274,31 @@ def file_is_complete_jpeg(path: Path) -> bool:
     return is_complete_jpeg(head + tail)
 
 
+def atomic_write(dest: Path, chunks: Iterator[bytes], check=None) -> None:
+    """Write chunks to an exclusively created temp file, check it, then replace dest."""
+    fd, name = tempfile.mkstemp(prefix=f".{dest.name}.", suffix=".part", dir=dest.parent)
+    tmp = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            for chunk in chunks:
+                f.write(chunk)
+        if check is not None:
+            check(tmp)
+        os.replace(tmp, dest)  # overwrites on every platform
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def _require_complete_jpeg(path: Path) -> None:
+    if not file_is_complete_jpeg(path):
+        raise FetchError(f"response is not a complete JPEG ({path.stat().st_size} bytes)")
+
+
 def fetch_page(index: int, url: str, out_dir: Path, done: dict[str, str]) -> str:
     dest = out_dir / f"{index:04d}.jpg"
     if done.get(dest.name) == url and dest.exists() and file_is_complete_jpeg(dest):
         return f"skip {dest.name}"
-    tmp = out_dir / f".{dest.name}.{os.getpid()}.part"
-    try:
-        with tmp.open("wb") as f:
-            for chunk in stream(url, MAX_PAGE_BYTES):
-                f.write(chunk)
-        if not file_is_complete_jpeg(tmp):
-            raise FetchError(f"response is not a complete JPEG ({tmp.stat().st_size} bytes)")
-        os.replace(tmp, dest)  # overwrites on every platform
-    finally:
-        tmp.unlink(missing_ok=True)
+    atomic_write(dest, stream(url, MAX_PAGE_BYTES), _require_complete_jpeg)
     with _STATE_LOCK:
         done[dest.name] = url
     return f"ok   {dest.name} {dest.stat().st_size // 1024} KB"
@@ -299,18 +326,26 @@ def load_state(out_dir: Path, manifest_url: str) -> dict[str, str]:
         if any(out_dir.glob("*.jpg")):
             raise FetchError(f"{out_dir} has pages but no {STATE_FILE}; use an empty folder")
         return {}
-    state = json.loads(path.read_text())
+    try:
+        state = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        raise FetchError(f"{path} is unreadable: {exc}") from exc
+    if not isinstance(state, dict):
+        raise FetchError(f"{path} is not a JSON object")
     if state.get("manifest") != manifest_url:
         raise FetchError(f"{out_dir} belongs to another manifest: {state.get('manifest')}")
-    return dict(state.get("pages", {}))
+    pages = state.get("pages", {})
+    if not isinstance(pages, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in pages.items()
+    ):
+        raise FetchError(f"{path} has an invalid pages record")
+    return dict(pages)
 
 
 def save_state(out_dir: Path, manifest_url: str, done: dict[str, str]) -> None:
-    tmp = out_dir / f".{STATE_FILE}.{os.getpid()}"
     with _STATE_LOCK:
         payload = json.dumps({"manifest": manifest_url, "pages": done}, indent=1, sort_keys=True)
-    tmp.write_text(payload)
-    os.replace(tmp, out_dir / STATE_FILE)
+    atomic_write(out_dir / STATE_FILE, iter([payload.encode()]))
 
 
 def acquire_lock(out_dir: Path) -> Path:
@@ -369,19 +404,22 @@ def main() -> int:
         manifest = fetch_manifest(manifest_url)
         urls = image_urls(manifest, args.limit)
         save_state(out_dir, manifest_url, done)  # claim the folder before the first page
-        (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=1))
+        atomic_write(out_dir / "manifest.json", iter([json.dumps(manifest, indent=1).encode()]))
 
         skipped = [i for i, url in enumerate(urls) if not url]
         for i in skipped:
             print(f"none {i:04d}: canvas has no JPEG image or image service; skipped")
         jobs = [(i, url) for i, url in enumerate(urls) if url]
         failures = 0
-        with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            results = pool.map(lambda job: safe_fetch(job[0], job[1], out_dir, done), jobs)
-            for result in results:
-                print(result, flush=True)
-                failures += result.startswith("FAIL")
-                save_state(out_dir, manifest_url, done)  # an interrupted run can resume
+        try:
+            with ThreadPoolExecutor(max_workers=args.workers) as pool:
+                results = pool.map(lambda job: safe_fetch(job[0], job[1], out_dir, done), jobs)
+                for result in results:
+                    print(result, flush=True)
+                    failures += result.startswith("FAIL")
+                    save_state(out_dir, manifest_url, done)  # an interrupted run can resume
+        finally:
+            save_state(out_dir, manifest_url, done)  # keep pages finished before an error
     except (FetchError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

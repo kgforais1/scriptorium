@@ -88,10 +88,12 @@ v1 packages stay readable. A v1 package has no originals and loads unchanged.
 
 ## Evolution rule
 
-Version 2 keeps the same strict policy: unknown keys are rejected. A v1-only reader must
-reject a v2 package with `SchemaVersionUnsupported`. The loader reads `formatVersion` first
-and then validates against the matching schema file (`book-format.v1.schema.json` or
-`book-format.v2.schema.json`). The v1→v2 migration note will live in this document.
+Today there is one schema file, [`book-format.schema.json`](book-format.schema.json), for
+`formatVersion` 1. Planned for v2 (M1 Phase 1): it is renamed `book-format.v1.schema.json`,
+`book-format.v2.schema.json` is added, and the loader reads `formatVersion` first, then
+validates against the matching file. Version 2 keeps the same strict policy: unknown keys are
+rejected. A v1-only reader must reject a v2 package with `SchemaVersionUnsupported`. The
+v1→v2 migration note will live in this document.
 
 While `formatVersion` is `1`, the schema and Rust loaders reject unknown keys
 (`additionalProperties: false` / `#[serde(deny_unknown_fields)]`). Therefore any

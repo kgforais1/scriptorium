@@ -14,6 +14,7 @@ printed and is only sent to the configured host (redirects are refused).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -70,8 +71,10 @@ def wait_for_ce(host: str, token: str, task_id: str) -> None:
     raise RuntimeError(f"timed out after {CE_TIMEOUT_S}s waiting for the Compute Engine task")
 
 
-def fetch_issues(host: str, token: str, project_key: str) -> list[dict]:
+def fetch_issues(host: str, token: str, project_key: str) -> tuple[list[dict], int]:
+    """Return (issues, server total). The list stops at ISSUE_CAP; the total does not."""
     issues: list[dict] = []
+    total = 0
     page = 1
     while len(issues) < ISSUE_CAP:
         params = {
@@ -85,14 +88,17 @@ def fetch_issues(host: str, token: str, project_key: str) -> list[dict]:
         if not isinstance(batch, list):
             raise RuntimeError("api/issues/search response has no issues array")
         issues.extend(batch)
-        if not batch or len(issues) >= int(data.get("paging", {}).get("total", 0)):
+        total = int(data.get("paging", {}).get("total", 0))
+        if not batch or len(issues) >= total:
             break
         page += 1
-    return issues
+    return issues[:ISSUE_CAP], max(total, len(issues))
 
 
-def summarize(issues: list[dict]) -> str:
-    lines = ["# SonarQube unresolved issues", "", f"Total: {len(issues)}", ""]
+def summarize(issues: list[dict], total: int) -> str:
+    lines = ["# SonarQube unresolved issues", "", f"Total: {total}", ""]
+    if total > len(issues):
+        lines += [f"**Truncated:** only the first {len(issues)} of {total} issues are listed.", ""]
     for issue in issues:
         component = (issue.get("component") or "?").rsplit(":", 1)[-1]
         loc = f"{component}:{issue['line']}" if issue.get("line") else component
@@ -113,6 +119,24 @@ def prune(dump_dir: Path, keep: int) -> None:
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
+def _git_out(*args: str) -> bytes:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    return subprocess.check_output(["git", *args], cwd=ROOT, env=env)
+
+
+def tree_fingerprint() -> str:
+    """Hash of HEAD plus every uncommitted change, so a scan can prove nothing moved."""
+    digest = hashlib.sha256()
+    for args in (
+        ("rev-parse", "HEAD"),
+        ("diff", "HEAD", "--binary"),
+        ("ls-files", "--others", "--exclude-standard", "-z"),
+    ):
+        digest.update(_git_out(*args))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def host_allowed(host: str) -> bool:
     """Loopback only, like sonar_scan.sh, unless SONAR_ALLOW_REMOTE=1."""
     if os.environ.get("SONAR_ALLOW_REMOTE", "0") == "1":
@@ -121,7 +145,13 @@ def host_allowed(host: str) -> bool:
     return parts.scheme == "http" and (parts.hostname or "") in LOOPBACK_HOSTS
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if args == ["--fingerprint"]:
+        print(tree_fingerprint())
+        return 0
+    if args == ["--check-host"]:
+        return 0 if host_allowed(os.environ.get("SONAR_HOST_URL", "http://localhost:9000")) else 1
     token = os.environ.get("SONAR_TOKEN", "")
     host = os.environ.get("SONAR_HOST_URL", "http://localhost:9000")
     if not host_allowed(host):
@@ -143,7 +173,7 @@ def main() -> int:
 
     try:
         wait_for_ce(host, token, task_id)
-        issues = fetch_issues(host, token, project_key)
+        issues, total = fetch_issues(host, token, project_key)
     except (OSError, ValueError, RuntimeError) as exc:
         # HTTPError/URLError are OSError subclasses; the message carries no token.
         print(f"sonar_issues: {exc}; not writing sonar-state.json.", file=sys.stderr)
@@ -153,20 +183,26 @@ def main() -> int:
     dump_dir = TMP / "sonar-issues"
     dump_dir.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(issues, indent=1)
-    summary = summarize(issues)
+    summary = summarize(issues, total)
     (dump_dir / f"{stamp}.json").write_text(payload, encoding="utf-8")
     (dump_dir / f"{stamp}.md").write_text(summary, encoding="utf-8")
     (TMP / "sonar-latest-issues.json").write_text(payload, encoding="utf-8")
     (TMP / "sonar-latest-issues.md").write_text(summary, encoding="utf-8")
 
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    head = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, env=env
-    ).strip()
+    before = os.environ.get("SONAR_SCAN_FINGERPRINT", "")
+    if not before or before != tree_fingerprint():
+        print(
+            "sonar_issues: the tree changed during the scan (or no pre-scan fingerprint);"
+            " issues dumped, but not writing sonar-state.json. Re-run the scan.",
+            file=sys.stderr,
+        )
+        return 1
+    head = _git_out("rev-parse", "HEAD").decode().strip()
     state = {
         "last_scan_commit": head,
         "last_scan_time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "issues_count": len(issues),
+        "issues_count": total,
+        "issues_truncated": total > len(issues),
         "issues_path": f"tmp/sonar-issues/{stamp}.json",
         "issues_summary_path": "tmp/sonar-latest-issues.md",
         "ce_task_id": task_id,
@@ -177,7 +213,7 @@ def main() -> int:
     except OSError as exc:  # housekeeping must not fail a good scan
         print(f"sonar_issues: warning: pruning failed ({exc}).", file=sys.stderr)
 
-    print(f"Issues on record: {len(issues)} (commit {head[:12]})")
+    print(f"Issues on record: {total} (commit {head[:12]})")
     print("Summary: tmp/sonar-latest-issues.md  State: tmp/sonar-state.json")
     return 0
 

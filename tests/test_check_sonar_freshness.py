@@ -144,10 +144,6 @@ class MaxCommitsTests(unittest.TestCase):
             self.assertEqual(mod.resolve_max_commits(), 4)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class FreshnessGateOnTests(unittest.TestCase):
     """Gate enabled against a real temporary git repository."""
 
@@ -223,3 +219,7 @@ class CleanShaTests(unittest.TestCase):
             mock.patch.object(mod, "_git", return_value="d" * 40),
         ):
             self.assertEqual(mod.checked_sha("push"), "d" * 40)
+
+
+if __name__ == "__main__":
+    unittest.main()

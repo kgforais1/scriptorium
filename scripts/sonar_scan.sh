@@ -74,15 +74,12 @@ if [[ -z "${SONAR_TOKEN:-}" ]]; then
 fi
 
 # Local-only by design: refuse to ship the tree to a remote server by accident.
-case "$SONAR_HOST_URL" in
-  http://localhost:*|http://127.0.0.1:*|http://localhost|http://127.0.0.1) ;;
-  *)
-    if [[ "${SONAR_ALLOW_REMOTE:-0}" != "1" ]]; then
-      echo "sonar_scan: SONAR_HOST_URL is not loopback; set SONAR_ALLOW_REMOTE=1 to override." >&2
-      exit 1
-    fi
-    ;;
-esac
+# The parsed-URL check lives in sonar_issues.py so both scripts agree. SONAR_ALLOW_REMOTE is
+# read only from the exported environment, never from .env.
+if ! SONAR_HOST_URL="$SONAR_HOST_URL" "$PYTHON" "$ROOT_DIR/scripts/sonar_issues.py" --check-host; then
+  echo "sonar_scan: SONAR_HOST_URL is not loopback; export SONAR_ALLOW_REMOTE=1 to override." >&2
+  exit 1
+fi
 
 if ! command -v sonar-scanner >/dev/null 2>&1; then
   echo "sonar_scan: sonar-scanner is not installed (brew install sonar-scanner)." >&2
@@ -100,7 +97,9 @@ if [[ "$RUN_COVERAGE" == "1" ]]; then
   "$PYTHON" -m pytest --cov --cov-report=xml -q
 fi
 
-export SONAR_TOKEN SONAR_HOST_URL
+# Fingerprint HEAD and the working tree; sonar_issues.py records the scan only if it is unchanged.
+SONAR_SCAN_FINGERPRINT="$("$PYTHON" "$ROOT_DIR/scripts/sonar_issues.py" --fingerprint)"
+export SONAR_TOKEN SONAR_HOST_URL SONAR_SCAN_FINGERPRINT
 echo "== sonar-scanner -> $SONAR_HOST_URL =="
 sonar-scanner -Dsonar.projectVersion="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 
