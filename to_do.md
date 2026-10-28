@@ -1,13 +1,13 @@
 # Scriptorium backlog
 
-Last reviewed: 2026-08-26
+Last reviewed: 2026-10-27
 
 Agents: start at **Next Up** (3–5 pointer lines). Detail lives in linked plans, not here.
 Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
-- [Pre-M1 flipbook spike](plans/2026-08-23-pre-m1-flipbook-spike.md) — ADR gates G1–G5 after M0 window exists
+- [Pre-M1 flipbook spike](plans/2026-08-23-pre-m1-flipbook-spike.md) — ADR gates G1–G6 (direction E; port its WebGL engine first) after M0 window exists
 - [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) — blocked on spike ADR; acceptance A1–A13
 - [M0.5 harness follow-ups](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri-scaffold--when-app-code-exists) — TS lint, coverage gates, S9–S11
 
@@ -21,9 +21,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Unplanned / small
 
-- **Pick a reader design** — choose a direction from mockups A–G in
-  [`design/mockups/`](design/mockups/) (PR #54); skins and `DESIGN.md` notes →
-  [spike plan](plans/2026-08-23-pre-m1-flipbook-spike.md#reader-design-input-added-2026-10-27)
+_None._
 
 ## Icebox
 
@@ -36,6 +34,8 @@ Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to
 - **M1 format/load hardening** — **A10–A13**, CI `cargo build` (**LC-M2**), CSP tracking (**LC-M3**),
   optional `pageLabel` maxLength (**LC-T11**) →
   [M1 plan follow-ups](plans/2026-08-23-m1-scan-viewer.md#follow-ups-from-m0-senior-reviews-2026-08-25)
+- **Second skin (Gallery Daylight, mockup B) + skin picker** — M7 →
+  [`design/DESIGN.md`](design/DESIGN.md#skins)
 - **Later product (M2–M8)** — OCR, text/hybrid modes, library, hotspots, polish, web/IIIF →
   [roadmap](plans/2026-08-23-product-roadmap.md)
 - **cargo-audit unmaintained warnings** — 6 warnings, `cargo audit` still exits 0 in

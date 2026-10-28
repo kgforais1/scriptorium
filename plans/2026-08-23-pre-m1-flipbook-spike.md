@@ -30,10 +30,11 @@ many 2021-era imperative wrappers. These are blockers for M1 as previously writt
 
 ## Approach
 
-Time-box **1–2 days**. Allowed outcomes (all valid):
+Time-box **1–2 days**. When porting E, the spike ports a 10-page slice; the full port happens in M1. Allowed outcomes (all valid):
 
 | Outcome | When |
 |---|---|
+| Port mockup E's WebGL2 curl engine | **Lead candidate** (direction E chosen 2026-10-27). Every mockup renders a lit WebGL2 book; StPageFlip cannot produce E's lamp, curl shading, or cover materials |
 | Keep StPageFlip / `page-flip` as-is | Spike passes all gates below |
 | Vendor/fork `page-flip` and patch | Small fixes unblock us; document fork path |
 | Switch to a named alternative | Evaluate in order: (1) HTML-mode StPageFlip with per-page sized HTML, (2) thin CSS 3D transform own-build (~300 lines), (3) only if needed — another inventory candidate after a 1-hour survey |
@@ -68,6 +69,10 @@ except optional trivial edge trim documented later.
 - [ ] Mount candidate under React 18/19 **StrictMode**
 - [ ] Load local files via Tauri asset protocol / `convertFileSrc` (absolute paths)
 - [ ] Exercise canvas vs HTML mode if using StPageFlip; note hard-page implications for M7
+- [ ] If porting E: replace its procedurally painted pages with scan textures; note texture
+      memory and upload cost at 200 pages, and WebGL2 availability in each target webview
+- [ ] Drive scene and material from [`design/skins/lamplit/scene.json`](../design/skins/lamplit/scene.json);
+      prove a second, throwaway scene file restyles the book with no code change
 - [ ] Confirm turn animation works with keyboard next/prev
 
 ### Phase 3 — ADR
@@ -79,6 +84,7 @@ except optional trivial edge trim documented later.
   - Aspect-ratio policy
   - Known limits (max pages smoke-tested, memory notes)
   - Explicit non-outcome: no strip fallback
+  - Final `scene.json` keys the engine reads (update the lamplit file to match)
 
 ## Pass / fail gate (M1 may not start until pass)
 
@@ -89,6 +95,7 @@ except optional trivial edge trim documented later.
 | G3 | StrictMode | No double-mount crash / blank book on remount |
 | G4 | Asset load | Pages load from disk via Tauri asset URL on macOS (Windows noted if available) |
 | G5 | ADR | Committed ADR answers all bullets in Phase 3 |
+| G6 | Skin-ready | Swapping `scene.json` changes light, background, and materials with no engine code change. A placeholder daylight scene with a `directional` light renders through data alone. If it cannot, G6 fails |
 
 **On fail:** Status → `blocked` or `abandoned`; report to user; do not begin M1 Phase 1.
 
@@ -100,22 +107,15 @@ except optional trivial edge trim documented later.
 
 ## Reader design input (added 2026-10-27)
 
-Seven look-and-feel prototypes (A–G) live in [`design/mockups/`](../design/mockups/) (PR #54).
-They are reference only, not code to adopt. The spike should measure the chosen page-turn
-approach against them, especially the curl in G and F.
-
-Consider supporting multiple skins from the start:
-
-- One shared page-turn engine.
-- Each skin is a data config: scene (wood, lighting, props, camera), book material
-  (cover, paper, ribbon) and UI theme tokens.
-- Swappable UI layouts (A-style toolbar vs B-style scrubber and panel) cost more; defer
-  unless needed.
-- Once a direction is picked, create `DESIGN.md` for shared principles and one token file
-  per skin (W3C design-tokens JSON). The token files are the source of truth for each look.
+**Decision (2026-10-27):** direction **E, Lamplit gallery**, with multiple skins planned from
+the start. The skin model, principles, and skin list live in
+[`design/DESIGN.md`](../design/DESIGN.md). Lamplit is the first skin
+([`design/skins/lamplit/`](../design/skins/lamplit/)); Gallery Daylight (mockup B) is the planned
+second. Mockups A–G in [`design/mockups/`](../design/mockups/) remain reference only.
 
 Interaction requirements surfaced by the Greptile and CodeRabbit reviews of the mockups
-(PR #54). The spike should confirm the chosen engine can meet them:
+(PR #54). The spike confirms the engine exposes the picking, focus, and animation hooks these
+need. Hotspot items are verified in M6, when hotspots exist:
 
 - [ ] A cancelled pointer drag (`pointercancel`, lost capture) settles the page and frees
       navigation; the book never stays stuck mid-turn.
@@ -135,6 +135,9 @@ Interaction requirements surfaced by the Greptile and CodeRabbit reviews of the 
 |---|---|
 | No library works well enough | Escalate to owner; reconsider product metaphor |
 | Fork maintenance burden | Prefer minimal patch; record upstream status |
+| E's engine is prototype code (fixed `NPAGE`, procedural pages, no error handling) | Port a 10-page slice in the spike; list the rewrite scope in the ADR |
+| Scan textures exceed GPU memory at 200 pages | Window textures around the open spread; record VRAM and upload time in the ADR |
+| WebGL2 missing or slow in a Tauri webview (WKWebView, WebView2, WebKitGTK) | Test macOS first; record the support matrix and the fallback in the ADR |
 
 ## Completion steps
 
