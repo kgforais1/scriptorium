@@ -26,6 +26,7 @@ import argparse
 import http.client
 import json
 import os
+import socket
 import sys
 import tempfile
 import threading
@@ -114,45 +115,101 @@ class _AllowlistedRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, check_url(newurl))
 
 
-_OPENER = urllib.request.build_opener(_AllowlistedRedirects)
+_TLS = threading.local()  # connections opened by the current stream() call, per thread
 
 
-def stream(url: str, max_bytes: int) -> Iterator[bytes]:
-    """Yield response chunks, enforcing a byte cap and a total deadline."""
+class _TrackedHTTPSHandler(urllib.request.HTTPSHandler):
+    """Record each HTTPS connection so a deadline watchdog can close it."""
+
+    def do_open(self, http_class, req, **http_conn_args):
+        def tracked(host, **kwargs):
+            conn = http_class(host, **kwargs)
+            conns = getattr(_TLS, "conns", None)
+            if conns is not None:
+                conns.append(conn)
+            return conn
+
+        return super().do_open(tracked, req, **http_conn_args)
+
+
+_OPENER = urllib.request.build_opener(_AllowlistedRedirects, _TrackedHTTPSHandler)
+
+
+def _expire(conns: list, expired: threading.Event) -> None:
+    """Watchdog: unblock any read, including the wait for response headers."""
+    expired.set()
+    for conn in list(conns):
+        sock = getattr(conn, "sock", None)
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+
+def stream(url: str, max_bytes: int, deadline_s: float = DOWNLOAD_DEADLINE_S) -> Iterator[bytes]:
+    """Yield response chunks, enforcing a byte cap and a total deadline.
+
+    The deadline covers connecting, waiting for headers, and the body: a watchdog closes
+    the connection when it expires. SOCKET_TIMEOUT_S still bounds each single read.
+    """
     req = urllib.request.Request(check_url(url), headers={"User-Agent": USER_AGENT})
-    deadline = time.monotonic() + DOWNLOAD_DEADLINE_S
+    conns: list = []
+    expired = threading.Event()
+    watchdog = threading.Timer(deadline_s, _expire, (conns, expired))
+    watchdog.daemon = True
     received = 0
+    _TLS.conns = conns
+    watchdog.start()
     try:
         with _OPENER.open(req, timeout=SOCKET_TIMEOUT_S) as resp:
+            _TLS.conns = None
             declared = resp.headers.get("Content-Length")
-            if declared and declared.isdigit() and int(declared) > max_bytes:
+            expected = int(declared) if declared and declared.isdigit() else None
+            if expected is not None and expected > max_bytes:
                 raise FetchError(f"response too large: {declared} bytes")
-            # read1 returns after at most one socket read, so the deadline is checked even
-            # when a server trickles bytes slowly enough to dodge the socket timeout.
+            # read1 returns after at most one socket read, so the byte cap and the
+            # deadline are checked between reads.
             while chunk := resp.read1(CHUNK):
                 received += len(chunk)
                 if received > max_bytes:
                     raise FetchError(f"response exceeded {max_bytes} bytes")
-                if time.monotonic() > deadline:
-                    raise FetchError(f"download exceeded {DOWNLOAD_DEADLINE_S} s")
+                if expired.is_set():
+                    raise FetchError(f"download exceeded {deadline_s} s")
                 yield chunk
+            if expired.is_set():
+                raise FetchError(f"download exceeded {deadline_s} s")
+            if expected is not None and received < expected:
+                raise FetchError(f"response ended early: {received} of {expected} bytes")
     except http.client.HTTPException as exc:  # e.g. IncompleteRead; not an OSError
         raise FetchError(f"broken response: {exc!r}") from exc
+    except OSError as exc:
+        if expired.is_set():
+            raise FetchError(f"download exceeded {deadline_s} s") from exc
+        raise
+    finally:
+        _TLS.conns = None
+        watchdog.cancel()
 
 
 def fetch_manifest(url: str, attempts: int = 4) -> dict:
-    manifest: object = None
+    raw = b""
     for attempt in range(1, attempts + 1):
         try:
-            manifest = json.loads(b"".join(stream(url, MAX_MANIFEST_BYTES)))
+            raw = b"".join(stream(url, MAX_MANIFEST_BYTES))
             break
         except RefusedURL:
             raise  # an allowlist refusal (even via redirect) is permanent
-        except (OSError, FetchError, ValueError) as exc:
+        except (OSError, FetchError) as exc:
             if attempt == attempts:
                 raise FetchError(f"manifest failed after {attempts} attempts: {exc}") from exc
             time.sleep(5 * attempt)
-    if not isinstance(manifest, dict):  # a shape error is permanent; do not retry it
+    # Parse and shape errors are permanent, so they are outside the retry loop.
+    try:
+        manifest = json.loads(raw)
+    except (ValueError, RecursionError) as exc:  # RecursionError: absurdly deep nesting
+        raise FetchError(f"manifest is not valid JSON: {type(exc).__name__}") from exc
+    if not isinstance(manifest, dict):
         raise FetchError("manifest is not a JSON object")
     return manifest
 
@@ -168,11 +225,13 @@ IMAGE_SERVICE_TYPES = {"ImageService1", "ImageService2", "ImageService3"}
 
 
 def _image_service_version(service: dict) -> int | None:
-    """2 or 3 for an IIIF Image API service, None for any other kind of service."""
+    """1, 2 or 3 for an IIIF Image API service, None for any other kind of service."""
     kind = str(service.get("type") or service.get("@type") or "")
     marks = json.dumps([service.get("@context"), service.get("profile")])
     if kind == "ImageService3" or "iiif.io/api/image/3" in marks:
         return 3
+    if kind == "ImageService1" or "iiif.io/api/image/1" in marks:
+        return 1
     if kind in IMAGE_SERVICE_TYPES or "iiif.io/api/image/" in marks:
         return 2
     return None
@@ -187,7 +246,8 @@ def _service_url(services: object) -> str | None:
         version = _image_service_version(service)
         if isinstance(base, str) and version:
             size = "max" if version == 3 else "full"
-            return f"{base.rstrip('/')}/full/{size}/0/default.jpg"
+            quality = "native" if version == 1 else "default"  # Image API 1.x quality name
+            return f"{base.rstrip('/')}/full/{size}/0/{quality}.jpg"
     return None
 
 
@@ -233,7 +293,13 @@ def canvas_url(canvas: object) -> str | None:
         return None
     for raw in _canvas_bodies(canvas):
         for body in _image_bodies(raw):
-            url = _service_url(body.get("service")) or _jpeg_id(body)
+            url = _service_url(body.get("service"))
+            if url:
+                try:
+                    return check_url(url)
+                except RefusedURL:
+                    pass  # an off-allowlist service; an allowed JPEG body may still work
+            url = _jpeg_id(body)
             if url:
                 return url
     return None

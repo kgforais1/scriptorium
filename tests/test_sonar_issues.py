@@ -110,6 +110,27 @@ class FingerprintTests(unittest.TestCase):
         self.assertNotEqual(before, mod.tree_fingerprint())
 
 
+class FetchIssuesTests(unittest.TestCase):
+    def test_two_pages_are_combined(self) -> None:
+        pages = {
+            "1": {"issues": [{"key": "a"}], "paging": {"total": 2}},
+            "2": {"issues": [{"key": "b"}], "paging": {"total": 2}},
+        }
+        with mock.patch.object(mod, "api_get", side_effect=lambda h, t, p, q: pages[q["p"]]) as api:
+            issues, total = mod.fetch_issues("http://localhost:9000", "tok", "proj")
+        self.assertEqual([i["key"] for i in issues], ["a", "b"])
+        self.assertEqual(total, 2)
+        self.assertEqual([c.args[3]["p"] for c in api.call_args_list], ["1", "2"])
+
+    def test_response_without_paging_makes_one_request(self) -> None:
+        reply = {"issues": [{"key": "a"}, {"key": "b"}]}
+        with mock.patch.object(mod, "api_get", return_value=reply) as api:
+            issues, total = mod.fetch_issues("http://localhost:9000", "tok", "proj")
+        self.assertEqual(len(issues), 2)
+        self.assertEqual(total, 2)
+        api.assert_called_once()
+
+
 class SummaryTests(unittest.TestCase):
     def test_truncation_is_flagged(self) -> None:
         text = mod.summarize([{"rule": "r", "component": "p:f.py", "line": 1}], 5)
