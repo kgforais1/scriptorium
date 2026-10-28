@@ -134,8 +134,15 @@ def tree_fingerprint() -> str:
     for name in sorted(filter(None, untracked.split(b"\0"))):
         digest.update(name + b"\0")
         path = ROOT / os.fsdecode(name)
+        if path.is_symlink() or not path.is_file():  # never follow links or read devices
+            digest.update(b"<not-a-file>")
+            continue
         try:
-            digest.update(hashlib.sha256(path.read_bytes()).digest())
+            file_digest = hashlib.sha256()
+            with path.open("rb") as f:
+                while block := f.read(2**20):
+                    file_digest.update(block)
+            digest.update(file_digest.digest())
         except OSError:  # vanished or unreadable: still part of the state
             digest.update(b"<unreadable>")
     return digest.hexdigest()

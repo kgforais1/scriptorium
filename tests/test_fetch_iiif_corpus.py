@@ -7,12 +7,14 @@ Run:
 
 from __future__ import annotations
 
+import http.client
 import importlib.util
 
 import tempfile
 import unittest
 from pathlib import Path
 from types import ModuleType
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -166,6 +168,17 @@ class ManifestParsingTests(unittest.TestCase):
         for manifest in ({"items": None}, {"sequences": [{"canvases": None}]}, {"sequences": "x"}):
             with self.subTest(manifest=manifest), self.assertRaises(fetch.FetchError):
                 fetch.image_urls(manifest)
+
+
+class BrokenResponseTests(unittest.TestCase):
+    def test_incomplete_read_becomes_fetch_error(self) -> None:
+        resp = mock.MagicMock()
+        resp.__enter__.return_value = resp
+        resp.headers.get.return_value = None
+        resp.read1.side_effect = [b"ab", http.client.IncompleteRead(b"ab", 10)]
+        with mock.patch.object(fetch._OPENER, "open", return_value=resp):
+            with self.assertRaises(fetch.FetchError):
+                list(fetch.stream("https://iiif.archive.org/p.jpg", 100))
 
 
 class StateTests(unittest.TestCase):
