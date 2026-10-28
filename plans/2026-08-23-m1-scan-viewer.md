@@ -1,6 +1,6 @@
 # Plan: M1 — Scan viewer (first product milestone)
 
-Last reviewed: 2026-10-27
+Last reviewed: 2026-10-28
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
 Status: draft
@@ -25,7 +25,8 @@ last-read page. Priorities: reliability and correctness over polish.
 - Deep-zoom, figure extraction, heavy texture (M7) — except whatever the flip ADR already chose
 - Web/PWA / IIIF (M8)
 - Referenced/symlink storage mode (schema-reserved only)
-- HEIC (document unsupported)
+- PDF import (M1.5)
+- HEIC and AVIF (document unsupported; revisit later)
 
 ## Approach
 
@@ -72,7 +73,7 @@ folder pickers.
 | Variant | When | Message must convey |
 |---|---|---|
 | `EmptyFolder` | No files | Folder has no files |
-| `NoSupportedImages` | No jpg/jpeg/png/webp | No supported images found |
+| `NoSupportedImages` | No file in a supported input format (see below) | No supported images found |
 | `UnreadableFile` | I/O error on a page | Which file failed |
 | `DestinationExists` | Target book path exists (incl. case-insensitive `id` collision on macOS/Windows) | Refuse overwrite |
 | `DuplicatePageStem` | Two sources map to same stem (incl. case-insensitive) | Duplicate page names |
@@ -82,10 +83,31 @@ folder pickers.
 | `ChecksumMismatch` | Page bytes ≠ stored sha256 | Book files corrupted or modified |
 | `PermissionDenied` | OS denied | Permission denied |
 
+### Input formats (normative for M1)
+
+Ingest keeps each original file and gives the reader a file every target webview can show.
+
+| Input | Extensions | Reader gets |
+|---|---|---|
+| JPEG, PNG, WebP | `.jpg` `.jpeg` `.png` `.webp` | The original |
+| BMP, GIF | `.bmp` `.gif` | A PNG copy (GIF: first frame only) |
+| TIFF | `.tif` `.tiff` | A JPEG copy at quality ≥ 92; each frame of a multi-page TIFF is one page |
+| JPEG 2000 | `.jp2` `.j2k` `.jpf` | A JPEG copy at quality ≥ 92 (OpenJPEG binding) |
+
+Ingest rules for every format:
+
+- Apply the EXIF orientation before measuring `width` and `height`.
+- Convert CMYK, 16-bit, and ICC-tagged images to 8-bit sRGB in the display copy.
+- Keep the original, unmodified, beside the display copy. Checksums cover both files.
+- A decode failure is `UnreadableFile` for that page, not a silent skip.
+
+Storing originals adds a field to page entries, so it needs `formatVersion` 2. See
+[`docs/book-format.md`](../docs/book-format.md#planned-originals-and-display-copies).
+
 ### Natural-sort specification (normative for M1)
 
 Sort **filename stem** with natural order (numeric chunks as integers), case-insensitive
-extension ignored for ordering. Only `.jpg` `.jpeg` `.png` `.webp` included.
+extension ignored for ordering. Only the supported input formats below are included.
 
 **Tie-break (normative):** after natural compare of stems is equal, order by:
 1. Longer zero-padded numeric representation wins for that chunk only when integer values

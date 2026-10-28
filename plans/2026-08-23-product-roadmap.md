@@ -1,6 +1,6 @@
 # Plan: Scriptorium product roadmap
 
-Last reviewed: 2026-10-27
+Last reviewed: 2026-10-28
 Date: 2026-08-23
 Author: bootstrap session
 Status: approved
@@ -85,6 +85,12 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Close remaining M0 review format/load items (**A10–A13**, **LC-M2** cargo build, **LC-M3** CSP tracking) — see follow-ups section below
 
 **Out of scope for M1:** library shelf, authoring, OCR, hotspots, web deploy.
+
+### M1.5 — PDF import
+
+- [ ] Rasterize PDF pages at ingest (pdfium bundled per platform), at a DPI chosen per page size
+- [ ] Keep the source PDF in the package; checksum it like any original
+- [ ] Capture any embedded PDF text layer for M2 search
 
 ### M2 — OCR-aware scans (text under the image)
 

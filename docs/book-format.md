@@ -1,6 +1,6 @@
 # Scriptorium book package format
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-10-28
 
 Normative spec for a Scriptorium **book package** (formatVersion 1). A package is a
 self-contained directory that the app can open, verify, and re-locate on disk without
@@ -54,6 +54,14 @@ still load.
 | `sha256` | string | yes | hex digest of the page file |
 | `pageLabel` | string | no | optional human label |
 | `storage` | string | no | `"copied"` default; `"referenced"` reserved, not implemented in M1 |
+
+## Planned: originals and display copies
+
+M1 ingest accepts formats the webview cannot show, such as TIFF and JPEG 2000. It will store
+each original beside a display copy. `file` stays the display image. A new optional page
+object, `source` (`file`, `byteSize`, `sha256`), points at the original. Because this adds a
+field, it ships as `formatVersion` 2 with a migration note. Input formats are listed in the
+[M1 plan](../plans/2026-08-23-m1-scan-viewer.md#input-formats-normative-for-m1).
 
 ## Evolution rule
 
