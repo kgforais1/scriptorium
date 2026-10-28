@@ -207,12 +207,15 @@ class ServiceSelectionTests(unittest.TestCase):
             "service": {
                 "@id": "https://iiif.archive.org/s",
                 "profile": "http://library.stanford.edu/iiif/image-api/1.1/compliance.html#level1",
-                "@context": "http://iiif.io/api/image/1/context.json",
+                "@context": "http://library.stanford.edu/iiif/image-api/1.1/context.json",
             },
         }
         self.assertEqual(
             fetch.canvas_url(v3_canvas(body)), "https://iiif.archive.org/s/full/full/0/native.jpg"
         )
+
+    def test_off_allowlist_jpeg_body_is_unusable(self) -> None:
+        self.assertIsNone(fetch.canvas_url(v3_canvas({"id": "https://evil.test/p.jpg"})))
 
     def test_refused_service_falls_back_to_jpeg_body(self) -> None:
         body = {
@@ -222,24 +225,24 @@ class ServiceSelectionTests(unittest.TestCase):
         self.assertEqual(fetch.canvas_url(v3_canvas(body)), "https://iiif.archive.org/p.jpg")
 
 
-def fake_response(chunks: list, length: str | None = None) -> mock.MagicMock:
+def fake_response(chunks: list, length: int | None = None) -> mock.MagicMock:
     resp = mock.MagicMock()
     resp.__enter__.return_value = resp
-    resp.headers.get.return_value = length
+    resp.length = length
     resp.read1.side_effect = chunks
     return resp
 
 
 class BrokenResponseTests(unittest.TestCase):
     def test_short_body_against_content_length_fails(self) -> None:
-        resp = fake_response([b"ab", b""], length="10")
+        resp = fake_response([b"ab", b""], length=10)
         with mock.patch.object(fetch._OPENER, "open", return_value=resp):
             chunks = fetch.stream("https://iiif.archive.org/p.jpg", 100)
             with self.assertRaises(fetch.FetchError):
                 list(chunks)
 
     def test_full_body_against_content_length_passes(self) -> None:
-        resp = fake_response([b"ab", b""], length="2")
+        resp = fake_response([b"ab", b""], length=2)
         with mock.patch.object(fetch._OPENER, "open", return_value=resp):
             self.assertEqual(list(fetch.stream("https://iiif.archive.org/p.jpg", 100)), [b"ab"])
 
@@ -251,14 +254,14 @@ class BrokenResponseTests(unittest.TestCase):
         port = server.getsockname()[1]
 
         def connect_silently(req, timeout):
-            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=min(timeout, 2))
             fetch._TLS.conns.append(conn)
             conn.request("GET", "/")
             return conn.getresponse()  # the server never answers
 
         with mock.patch.object(fetch._OPENER, "open", side_effect=connect_silently):
             chunks = fetch.stream("https://iiif.archive.org/p.jpg", 100, deadline_s=0.3)
-            with self.assertRaises(fetch.FetchError):
+            with self.assertRaisesRegex(fetch.FetchError, "exceeded"):
                 list(chunks)
 
     def test_deeply_nested_manifest_is_a_permanent_error(self) -> None:
@@ -268,10 +271,19 @@ class BrokenResponseTests(unittest.TestCase):
                 fetch.fetch_manifest("https://iiif.archive.org/m.json")
         stream.assert_called_once()
 
+    def test_truncated_manifest_is_retried(self) -> None:
+        replies = [iter([b'{"items": [']), iter([b'{"items": []}'])]
+        with (
+            mock.patch.object(fetch, "stream", side_effect=replies) as stream,
+            mock.patch.object(fetch.time, "sleep"),
+        ):
+            self.assertEqual(fetch.fetch_manifest("https://iiif.archive.org/m.json"), {"items": []})
+        self.assertEqual(stream.call_count, 2)
+
     def test_incomplete_read_becomes_fetch_error(self) -> None:
         resp = mock.MagicMock()
         resp.__enter__.return_value = resp
-        resp.headers.get.return_value = None
+        resp.length = None
         resp.read1.side_effect = [b"ab", http.client.IncompleteRead(b"ab", 10)]
         with mock.patch.object(fetch._OPENER, "open", return_value=resp):
             with self.assertRaises(fetch.FetchError):
