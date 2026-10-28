@@ -52,8 +52,8 @@ Real scans for load, aspect, and format testing. Download them into gitignored
 
 | Book | Archive.org id | Pages | Why |
 |---|---|---|---|
-| *Edmund Dulac's Picture-Book* (1916) | `edmunddulacspict00dulauoft` | 204 | Colour plates; the M1 gate corpus (204 pages) |
-| *The Princess and the Goblin* (1920) | `princessgoblin00macd` | 240 | Text with plates; second long book |
+| *Edmund Dulac's Picture-Book* (1916) | `edmunddulacspict00dulauoft` | 202 | Colour plates; the M1 gate corpus |
+| *The Princess and the Goblin* (1920) | `princessgoblin00macd` | 238 | Text with plates; second long book |
 | *Alice's Adventures in Wonderland* (1911) | `alicesadventures00carr` | 348 | Larger book for scale tests |
 
 Other good sources: e-codices (medieval manuscripts, irregular page sizes), the Library
@@ -79,7 +79,7 @@ for f in "$out/source/${id}_jp2"/*.jp2; do
 done
 ```
 
-Verify the gate corpus before an A9 run. Expect 204 pages: 196 at 2808x3906, one each at
+Verify the gate corpus before an A9 run. Expect 202 pages: 196 at 2808x3906, one each at
 2924x4218 and 3048x4198, and four at 936x1292.
 
 ```sh

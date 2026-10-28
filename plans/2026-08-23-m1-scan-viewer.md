@@ -153,7 +153,7 @@ development build via `pnpm tauri dev` (or release build if noted). If developin
 on another class, amend this plan before claiming A9.
 
 **Gate corpus (pinned):** *Edmund Dulac's Picture-Book*, archive.org
-`edmunddulacspict00dulauoft`: **204 pages**, JPEG quality 92, about 450 MB total. 196 pages
+`edmunddulacspict00dulauoft`: **202 pages**, JPEG quality 92, about 450 MB total. 196 pages
 are 2808 × 3906 (about 11 MP). The covers and a few plates differ (2924 × 4218, 3048 × 4198,
 and four at 936 × 1292), which also exercises mixed page sizes. Fetch it with the recipe in
 [`tests/fixtures/README.md`](../tests/fixtures/README.md#public-domain-test-corpora).
@@ -205,7 +205,9 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
       `book-format.v2.schema.json` with `sources[]` and page `source`. The loader reads
       `formatVersion` first, then picks the schema; any other version is
       `SchemaVersionUnsupported` (A8). Rust reads v1 and v2 and writes v2. Add the `sources[]`
-      validation rules and the v1→v2 migration note to `docs/book-format.md`
+      validation rules and the v1→v2 migration note to `docs/book-format.md`. Update every
+      reference to the old schema path (Rust `load_schema`, fixture tests, README,
+      `docs/NAVIGATION.md`, `CHANGELOG.md`, comments) and give each schema file its own `$id`
 - [ ] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
       fixture per row and per conversion rule (CMYK, 16-bit, ICC, EXIF orientation,
       multi-page TIFF)

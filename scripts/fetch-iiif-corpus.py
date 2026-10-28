@@ -25,6 +25,7 @@ USER_AGENT = "scriptorium-corpus-fetch/0.1 (test fixtures)"
 JPEG_MAGIC = b"\xff\xd8\xff"
 JPEG_EOI = b"\xff\xd9"
 JPEG_FORMATS = {"image/jpeg", "image/jpg"}
+TAIL_WINDOW = 1024  # JPEGs may carry trailing padding after the end-of-image marker
 
 
 def require_https(url: str) -> str:
@@ -68,8 +69,10 @@ def _canvas_url(canvas: dict, v3: bool) -> str | None:
         return None
     body_id = body.get("id" if v3 else "@id")
     fmt = body.get("format")
-    looks_jpeg = fmt in JPEG_FORMATS or (
-        fmt is None and isinstance(body_id, str) and body_id.lower().endswith((".jpg", ".jpeg"))
+    looks_jpeg = (isinstance(fmt, str) and fmt.lower() in JPEG_FORMATS) or (
+        fmt is None
+        and isinstance(body_id, str)
+        and urllib.parse.urlparse(body_id).path.lower().endswith((".jpg", ".jpeg"))
     )
     fallback = body_id if looks_jpeg else None
     base = _service_id(body.get("service"))
@@ -87,7 +90,7 @@ def image_urls(manifest: dict) -> list[str | None]:
 
 def is_complete_jpeg(data: bytes) -> bool:
     """Start-of-image marker at the head and end-of-image marker near the tail."""
-    return data[:3] == JPEG_MAGIC and JPEG_EOI in data[-16:]
+    return data[:3] == JPEG_MAGIC and JPEG_EOI in data[-TAIL_WINDOW:]
 
 
 def _existing_is_complete(path: Path) -> bool:
@@ -96,8 +99,8 @@ def _existing_is_complete(path: Path) -> bool:
         return False
     with path.open("rb") as f:
         head = f.read(3)
-        f.seek(size - 16)
-        tail = f.read(16)
+        f.seek(max(3, size - TAIL_WINDOW))
+        tail = f.read(TAIL_WINDOW)
     return is_complete_jpeg(head + tail)
 
 

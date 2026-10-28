@@ -62,7 +62,7 @@ except optional trivial edge trim documented later.
 
 - [ ] Build a tiny fixture set in `tmp/`: ≥3 pages with **deliberately different** aspect
       ratios, taken from the public-domain corpora (mix books, or add a fold-out plate)
-- [ ] Use the M1 gate corpus (Dulac, 204 pages) for load smoke
+- [ ] Use the M1 gate corpus (Dulac, 202 pages) for load smoke
 - [x] Document how to fetch fixtures: [`tests/fixtures/README.md`](../tests/fixtures/README.md#public-domain-test-corpora)
       and `scripts/fetch-iiif-corpus.py`
 
