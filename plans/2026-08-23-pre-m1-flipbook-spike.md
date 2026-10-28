@@ -90,7 +90,7 @@ except optional trivial edge trim documented later.
 
 | # | Gate | Pass means |
 |---|---|---|
-| G1 | Metaphor | Page-turn animation visible for ≥2 pages (not a static strip) |
+| G1 | Metaphor | Page-turn animation visible for ≥2 pages (not a static strip), driven by mouse drag and by one-finger touch drag through Pointer Events. Touch is tested on real hardware or the webview's touch emulation, and the ADR notes which |
 | G2 | Heterogeneous | Three mismatched-aspect scans display without stretch (policy applied) |
 | G3 | StrictMode | No double-mount crash / blank book on remount |
 | G4 | Asset load | Pages load from disk via Tauri asset URL on macOS (Windows noted if available) |

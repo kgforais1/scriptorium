@@ -131,7 +131,7 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 ### M7 — Polish & extraction
 
 - [ ] Figure/image extraction from page regions (crop to assets)
-- [ ] Deep-zoom inspect on a page or region (OpenSeadragon-style panel)
+- [ ] Deep-zoom inspect on a page or region (OpenSeadragon-style panel), with pinch-to-zoom on touch
 - [ ] Book polish beyond the M1 engine: page thickness, cover open/close, richer paper detail
 - [ ] Second skin **Gallery Daylight** (mockup B) + skin picker; remember choice per user
 - [ ] Performance: lazy load pages, virtualized thumbnail scrubber (basic scrubber ships in M1), large book handling

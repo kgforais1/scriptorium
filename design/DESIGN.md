@@ -34,6 +34,9 @@ against scan textures, not copying the mockup file.
 - Notes are opt-in. Hotspot markers can be hidden with one toggle.
 - Motion respects `prefers-reduced-motion`. Pulses stop and turns shorten.
 - Every control works by keyboard and is named for assistive technology.
+- Touch is a first-class input. A finger drag turns the page, every control has a touch
+  target of at least 44 px, and nothing works only on hover. Hover may add polish but must
+  have a tap equivalent.
 
 ## Skin model
 

@@ -186,6 +186,9 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] No hard-coded colours, fonts, or scene values in reader components (lamplit is the only
       skin; no picker yet)
 - [ ] Every control works by keyboard, has a visible focus state, and has an accessible name
+- [ ] Touch: one-finger drag and tap zones turn pages; controls have touch targets of at least
+      44 px; hover-only affordances (tooltips, thumbnail lift) have a tap equivalent; the
+      canvas blocks browser pinch and scroll without trapping the chrome
 - [ ] With `prefers-reduced-motion`, pulses stop and page turns shorten or cross-fade
 
 ### Phase 4 — Docs & release
