@@ -79,11 +79,12 @@ for f in "$out/source/${id}_jp2"/*.jp2; do
 done
 ```
 
-Verify the gate corpus before an A9 run. Expect 204 pages at 2808 × 3906:
+Verify the gate corpus before an A9 run. Expect 204 pages: 196 at 2808x3906, one each at
+2924x4218 and 3048x4198, and four at 936x1292.
 
 ```sh
-ls tmp/fixtures/corpus/dulac-picture-book/jpg/*.jpg | wc -l
-sips -g pixelWidth -g pixelHeight tmp/fixtures/corpus/dulac-picture-book/jpg/0010.jpg
+cd tmp/fixtures/corpus/dulac-picture-book/jpg
+sips -g pixelWidth -g pixelHeight *.jpg | awk '/pixelWidth/{w=$2} /pixelHeight/{print w "x" $2}' | sort | uniq -c
 ```
 
 ### Any IIIF manifest

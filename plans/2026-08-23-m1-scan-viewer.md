@@ -54,7 +54,7 @@ folder pickers.
 
 | ID | Criterion | How verified |
 |---|---|---|
-| A1 | Ingest of a fixture folder produces a package that **validates** against `docs/book-format.schema.json` | `cargo test` + schema validation |
+| A1 | Ingest of a fixture folder produces a package that **validates** against `docs/book-format.v2.schema.json`; v1 fixtures still validate against `docs/book-format.v1.schema.json` | `cargo test` + schema validation |
 | A2 | Page order matches the **natural-sort table** below for the committed sort fixture | `cargo test` |
 | A3 | Each defined error variant returns its required user-visible message and does not abort the process | `cargo test` (+ manual spot-check in UI) |
 | A4 | Reader shows **page-turn** for ≥2 pages using ADR library; images are scan files (not placeholders); **no aspect stretch** (pad policy from ADR) | Manual + spike gates carried forward |
@@ -63,7 +63,7 @@ folder pickers.
 | A7 | Open… on an existing package directory loads without re-copy | Manual script |
 | A8 | Unsupported `formatVersion` → `SchemaVersionUnsupported` message | `cargo test` |
 | A9 | Perf budget (below) holds on the **named reference class** against the **pinned gate corpus** | Manual timed run; record results in PR |
-| A10 | Mutating one page byte causes `ChecksumMismatch` on load (negative checksum test) | `cargo test` |
+| A10 | Mutating one byte of a page file, or of a `sources[]` original, causes `ChecksumMismatch` on load | `cargo test` |
 | A11 | Ingest rejects `id` that case-folds equal to an existing book directory on case-insensitive FS | `cargo test` |
 | A12 | Resolved page path canonicalizes under package root (prefix assertion after `join`) | `cargo test` |
 | A13 | Webview CSP is **not** `null` before Phase 2 commands + asset protocol ship | Review `tauri.conf.json` + manual |
@@ -80,7 +80,7 @@ folder pickers.
 | `InsufficientDiskSpace` | Pre-flight fail | Need more free space |
 | `SchemaVersionUnsupported` | Unknown/newer formatVersion | Unsupported book version |
 | `InvalidPackage` | missing meta / schema fail | Not a valid Scriptorium book |
-| `ChecksumMismatch` | Page bytes ≠ stored sha256 | Book files corrupted or modified |
+| `ChecksumMismatch` | Page or original bytes ≠ stored sha256 | Book files corrupted or modified |
 | `PermissionDenied` | OS denied | Permission denied |
 
 ### Input formats (normative for M1)
@@ -99,9 +99,9 @@ and keeps the untouched original under `originals/`.
 
 A JPEG, PNG, or WebP input gets a converted copy when any of these is true:
 
-- It is CMYK, 16-bit, or carries a non-sRGB ICC profile. Convert to 8-bit sRGB. An image
-  with no profile is treated as sRGB; a CMYK image with no profile uses a bundled default
-  CMYK profile.
+- It is CMYK, 16-bit, or carries a non-sRGB ICC profile. Convert to 8-bit sRGB. An RGB or
+  grey image with no profile is treated as sRGB. A CMYK image with no profile is rejected as
+  `UnreadableFile`, because the common default CMYK profiles cannot be redistributed.
 - Its EXIF orientation is not 1. Rotate or flip the pixels and drop the tag. TIFF uses its
   own orientation tag, with the same rule.
 
@@ -153,8 +153,9 @@ development build via `pnpm tauri dev` (or release build if noted). If developin
 on another class, amend this plan before claiming A9.
 
 **Gate corpus (pinned):** *Edmund Dulac's Picture-Book*, archive.org
-`edmunddulacspict00dulauoft`: **204 pages** at about **11 MP** each (2808 × 3906), JPEG
-quality 92, about 450 MB total. Fetch it with the recipe in
+`edmunddulacspict00dulauoft`: **204 pages**, JPEG quality 92, about 450 MB total. 196 pages
+are 2808 × 3906 (about 11 MP). The covers and a few plates differ (2924 × 4218, 3048 × 4198,
+and four at 936 × 1292), which also exercises mixed page sizes. Fetch it with the recipe in
 [`tests/fixtures/README.md`](../tests/fixtures/README.md#public-domain-test-corpora).
 Pixel count drives decode time and memory (about 44 MB per decoded RGBA page), so the gate
 is set by pixels, not file size. Do not upscale pages to inflate file size.
@@ -200,9 +201,11 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 
 ### Phase 1 — Book I/O (Rust)
 
-- [ ] Book format v2: schema adds `sources[]` and page `source`; Rust accepts v1 and v2 and
-      writes v2; v1→v2 migration note in `docs/book-format.md`; A1 validates against the v2
-      schema
+- [ ] Book format v2: rename the current schema to `book-format.v1.schema.json` and add
+      `book-format.v2.schema.json` with `sources[]` and page `source`. The loader reads
+      `formatVersion` first, then picks the schema; any other version is
+      `SchemaVersionUnsupported` (A8). Rust reads v1 and v2 and writes v2. Add the `sources[]`
+      validation rules and the v1→v2 migration note to `docs/book-format.md`
 - [ ] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
       fixture per row and per conversion rule (CMYK, 16-bit, ICC, EXIF orientation,
       multi-page TIFF)
@@ -216,7 +219,7 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] Ingest case-insensitive `id` collision check (A11)
 - [ ] Orphan temp-dir sweep + DuplicatePageStem tests
 - [ ] All error taxonomy variants tested with `tempfile`
-- [ ] Schema bind: Rust sample serialize ↔ `docs/book-format.schema.json`
+- [ ] Schema bind: Rust sample serialize ↔ `docs/book-format.v2.schema.json` (and v1 samples ↔ v1 schema)
 
 ### Phase 2 — Commands + UI
 

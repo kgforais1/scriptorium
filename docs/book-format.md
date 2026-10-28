@@ -75,9 +75,22 @@ Planned shape for `formatVersion` 2:
 - `load_book` verifies each `sources[]` sha256 once. Drift is `ChecksumMismatch`.
 - Free-space preflight counts originals plus display copies in `estimated_bytes`.
 
+Validation rules for v2, added to the loader table when v2 ships:
+
+- `sources[].id` is non-empty and unique within the book.
+- Every page `source.ref` names an existing `sources[].id`.
+- `source.frame` is an integer ≥ 0 and below the source's frame count, when the format
+  reports one.
+- `sources` and `source` appear only when `formatVersion` is 2 or higher.
+
 v1 packages stay readable. A v1 package has no originals and loads unchanged.
 
 ## Evolution rule
+
+Version 2 keeps the same strict policy: unknown keys are rejected. A v1-only reader must
+reject a v2 package with `SchemaVersionUnsupported`. The loader reads `formatVersion` first
+and then validates against the matching schema file (`book-format.v1.schema.json` or
+`book-format.v2.schema.json`). The v1→v2 migration note will live in this document.
 
 While `formatVersion` is `1`, the schema and Rust loaders reject unknown keys
 (`additionalProperties: false` / `#[serde(deny_unknown_fields)]`). Therefore any
