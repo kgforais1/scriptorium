@@ -111,9 +111,19 @@ def _git(*args: str) -> str:
     ).strip()
 
 
+def clean_sha(value: object) -> str | None:
+    """Return a canonical commit SHA, or None.
+
+    The result is rebuilt from parsed bytes, so text from the state file or the
+    environment never reaches a git argument directly.
+    """
+    match = COMMIT_SHA_RE.fullmatch(str(value).strip().lower())
+    return bytes.fromhex(match.group(0)).hex() if match else None
+
+
 def is_ancestor(ancestor: str, descendant: str) -> bool:
     try:
-        _git("merge-base", "--is-ancestor", ancestor, descendant)
+        _git("merge-base", "--is-ancestor", "--end-of-options", ancestor, descendant)
     except subprocess.CalledProcessError:
         return False
     return True
@@ -122,11 +132,11 @@ def is_ancestor(ancestor: str, descendant: str) -> bool:
 def checked_sha(stage: str) -> str | None:
     """Commit to judge: the pushed commit on push (PRE_COMMIT_TO_REF), else HEAD."""
     if stage == "push":
-        pushed = os.environ.get("PRE_COMMIT_TO_REF", "").strip().lower()
-        if COMMIT_SHA_RE.fullmatch(pushed):
+        pushed = clean_sha(os.environ.get("PRE_COMMIT_TO_REF", ""))
+        if pushed:
             return pushed
     try:
-        return _git("rev-parse", "HEAD")
+        return clean_sha(_git("rev-parse", "HEAD"))
     except (OSError, subprocess.CalledProcessError) as exc:
         print(f"Sonar freshness gate: failed to resolve HEAD ({exc}).", file=sys.stderr)
         return None
@@ -143,8 +153,9 @@ def load_state(state_path: Path) -> dict | None:
             reason = ""
         except (OSError, ValueError) as exc:
             reason = f"state file is unreadable ({type(exc).__name__})"
-    if isinstance(state, dict) and COMMIT_SHA_RE.fullmatch(str(state.get("last_scan_commit"))):
-        return state
+    sha = clean_sha(state.get("last_scan_commit")) if isinstance(state, dict) else None
+    if isinstance(state, dict) and sha:
+        return {**state, "last_scan_commit": sha}
     if not reason:
         reason = "state file has no valid last_scan_commit"
     print(
@@ -180,7 +191,7 @@ def run_gate(state_path: Path, max_commits: int, stage: str) -> int:
         )
         return 1
     try:
-        count = int(_git("rev-list", "--count", f"{last}..{head}"))
+        count = int(_git("rev-list", "--count", "--end-of-options", f"{last}..{head}"))
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"Sonar freshness gate: failed to count commits ({exc}).", file=sys.stderr)
         return 1
