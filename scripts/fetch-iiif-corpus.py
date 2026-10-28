@@ -251,16 +251,23 @@ def _image_service_version(service: dict) -> int | None:
 
 
 def _service_url(services: object) -> str | None:
-    """Full-size JPEG request for the first Image API service, in that service's version."""
+    """Allowlisted full-size JPEG request for the first usable Image API service.
+
+    Each service is requested in its own Image API version. A service whose URL the
+    allowlist refuses is skipped, and later services are still tried.
+    """
     for service in services if isinstance(services, list) else [services]:
         if not isinstance(service, dict):
             continue
         base = service.get("@id") or service.get("id")
         version = _image_service_version(service)
-        if isinstance(base, str) and version:
-            size = "max" if version == 3 else "full"
-            quality = "native" if version == 1 else "default"  # Image API 1.x quality name
-            return f"{base.rstrip('/')}/full/{size}/0/{quality}.jpg"
+        if not isinstance(base, str) or not version:
+            continue
+        size = "max" if version == 3 else "full"
+        quality = "native" if version == 1 else "default"  # Image API 1.x quality name
+        url = _allowed(f"{base.rstrip('/')}/full/{size}/0/{quality}.jpg")
+        if url:
+            return url
     return None
 
 
@@ -315,7 +322,7 @@ def _allowed(url: str | None) -> str | None:
 
 def _body_url(body: dict) -> str | None:
     """Prefer an allowlisted Image API service, then an allowlisted JPEG body."""
-    return _allowed(_service_url(body.get("service"))) or _allowed(_jpeg_id(body))
+    return _service_url(body.get("service")) or _allowed(_jpeg_id(body))
 
 
 def canvas_url(canvas: object) -> str | None:

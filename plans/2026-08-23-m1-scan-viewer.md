@@ -136,8 +136,15 @@ in its directory order, frame 0 first. Every page gets a display file named by i
 TIFF's frames cannot collide with an ordinary input file. Test a folder that mixes `2.tif`
 (three frames) with `1.jpg` and `3.jpg`: the result is `1.jpg`, the three frames, then `3.jpg`.
 
-**Chunk order (normative):** compare stems chunk by chunk. A numeric chunk sorts before a
-text chunk, so pure-numeric stems come first, ordered by value, and `cover` follows them.
+**Chunk order (normative):** split each stem into alternating numeric and text chunks and
+compare them pairwise, left to right. The first chunk pair that differs decides the order:
+- Two numeric chunks compare by integer value (`2` before `10`).
+- A numeric chunk sorts before a text chunk at the same position, so pure-numeric stems come
+  before `cover`.
+- Two text chunks compare case-insensitively by UTF-8 bytes.
+- A stem that runs out of chunks first sorts first (`1` before `1a`).
+
+So `0a` sorts before `1`: the first chunks are `0` and `1`, and 0 < 1.
 
 **Tie-break (normative):** after natural compare of stems is equal, order by:
 1. Longer zero-padded numeric representation wins for that chunk only when integer values
@@ -152,6 +159,7 @@ text chunk, so pure-numeric stems come first, ordered by value, and `cover` foll
 | `img01.jpg`, `img001.jpg` | `img001`, `img01` (longer pad first per rule 1) |
 | `cover.jpg`, `1.jpg`, `2.jpg` | `1`, `2`, `cover` (letters after pure-numeric stems that sort as numbers first — pure numeric stems ordered by value; non-numeric follow by UTF-8) |
 | `1.jpg`, `1b.jpg`, `1a.jpg` | `1`, `1a`, `1b` |
+| `1.jpg`, `0a.jpg` | `0a`, `1` (first chunks compare as 0 < 1) |
 
 Expand to ≥12 cases in `cargo test` beside the sort function. Do not leave tie-breaks as open questions.
 

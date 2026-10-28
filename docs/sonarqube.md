@@ -57,7 +57,7 @@ bash scripts/sonar_scan.sh --coverage   # runs pytest --cov first
 ```
 
 [`scripts/sonar_scan.sh`](../scripts/sonar_scan.sh) refuses a non-loopback host unless
-`SONAR_ALLOW_REMOTE=1` is set. It passes the token through the environment, not argv.
+`SONAR_ALLOW_REMOTE=1` is exported, and then only over https. It passes the token through the environment, not argv.
 Then [`scripts/sonar_issues.py`](../scripts/sonar_issues.py) waits for the server to
 finish the analysis and writes these gitignored files:
 

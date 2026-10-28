@@ -149,14 +149,18 @@ def tree_fingerprint() -> str:
 
 
 def host_allowed(host: str) -> bool:
-    """Loopback only (http or https), unless SONAR_ALLOW_REMOTE=1 is exported."""
-    if os.environ.get("SONAR_ALLOW_REMOTE", "0") == "1":
-        return True
+    """Loopback over http or https. A remote host only over https, and only when
+    SONAR_ALLOW_REMOTE=1 is exported, so the token never crosses the network in clear."""
     try:
         parts = urllib.parse.urlparse(host)
+        _ = parts.port  # raises ValueError for a non-numeric or out-of-range port
     except ValueError:
         return False
-    return parts.scheme in {"http", "https"} and (parts.hostname or "") in LOOPBACK_HOSTS
+    if parts.scheme not in {"http", "https"} or not parts.hostname:
+        return False
+    if parts.hostname in LOOPBACK_HOSTS:
+        return True
+    return parts.scheme == "https" and os.environ.get("SONAR_ALLOW_REMOTE", "0") == "1"
 
 
 def main(argv: list[str] | None = None) -> int:

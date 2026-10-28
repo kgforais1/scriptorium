@@ -53,13 +53,17 @@ class HostAllowedTests(unittest.TestCase):
                 "http://localhost.evil.test",
                 "ftp://localhost:9000",
                 "http://[::1",
+                "http://localhost:notaport",
             ):
                 with self.subTest(host=host):
                     self.assertFalse(mod.host_allowed(host))
 
-    def test_exported_override(self) -> None:
+    def test_exported_override_allows_https_remote_only(self) -> None:
         with mock.patch.dict(os.environ, {"SONAR_ALLOW_REMOTE": "1"}, clear=True):
-            self.assertTrue(mod.host_allowed("https://sonarcloud.io"))
+            self.assertTrue(mod.host_allowed("https://sonar.example.com"))
+            for host in ("http://sonar.example.com", "ftp://sonar.example.com", "http://[::1"):
+                with self.subTest(host=host):
+                    self.assertFalse(mod.host_allowed(host))
 
     def test_check_host_cli(self) -> None:
         with mock.patch.dict(os.environ, {"SONAR_HOST_URL": "http://localhost:9000"}, clear=True):
@@ -135,6 +139,18 @@ class FetchIssuesTests(unittest.TestCase):
         self.assertEqual(len(issues), 2)
         self.assertEqual(total, 2)
         api.assert_called_once()
+
+    def test_cap_bounds_the_request_loop(self) -> None:
+        batch = [{"key": "x"}] * 3  # 3 does not divide the patched cap of 10
+        reply = {"issues": batch, "paging": {"total": 10_000}}
+        with (
+            mock.patch.object(mod, "ISSUE_CAP", 10),
+            mock.patch.object(mod, "api_get", return_value=reply) as api,
+        ):
+            issues, total = mod.fetch_issues("http://localhost:9000", "tok", "proj")
+        self.assertEqual(len(issues), 10)
+        self.assertEqual(total, 10_000)
+        self.assertEqual(api.call_count, 4)  # 3, 6, 9, 12 fetched; the loop stops at the cap
 
 
 class SummaryTests(unittest.TestCase):

@@ -228,6 +228,14 @@ class ServiceSelectionTests(unittest.TestCase):
     def test_off_allowlist_jpeg_body_is_unusable(self) -> None:
         self.assertIsNone(fetch.canvas_url(v3_canvas({"id": "https://evil.test/p.jpg"})))
 
+    def test_refused_service_is_skipped_for_a_later_one(self) -> None:
+        refused = {"id": "https://evil.test/s", "type": "ImageService2"}
+        allowed = {"id": "https://iiif.archive.org/s", "type": "ImageService2"}
+        body = {"id": "https://iiif.archive.org/p.jp2", "service": [refused, allowed]}
+        self.assertEqual(
+            fetch.canvas_url(v3_canvas(body)), "https://iiif.archive.org/s/full/full/0/default.jpg"
+        )
+
     def test_refused_service_falls_back_to_jpeg_body(self) -> None:
         body = {
             "id": "https://iiif.archive.org/p.jpg",
@@ -271,6 +279,11 @@ class BrokenResponseTests(unittest.TestCase):
         finally:
             fetch._TLS.conns = None
         self.assertEqual(conns, [made])
+
+    def test_real_opener_uses_exactly_one_tracked_https_handler(self) -> None:
+        https = [h for h in fetch._OPENER.handlers if isinstance(h, urllib.request.HTTPSHandler)]
+        self.assertEqual(len(https), 1)
+        self.assertIsInstance(https[0], fetch._TrackedHTTPSHandler)
 
     def test_watchdog_unblocks_a_header_wait(self) -> None:
         server = socket.socket()
