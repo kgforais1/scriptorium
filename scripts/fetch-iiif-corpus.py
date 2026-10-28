@@ -2,7 +2,7 @@
 """Download every page of a IIIF book as full-size JPEGs into a folder under tmp/.
 
 Used to build test corpora for the reader. Supports IIIF Presentation v2 and v3 manifests
-and Image API v2 and v3 services. Nothing it writes is meant to be committed.
+and IIIF Image API v1, v2 and v3 services. Nothing it writes is meant to be committed.
 
 Safety limits, because the manifest is untrusted input:
 - Only https URLs on the public IIIF hosts in ALLOWED_HOSTS are fetched, including
@@ -82,7 +82,10 @@ def check_url(url: str) -> str:
     The returned URL is rebuilt with the host taken from ALLOWED_HOSTS itself, so no
     caller-supplied host or credentials reach the request.
     """
-    parts = urllib.parse.urlparse(url)
+    try:
+        parts = urllib.parse.urlparse(url)
+    except ValueError as exc:  # e.g. an unclosed IPv6 bracket in an untrusted manifest
+        raise RefusedURL(f"malformed URL: {url!r}") from exc
     if parts.scheme != "https":
         raise RefusedURL(f"refusing non-https URL: {url!r}")
     requested = (parts.hostname or "").lower()
@@ -268,7 +271,10 @@ def _jpeg_id(body: dict) -> str | None:
     fmt = body.get("format")
     if isinstance(fmt, str):
         return body_id if fmt.lower() in JPEG_FORMATS else None
-    path = urllib.parse.urlparse(body_id).path.lower()
+    try:
+        path = urllib.parse.urlparse(body_id).path.lower()
+    except ValueError:  # malformed URL in an untrusted manifest: not a usable JPEG
+        return None
     return body_id if path.endswith((".jpg", ".jpeg")) else None
 
 
@@ -402,7 +408,7 @@ def safe_fetch(index: int, url: str, out_dir: Path, done: dict[str, str], attemp
             return fetch_page(index, url, out_dir, done)
         except RefusedURL as exc:
             return f"FAIL {index:04d}: {exc}"
-        except (OSError, FetchError) as exc:  # servers time out on large transcodes; retry
+        except (OSError, FetchError, ValueError) as exc:  # e.g. slow transcodes; retry
             if attempt == attempts:
                 return f"FAIL {index:04d}: {exc}"
             time.sleep(5 * attempt)
@@ -512,7 +518,7 @@ def main() -> int:
                     save_state(out_dir, manifest_url, done)  # an interrupted run can resume
         finally:
             save_state(out_dir, manifest_url, done)  # keep pages finished before an error
-    except (FetchError, ValueError) as exc:
+    except (OSError, FetchError, ValueError) as exc:  # OSError: e.g. disk full on save
         print(f"error: {exc}", file=sys.stderr)
         return 1
     finally:

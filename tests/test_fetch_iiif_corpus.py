@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import http.client
 import importlib.util
-
 import socket
 import tempfile
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 from types import ModuleType
 from unittest import mock
@@ -194,6 +195,16 @@ class ManifestParsingTests(unittest.TestCase):
             fetch.image_urls(huge)
         self.assertEqual(fetch.image_urls(huge, limit=2), [None, None])
 
+    def test_malformed_urls_are_unusable_not_fatal(self) -> None:
+        with self.assertRaises(fetch.RefusedURL):
+            fetch.check_url("https://[::1/x")
+        self.assertIsNone(fetch.canvas_url(v3_canvas({"id": "https://[::1/x.jpg"})))
+        bad_service = {
+            "id": "https://iiif.archive.org/p.jpg",
+            "service": {"id": "https://[::1/s", "type": "ImageService2"},
+        }
+        self.assertEqual(fetch.canvas_url(v3_canvas(bad_service)), "https://iiif.archive.org/p.jpg")
+
     def test_malformed_canvas_lists_are_refused(self) -> None:
         for manifest in ({"items": None}, {"sequences": [{"canvases": None}]}, {"sequences": "x"}):
             with self.subTest(manifest=manifest), self.assertRaises(fetch.FetchError):
@@ -246,7 +257,22 @@ class BrokenResponseTests(unittest.TestCase):
         with mock.patch.object(fetch._OPENER, "open", return_value=resp):
             self.assertEqual(list(fetch.stream("https://iiif.archive.org/p.jpg", 100)), [b"ab"])
 
-    def test_deadline_covers_waiting_for_headers(self) -> None:
+    def test_https_handler_tracks_its_connection(self) -> None:
+        conns: list = []
+        made = mock.MagicMock()
+        made.request.side_effect = OSError("stop after construction")
+        handler = fetch._TrackedHTTPSHandler()
+        req = urllib.request.Request("https://iiif.archive.org/p.jpg")
+        req.timeout = 1  # set by OpenerDirector.open in real use
+        fetch._TLS.conns = conns
+        try:
+            with self.assertRaises(urllib.error.URLError):
+                handler.do_open(lambda host, **kw: made, req)
+        finally:
+            fetch._TLS.conns = None
+        self.assertEqual(conns, [made])
+
+    def test_watchdog_unblocks_a_header_wait(self) -> None:
         server = socket.socket()
         server.bind(("127.0.0.1", 0))
         server.listen(1)

@@ -151,7 +151,7 @@ ingest pipeline returns on failure.
 | **Atomic write** | Write to a temp dir under the destination parent → validate → rename into place. If a destination book id already exists, ingest fails. | `DestinationExists` |
 | **Orphan cleanup** | On startup and before ingest, delete orphaned `*.scriptorium-tmp` / `.ingest-tmp-*` dirs under the library root older than 1 hour (or any left from a previous crashed run). | — |
 | **Checksums** | Compute `sha256` at ingest and store it in `meta.json`. `load_book` re-verifies the sha256 of each page file; drift is a hard failure. Skip re-verify only behind an explicit future flag — not in M1. | `ChecksumMismatch` |
-| **Free space** | Pre-flight check: refuse the copy if free space is less than `estimated_bytes × 1.1 + 50 MB` headroom. | — |
+| **Free space** | Pre-flight check: refuse the copy if free space is less than `estimated_bytes × 1.1 + 50 MB` headroom. `estimated_bytes` is the total ingest will write: every display image plus every retained original (v2). | — |
 
 ## Provenance and privacy
 

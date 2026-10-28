@@ -136,6 +136,9 @@ in its directory order, frame 0 first. Every page gets a display file named by i
 TIFF's frames cannot collide with an ordinary input file. Test a folder that mixes `2.tif`
 (three frames) with `1.jpg` and `3.jpg`: the result is `1.jpg`, the three frames, then `3.jpg`.
 
+**Chunk order (normative):** compare stems chunk by chunk. A numeric chunk sorts before a
+text chunk, so pure-numeric stems come first, ordered by value, and `cover` follows them.
+
 **Tie-break (normative):** after natural compare of stems is equal, order by:
 1. Longer zero-padded numeric representation wins for that chunk only when integer values
    are equal but digit strings differ (`001` before `01` before `1` — longer pad first).
@@ -212,8 +215,9 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
       `formatVersion` first, then picks the schema; any other version is
       `SchemaVersionUnsupported` (A8). Rust reads v1 and v2 and writes v2. Add the `sources[]`
       validation rules and the v1→v2 migration note to `docs/book-format.md`. Update every
-      reference to the old schema path (Rust `load_schema`, fixture tests, README,
-      `docs/NAVIGATION.md`, `CHANGELOG.md`, comments) and give each schema file its own `$id`
+      reference to the old schema path (`src-tauri/src/book_format.rs` `load_schema`,
+      `tests/test_generate_fixture_book.py`, README, `docs/NAVIGATION.md`, `CHANGELOG.md`,
+      comments) and give each schema file its own `$id`
 - [ ] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
       fixture per row and per conversion rule (CMYK, 16-bit, ICC, EXIF orientation,
       multi-page TIFF)

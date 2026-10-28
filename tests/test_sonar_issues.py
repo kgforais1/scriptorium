@@ -36,7 +36,12 @@ mod = _load()
 class HostAllowedTests(unittest.TestCase):
     def test_loopback_hosts_pass(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):
-            for host in ("http://localhost:9000", "http://127.0.0.1", "http://[::1]:9000/"):
+            for host in (
+                "http://localhost:9000",
+                "http://127.0.0.1",
+                "http://[::1]:9000/",
+                "https://localhost:9000",
+            ):
                 with self.subTest(host=host):
                     self.assertTrue(mod.host_allowed(host))
 
@@ -46,7 +51,8 @@ class HostAllowedTests(unittest.TestCase):
                 "https://sonarcloud.io",
                 "http://localhost@evil.test:9000",
                 "http://localhost.evil.test",
-                "https://localhost:9000",
+                "ftp://localhost:9000",
+                "http://[::1",
             ):
                 with self.subTest(host=host):
                     self.assertFalse(mod.host_allowed(host))
