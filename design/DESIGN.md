@@ -17,7 +17,9 @@ The reader supports **multiple skins** from the start. Lamplit is the first and 
 Gallery Daylight (mockup B) is the planned second skin. B shares E's layout and most of its CSS
 variable names. B's WebGL scene uses window light, not a lamp. So `scene.json` has a typed light: `point`
 for a lamp with a pool, or `directional` for window light. The engine must support both
-before M1 starts (spike gate G6).
+before M1 starts (spike gate G6). A directional light has `type`, `direction` (a unit
+vector toward the scene, such as `[-0.3, -0.8, -0.5]`), and `color`. It has no `position` or
+`poolCenter`. All other scene keys are shared by both types.
 
 Mockups stay reference only. Porting E's engine means re-implementing its curl and lighting
 against scan textures, not copying the mockup file.
