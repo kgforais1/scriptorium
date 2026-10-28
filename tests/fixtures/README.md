@@ -52,8 +52,8 @@ Real scans for load, aspect, and format testing. Download them into gitignored
 
 | Book | Archive.org id | Pages | Why |
 |---|---|---|---|
-| *Edmund Dulac's Picture-Book* (1916) | `edmunddulacspict00dulauoft` | 196 | Colour plates; the 200-page gate corpus |
-| *The Princess and the Goblin* (1920) | `princessgoblin00macd` | 236 | Text with plates; second long book |
+| *Edmund Dulac's Picture-Book* (1916) | `edmunddulacspict00dulauoft` | 204 | Colour plates; the 200-page gate corpus |
+| *The Princess and the Goblin* (1920) | `princessgoblin00macd` | 240 | Text with plates; second long book |
 | *Alice's Adventures in Wonderland* (1911) | `alicesadventures00carr` | 348 | Larger book for scale tests |
 
 Other good sources: e-codices (medieval manuscripts, irregular page sizes), the Library
