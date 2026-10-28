@@ -14,10 +14,12 @@ lamplit desk scene from A with the gallery chrome from B: a floating bottom bar 
 thumbnail scrubber, a header with tools, and a right-hand notes panel.
 
 The reader supports **multiple skins** from the start. Lamplit is the first and default skin.
-Gallery Daylight (mockup B) is the planned second skin. B already uses E's layout and the same
-token names, so it proves the skin model cheaply.
+Gallery Daylight (mockup B) is the planned second skin. B shares E's layout and most of its CSS
+variable names. B's WebGL scene uses window light, not a lamp, so the spike must show the
+shared scene keys can express it.
 
-Mockups stay reference only. They are not code to adopt as-is.
+Mockups stay reference only. Porting E's engine means re-implementing its curl and lighting
+against scan textures, not copying the mockup file.
 
 ## Principles
 
@@ -52,6 +54,8 @@ Rules:
 - Book size and aspect come from the scans, never from the skin.
 - A skin may not change layout. Swappable layouts, such as the B-style scrubber and panel
   versus the A-style toolbar, are out of scope until a real need appears.
+- Token names may differ from mockup variable names. For example, E's `--accent2` is the
+  `accent-strong` token. Code carried over from a mockup must use the token names.
 - Every skin defines the same token and scene keys. A missing key is a load error, not a
   silent fallback.
 

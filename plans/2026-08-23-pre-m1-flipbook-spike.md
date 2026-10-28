@@ -30,7 +30,7 @@ many 2021-era imperative wrappers. These are blockers for M1 as previously writt
 
 ## Approach
 
-Time-box **1–2 days**. Allowed outcomes (all valid):
+Time-box **1–2 days**. When porting E, the spike ports a 10-page slice; the full port happens in M1. Allowed outcomes (all valid):
 
 | Outcome | When |
 |---|---|
@@ -95,7 +95,7 @@ except optional trivial edge trim documented later.
 | G3 | StrictMode | No double-mount crash / blank book on remount |
 | G4 | Asset load | Pages load from disk via Tauri asset URL on macOS (Windows noted if available) |
 | G5 | ADR | Committed ADR answers all bullets in Phase 3 |
-| G6 | Skin-ready | Swapping `scene.json` changes lamp, background, and materials with no engine code change |
+| G6 | Skin-ready | Swapping `scene.json` changes lamp, background, and materials with no engine code change. The ADR states whether B's daylight look fits the final keys, or which engine capability is missing |
 
 **On fail:** Status → `blocked` or `abandoned`; report to user; do not begin M1 Phase 1.
 
@@ -114,7 +114,8 @@ the start. The skin model, principles, and skin list live in
 second. Mockups A–G in [`design/mockups/`](../design/mockups/) remain reference only.
 
 Interaction requirements surfaced by the Greptile and CodeRabbit reviews of the mockups
-(PR #54). The spike should confirm the chosen engine can meet them:
+(PR #54). The spike confirms the engine exposes the picking, focus, and animation hooks these
+need. Hotspot items are verified in M6, when hotspots exist:
 
 - [ ] A cancelled pointer drag (`pointercancel`, lost capture) settles the page and frees
       navigation; the book never stays stuck mid-turn.
@@ -134,6 +135,9 @@ Interaction requirements surfaced by the Greptile and CodeRabbit reviews of the 
 |---|---|
 | No library works well enough | Escalate to owner; reconsider product metaphor |
 | Fork maintenance burden | Prefer minimal patch; record upstream status |
+| E's engine is prototype code (fixed `NPAGE`, procedural pages, no error handling) | Port a 10-page slice in the spike; list the rewrite scope in the ADR |
+| Scan textures exceed GPU memory at 200 pages | Window textures around the open spread; record VRAM and upload time in the ADR |
+| WebGL2 missing or slow in a Tauri webview (WKWebView, WebView2, WebKitGTK) | Test macOS first; record the support matrix and the fallback in the ADR |
 
 ## Completion steps
 

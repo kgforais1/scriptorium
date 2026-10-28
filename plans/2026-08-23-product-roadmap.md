@@ -132,7 +132,7 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 
 - [ ] Figure/image extraction from page regions (crop to assets)
 - [ ] Deep-zoom inspect on a page or region (OpenSeadragon-style panel)
-- [ ] Enhanced paper texture, lighting, hard covers (per the flip ADR engine)
+- [ ] Book polish beyond the M1 engine: page thickness, cover open/close, richer paper detail
 - [ ] Second skin **Gallery Daylight** (mockup B) + skin picker; remember choice per user
 - [ ] Performance: lazy load pages, thumbnail strip, large book handling
 

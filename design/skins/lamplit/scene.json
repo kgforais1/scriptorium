@@ -1,5 +1,5 @@
 {
-  "$comment": "Lamplit scene and book material. Values from mockup E's WebGL scene, linear RGB unless noted. Keys are provisional until the spike ADR fixes the engine.",
+  "$comment": "Lamplit scene and book material, copied from mockup E. Material colours are sRGB inputs the engine linearizes (pow 2.2). lamp.color and ambient are linear HDR. background is the output-referred clear colour. Keys are provisional until the spike ADR fixes the engine.",
   "skin": "lamplit",
   "camera": { "fovDegrees": 18 },
   "background": { "srgb": [0.02, 0.012, 0.008] },
