@@ -69,6 +69,10 @@ class FetchError(Exception):
     """A download that should be reported, and retried where that makes sense."""
 
 
+class RefusedURL(FetchError):  # noqa: N818 - reads better at the raise sites
+    """A URL the allowlist rejects. Permanent, so it is never retried."""
+
+
 def check_url(url: str) -> str:
     """Allow only https URLs on an allowlisted public IIIF host.
 
@@ -77,15 +81,17 @@ def check_url(url: str) -> str:
     """
     parts = urllib.parse.urlparse(url)
     if parts.scheme != "https":
-        raise FetchError(f"refusing non-https URL: {url!r}")
+        raise RefusedURL(f"refusing non-https URL: {url!r}")
     requested = (parts.hostname or "").lower()
     host = next((h for h in ALLOWED_HOSTS if h == requested), None)
     try:
         port = parts.port
     except ValueError as exc:
-        raise FetchError(f"invalid port in URL: {url!r}") from exc
-    if host is None or port not in (None, 443):
-        raise FetchError(f"refusing host not in ALLOWED_HOSTS: {parts.hostname!r}")
+        raise RefusedURL(f"invalid port in URL: {url!r}") from exc
+    if host is None:
+        raise RefusedURL(f"refusing host not in ALLOWED_HOSTS: {parts.hostname!r}")
+    if port not in (None, 443):
+        raise RefusedURL(f"refusing port {port} for {host!r}")
     return urllib.parse.urlunparse(("https", host, parts.path, parts.params, parts.query, ""))
 
 
@@ -273,6 +279,8 @@ def safe_fetch(index: int, url: str, out_dir: Path, done: dict[str, str], attemp
     for attempt in range(1, attempts + 1):
         try:
             return fetch_page(index, url, out_dir, done)
+        except RefusedURL as exc:
+            return f"FAIL {index:04d}: {exc}"
         except (OSError, FetchError) as exc:  # servers time out on large transcodes; retry
             if attempt == attempts:
                 return f"FAIL {index:04d}: {exc}"
