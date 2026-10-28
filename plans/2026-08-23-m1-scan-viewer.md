@@ -1,13 +1,13 @@
 # Plan: M1 — Scan viewer (first product milestone)
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-10-27
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
 Status: draft
 Linked issue/PR: n/a
 Depends on:
 - [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md) **complete**
-- [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md) **complete** (ADR gates G1–G5)
+- [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md) **complete** (ADR gates G1–G6)
 Follows: product roadmap M1
 
 ## Goal
@@ -149,7 +149,7 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 
 - [ ] Confirm ADR library still loads in current shell
 - [ ] Complete asset-protocol checklist above (macOS required; Windows if available)
-- [ ] Stop if G1–G5 from spike no longer hold
+- [ ] Stop if G1–G6 from spike no longer hold
 
 ### Phase 1 — Book I/O (Rust)
 
@@ -179,6 +179,12 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] ←/→ + on-screen controls; edge no-ops
 - [ ] Debounced progress + **flush on close**
 - [ ] Loading / empty states
+- [ ] Reader chrome follows mockup E layout (header, bottom bar with scrubber); notes panel
+      shell only — hotspots stay M6
+- [ ] Skin plumbing per [`design/DESIGN.md`](../design/DESIGN.md): build step turns
+      `design/skins/lamplit/tokens.json` into CSS custom properties; engine reads `scene.json`
+- [ ] No hard-coded colours, fonts, or scene values in reader components (lamplit is the only
+      skin; no picker yet)
 
 ### Phase 4 — Docs & release
 

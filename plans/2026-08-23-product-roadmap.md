@@ -1,6 +1,6 @@
 # Plan: Scriptorium product roadmap
 
-Last reviewed: 2026-08-23
+Last reviewed: 2026-10-27
 Date: 2026-08-23
 Author: bootstrap session
 Status: approved
@@ -34,6 +34,13 @@ Three layers, not a single rendering choice:
 | `text` | Reflowed or fixed-layout rendered text | M3 — cleaner reading, copy, enrichment |
 | `hybrid` | Toggle or split: scan + text side-by-side or overlaid | M4 |
 
+## Look and skins
+
+Reader direction is **mockup E, Lamplit gallery** (decided 2026-10-27). One page-turn engine
+and one layout serve every skin; a skin is data only (UI tokens + scene/material config).
+Lamplit ships in M1; Gallery Daylight (mockup B) follows in M7. Detail:
+[`design/DESIGN.md`](../design/DESIGN.md).
+
 ## Milestones
 
 ### M0 — Harness & scaffold (complete)
@@ -49,7 +56,7 @@ Three layers, not a single rendering choice:
 
 **Active plan:** [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md)
 
-- [ ] ADR: flip library, aspect policy, StrictMode, asset load (gates G1–G5)
+- [ ] ADR: flip library, aspect policy, StrictMode, asset load, skin-ready engine (gates G1–G6)
 - [ ] No silent non-flip fallback
 
 ### M0.5 — Harness follow-ups (after Tauri / remaining quality)
@@ -125,7 +132,8 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 
 - [ ] Figure/image extraction from page regions (crop to assets)
 - [ ] Deep-zoom inspect on a page or region (OpenSeadragon-style panel)
-- [ ] Enhanced paper texture, lighting, hard covers (StPageFlip hard pages)
+- [ ] Enhanced paper texture, lighting, hard covers (per the flip ADR engine)
+- [ ] Second skin **Gallery Daylight** (mockup B) + skin picker; remember choice per user
 - [ ] Performance: lazy load pages, thumbnail strip, large book handling
 
 ### M8 — Platform & interop (later)
@@ -181,7 +189,7 @@ Illustrative shape (field names match M0 — not the superseded `image` / `defau
 
 ## Open questions (roadmap)
 
-- [ ] React vs Svelte for Vite UI (default React at scaffold)
+- [x] React vs Svelte for Vite UI — React (scaffolded in M0)
 - [ ] OCR runtime: in-app Rust/Tesseract vs external batch vs WASM
 - [ ] Fixed-layout text vs reflow for M3 (likely fixed-layout first for scanned books)
 
