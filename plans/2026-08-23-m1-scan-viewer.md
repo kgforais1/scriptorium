@@ -131,8 +131,12 @@ Expand to ≥12 cases in `cargo test` beside the sort function. Do not leave tie
 development build via `pnpm tauri dev` (or release build if noted). If developing primarily
 on another class, amend this plan before claiming A9.
 
-**Gate corpus (pinned):** generated script output — **200 pages**, average **~5 MB** JPEG each
-(total ~1 GB ±10%). The 2–8 MB range is for smoke only, not the gate.
+**Gate corpus (pinned):** *Edmund Dulac's Picture-Book*, archive.org
+`edmunddulacspict00dulauoft`: **204 pages** at about **11 MP** each (2808 × 3906), JPEG
+quality 92, about 450 MB total. Fetch it with the recipe in
+[`tests/fixtures/README.md`](../tests/fixtures/README.md#public-domain-test-corpora).
+Pixel count drives decode time and memory (about 44 MB per decoded RGBA page), so the gate
+is set by pixels, not file size. Do not upscale pages to inflate file size.
 
 | Metric | Target | Measurement |
 |---|---|---|
