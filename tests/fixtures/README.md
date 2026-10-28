@@ -68,6 +68,7 @@ fixtures, and the `.pdf` serves M1.5. This recipe is normative for the M1 gate c
 needs macOS, because `sips` does the JPEG conversion. Rerunning it is safe.
 
 ```sh
+set -euo pipefail
 id=edmunddulacspict00dulauoft; out=tmp/fixtures/corpus/dulac-picture-book
 mkdir -p "$out/source" "$out/jpg"
 curl -fL --retry 3 -o "$out/source/jp2.zip" "https://archive.org/download/$id/${id}_jp2.zip"
@@ -90,8 +91,12 @@ sips -g pixelWidth -g pixelHeight *.jpg | awk '/pixelWidth/{w=$2} /pixelHeight/{
 ### Any IIIF manifest
 
 `scripts/fetch-iiif-corpus.py` downloads every page of a IIIF v2 or v3 manifest as
-full-size JPEGs. It accepts only https page URLs, retries, and resumes. Pages are numbered
-from `0000`, like the zip recipe. It is slow against archive.org, and its JPEG quality is
+full-size JPEGs. It fetches only https URLs on the public IIIF hosts listed in its
+`ALLOWED_HOSTS`, writes only under `tmp/`, and caps sizes and download time. To use another
+library, add its host to `ALLOWED_HOSTS` in a reviewed change. It retries and resumes:
+`.fetch-state.json` ties each page to its source URL, and a folder belongs to one manifest.
+Pages are numbered from `0000`, like the zip recipe. Exit code 2 means some canvases had no
+usable image. It is slow against archive.org, and its JPEG quality is
 whatever the server chooses, so do not use it for the gate corpus.
 
 ```sh

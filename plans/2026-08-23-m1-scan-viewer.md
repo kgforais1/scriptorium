@@ -130,6 +130,12 @@ Originals need a book-level `sources[]` list and a per-page `source` reference, 
 Sort **filename stem** with natural order (numeric chunks as integers), case-insensitive
 extension ignored for ordering. Only the formats in [Input formats](#input-formats-normative-for-m1) are included.
 
+**Multi-frame inputs (normative):** sort input files first, then expand each multi-page TIFF
+in its directory order, frame 0 first. Every page gets a display file named by its final
+0-based page position (`pages/0000.jpg`, `pages/0001.png`, …), never by its input stem, so a
+TIFF's frames cannot collide with an ordinary input file. Test a folder that mixes `2.tif`
+(three frames) with `1.jpg` and `3.jpg`: the result is `1.jpg`, the three frames, then `3.jpg`.
+
 **Tie-break (normative):** after natural compare of stems is equal, order by:
 1. Longer zero-padded numeric representation wins for that chunk only when integer values
    are equal but digit strings differ (`001` before `01` before `1` — longer pad first).

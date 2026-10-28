@@ -89,7 +89,8 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 ### M1.5 — PDF import
 
 - [ ] Rasterize PDF pages at ingest (pdfium bundled per platform), capped at a long edge of
-      4000 px and at 12 MP total, so pages stay within the M1 pixel budget
+      4000 px and 12 MP **per page**, matching the M1 per-page pixel budget. No document-wide
+      pixel limit; long PDFs rely on M1's windowed page loading
 - [ ] Keep the source PDF once in `sources[]`; each page references it with a `frame`
 - [ ] Capture any embedded PDF text layer for M2 search
 

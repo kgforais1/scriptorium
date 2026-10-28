@@ -67,8 +67,9 @@ Planned shape for `formatVersion` 2:
 - Package layout gains `originals/`. Original files live there, named `<stem>.<ext>`.
 - `meta.json` gains an optional book-level `sources[]`. Each entry has `id`, `file`,
   `format`, `byteSize`, and `sha256`.
-- A page entry gains an optional `source` with `ref` (a `sources[].id`) and an optional
-  0-based `frame`. Several pages may share one source, such as a multi-page TIFF or a PDF in
+- A page entry gains an optional `source` with `ref` (a `sources[].id`) and a 0-based
+  `frame`. `frame` is required when the source has more than one frame, such as a
+  multi-page TIFF or a PDF, and omitted for a single-frame source. Several pages may share one source, such as a multi-page TIFF or a PDF in
   M1.5.
 - `sources[].file` follows the same path rules as `pages[].file`. Case-insensitive
   uniqueness applies within `sources[]`, not across pages that share a source.
@@ -79,8 +80,9 @@ Validation rules for v2, added to the loader table when v2 ships:
 
 - `sources[].id` is non-empty and unique within the book.
 - Every page `source.ref` names an existing `sources[].id`.
-- `source.frame` is an integer ≥ 0 and below the source's frame count, when the format
-  reports one.
+- `source.frame` is present exactly when the source has more than one frame. It is an
+  integer ≥ 0, below the source's frame count when the format reports one, and unique
+  among pages that share the source.
 - `sources` and `source` appear only when `formatVersion` is 2 or higher.
 
 v1 packages stay readable. A v1 package has no originals and loads unchanged.
