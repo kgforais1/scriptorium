@@ -138,13 +138,40 @@ _OPENER = urllib.request.build_opener(_AllowlistedRedirects, _TrackedHTTPSHandle
 def _expire(conns: list, expired: threading.Event) -> None:
     """Watchdog: unblock any read, including the wait for response headers."""
     expired.set()
-    for conn in list(conns):
+    for conn in conns:
         sock = getattr(conn, "sock", None)
         if sock is not None:
             try:
                 sock.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
+
+
+def _read_body(
+    resp, max_bytes: int, expired: threading.Event, deadline_s: float
+) -> Iterator[bytes]:
+    """Yield the body, enforcing the byte cap, the deadline, and the declared length."""
+    # resp.length is http.client's parsed Content-Length; it is None for chunked
+    # responses, which ignore any stale Content-Length header.
+    expected = getattr(resp, "length", None)
+    if not isinstance(expected, int):
+        expected = None
+    if expected is not None and expected > max_bytes:
+        raise FetchError(f"response too large: {expected} bytes")
+    received = 0
+    # read1 returns after at most one socket read, so the byte cap and the deadline are
+    # checked between reads.
+    while chunk := resp.read1(CHUNK):
+        received += len(chunk)
+        if received > max_bytes:
+            raise FetchError(f"response exceeded {max_bytes} bytes")
+        if expired.is_set():
+            raise FetchError(f"download exceeded {deadline_s} s")
+        yield chunk
+    if expired.is_set():
+        raise FetchError(f"download exceeded {deadline_s} s")
+    if expected is not None and received < expected:
+        raise FetchError(f"response ended early: {received} of {expected} bytes")
 
 
 def stream(url: str, max_bytes: int, deadline_s: float = DOWNLOAD_DEADLINE_S) -> Iterator[bytes]:
@@ -158,32 +185,12 @@ def stream(url: str, max_bytes: int, deadline_s: float = DOWNLOAD_DEADLINE_S) ->
     expired = threading.Event()
     watchdog = threading.Timer(deadline_s, _expire, (conns, expired))
     watchdog.daemon = True
-    received = 0
     _TLS.conns = conns
     watchdog.start()
     try:
         with _OPENER.open(req, timeout=SOCKET_TIMEOUT_S) as resp:
             _TLS.conns = None
-            # resp.length is http.client's parsed Content-Length; it is None for chunked
-            # responses, which ignore any stale Content-Length header.
-            expected = getattr(resp, "length", None)
-            if not isinstance(expected, int):
-                expected = None
-            if expected is not None and expected > max_bytes:
-                raise FetchError(f"response too large: {expected} bytes")
-            # read1 returns after at most one socket read, so the byte cap and the
-            # deadline are checked between reads.
-            while chunk := resp.read1(CHUNK):
-                received += len(chunk)
-                if received > max_bytes:
-                    raise FetchError(f"response exceeded {max_bytes} bytes")
-                if expired.is_set():
-                    raise FetchError(f"download exceeded {deadline_s} s")
-                yield chunk
-            if expired.is_set():
-                raise FetchError(f"download exceeded {deadline_s} s")
-            if expected is not None and received < expected:
-                raise FetchError(f"response ended early: {received} of {expected} bytes")
+            yield from _read_body(resp, max_bytes, expired, deadline_s)
     except http.client.HTTPException as exc:  # e.g. IncompleteRead; not an OSError
         if expired.is_set():  # the watchdog's shutdown surfaces as RemoteDisconnected
             raise FetchError(f"download exceeded {deadline_s} s") from exc
@@ -290,24 +297,33 @@ def _canvas_bodies(canvas: dict) -> Iterator[object]:
                 yield anno.get("body")
 
 
+def _allowed(url: str | None) -> str | None:
+    """The allowlisted form of url, or None when it is missing or refused."""
+    if not url:
+        return None
+    try:
+        return check_url(url)
+    except RefusedURL:
+        return None
+
+
+def _body_url(body: dict) -> str | None:
+    """Prefer an allowlisted Image API service, then an allowlisted JPEG body."""
+    return _allowed(_service_url(body.get("service"))) or _allowed(_jpeg_id(body))
+
+
 def canvas_url(canvas: object) -> str | None:
-    """First usable full-size JPEG URL for a canvas, or None when it has no image."""
+    """First usable full-size JPEG URL for a canvas, or None when it has no image.
+
+    Off-allowlist URLs make a canvas unusable (skipped) rather than a failed page.
+    """
     if not isinstance(canvas, dict):
         return None
     for raw in _canvas_bodies(canvas):
         for body in _image_bodies(raw):
-            url = _service_url(body.get("service"))
+            url = _body_url(body)
             if url:
-                try:
-                    return check_url(url)
-                except RefusedURL:
-                    pass  # an off-allowlist service; an allowed JPEG body may still work
-            url = _jpeg_id(body)
-            if url:
-                try:
-                    return check_url(url)
-                except RefusedURL:
-                    pass  # off-allowlist JPEG: the canvas is unusable, not a failed page
+                return url
     return None
 
 
