@@ -69,8 +69,7 @@ Planned shape for `formatVersion` 2:
   `format`, `byteSize`, and `sha256`.
 - A page entry gains an optional `source` with `ref` (a `sources[].id`) and a 0-based
   `frame`. `frame` is required when the source has more than one frame, such as a
-  multi-page TIFF or a PDF, and omitted for a single-frame source. Several pages may share one source, such as a multi-page TIFF or a PDF in
-  M1.5.
+  multi-page TIFF or a PDF, and omitted for a single-frame source. Several pages may share one source.
 - `sources[].file` follows the same path rules as `pages[].file`. Case-insensitive
   uniqueness applies within `sources[]`, not across pages that share a source.
 - `load_book` verifies each `sources[]` sha256 once. Drift is `ChecksumMismatch`.

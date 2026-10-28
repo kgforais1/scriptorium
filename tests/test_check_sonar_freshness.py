@@ -176,7 +176,9 @@ class FreshnessGateOnTests(unittest.TestCase):
         self.state.write_text(f'{{"last_scan_commit": "{self.scanned}"}}', encoding="utf-8")
 
     def _git(self, *args: str) -> str:
-        return subprocess.check_output(["git", *args], cwd=self.root, text=True).strip()
+        return subprocess.check_output(
+            ["git", *args], cwd=self.root, text=True, env=mod._git_env()
+        ).strip()
 
     def _commit(self) -> str:
         self._git("commit", "-q", "--allow-empty", "--no-verify", "-m", "c")

@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -60,6 +61,7 @@ DOWNLOAD_DEADLINE_S = 600
 SOCKET_TIMEOUT_S = 120
 CHUNK = 2**16
 STATE_FILE = ".fetch-state.json"
+_STATE_LOCK = threading.Lock()  # guards the shared page record across worker threads
 LOCK_FILE = ".fetch.lock"
 
 
@@ -78,7 +80,11 @@ def check_url(url: str) -> str:
         raise FetchError(f"refusing non-https URL: {url!r}")
     requested = (parts.hostname or "").lower()
     host = next((h for h in ALLOWED_HOSTS if h == requested), None)
-    if host is None or parts.port not in (None, 443):
+    try:
+        port = parts.port
+    except ValueError as exc:
+        raise FetchError(f"invalid port in URL: {url!r}") from exc
+    if host is None or port not in (None, 443):
         raise FetchError(f"refusing host not in ALLOWED_HOSTS: {parts.hostname!r}")
     return urllib.parse.urlunparse(("https", host, parts.path, parts.params, parts.query, ""))
 
@@ -97,8 +103,7 @@ class _AllowlistedRedirects(urllib.request.HTTPRedirectHandler):
     """Check a redirect target before following it."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: PLR0913 - stdlib signature
-        check_url(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        return super().redirect_request(req, fp, code, msg, headers, check_url(newurl))
 
 
 _OPENER = urllib.request.build_opener(_AllowlistedRedirects)
@@ -123,17 +128,18 @@ def stream(url: str, max_bytes: int) -> Iterator[bytes]:
 
 
 def fetch_manifest(url: str, attempts: int = 4) -> dict:
+    manifest: object = None
     for attempt in range(1, attempts + 1):
         try:
             manifest = json.loads(b"".join(stream(url, MAX_MANIFEST_BYTES)))
-            if not isinstance(manifest, dict):
-                raise FetchError("manifest is not a JSON object")
-            return manifest
+            break
         except (OSError, FetchError, ValueError) as exc:
             if attempt == attempts:
                 raise FetchError(f"manifest failed after {attempts} attempts: {exc}") from exc
             time.sleep(5 * attempt)
-    raise AssertionError("unreachable")
+    if not isinstance(manifest, dict):  # a shape error is permanent; do not retry it
+        raise FetchError("manifest is not a JSON object")
+    return manifest
 
 
 # --- manifest parsing -------------------------------------------------------------------
@@ -258,7 +264,8 @@ def fetch_page(index: int, url: str, out_dir: Path, done: dict[str, str]) -> str
         os.replace(tmp, dest)  # overwrites on every platform
     finally:
         tmp.unlink(missing_ok=True)
-    done[dest.name] = url
+    with _STATE_LOCK:
+        done[dest.name] = url
     return f"ok   {dest.name} {dest.stat().st_size // 1024} KB"
 
 
@@ -290,7 +297,9 @@ def load_state(out_dir: Path, manifest_url: str) -> dict[str, str]:
 
 def save_state(out_dir: Path, manifest_url: str, done: dict[str, str]) -> None:
     tmp = out_dir / f".{STATE_FILE}.{os.getpid()}"
-    tmp.write_text(json.dumps({"manifest": manifest_url, "pages": done}, indent=1, sort_keys=True))
+    with _STATE_LOCK:
+        payload = json.dumps({"manifest": manifest_url, "pages": done}, indent=1, sort_keys=True)
+    tmp.write_text(payload)
     os.replace(tmp, out_dir / STATE_FILE)
 
 

@@ -53,6 +53,7 @@ class CheckUrlTests(unittest.TestCase):
             "https://example.com/x",
             "https://iiif.archive.org.evil.test/x",
             "https://iiif.archive.org:8443/x",
+            "https://iiif.archive.org:abc/x",
         ):
             with self.subTest(url=url), self.assertRaises(fetch.FetchError):
                 fetch.check_url(url)
