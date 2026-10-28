@@ -51,7 +51,7 @@ An exported variable wins over `.env`. The scan script parses `.env` and never s
 ## Run the scan
 
 ```bash
-brew install sonar-scanner          # once
+brew install sonar-scanner          # once; the gate also needs git 2.24 or later
 bash scripts/sonar_scan.sh          # uses coverage.xml if present
 bash scripts/sonar_scan.sh --coverage   # runs pytest --cov first
 ```

@@ -139,6 +139,8 @@ def fetch_manifest(url: str, attempts: int = 4) -> dict:
         try:
             manifest = json.loads(b"".join(stream(url, MAX_MANIFEST_BYTES)))
             break
+        except RefusedURL:
+            raise  # an allowlist refusal (even via redirect) is permanent
         except (OSError, FetchError, ValueError) as exc:
             if attempt == attempts:
                 raise FetchError(f"manifest failed after {attempts} attempts: {exc}") from exc

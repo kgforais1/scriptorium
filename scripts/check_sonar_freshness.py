@@ -182,6 +182,7 @@ def run_gate(state_path: Path, max_commits: int, stage: str) -> int:
     last = state["last_scan_commit"]
     head = checked_sha(stage)
     if head is None:
+        print("Sonar freshness gate: could not determine the commit to check.", file=sys.stderr)
         return 1
     if not is_ancestor(last, head):
         print(

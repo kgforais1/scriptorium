@@ -205,3 +205,21 @@ class FreshnessGateOnTests(unittest.TestCase):
     def test_rewritten_history_blocks(self) -> None:
         self.state.write_text('{"last_scan_commit": "' + "0" * 40 + '"}', encoding="utf-8")
         self.assertEqual(self._run("commit"), 1)
+
+
+class CleanShaTests(unittest.TestCase):
+    def test_accepts_and_normalises_full_shas(self) -> None:
+        self.assertEqual(mod.clean_sha("AB" * 20), "ab" * 20)
+        self.assertEqual(mod.clean_sha(" " + "c" * 64 + "\n"), "c" * 64)
+
+    def test_rejects_everything_else(self) -> None:
+        for value in ("--help", "-n", "ab" * 19, "g" * 40, "a" * 41, None, 123):
+            with self.subTest(value=value):
+                self.assertIsNone(mod.clean_sha(value))
+
+    def test_hostile_pushed_ref_falls_back_to_head(self) -> None:
+        with (
+            mock.patch.dict(os.environ, {"PRE_COMMIT_TO_REF": "--output=/tmp/x"}),
+            mock.patch.object(mod, "_git", return_value="d" * 40),
+        ):
+            self.assertEqual(mod.checked_sha("push"), "d" * 40)
