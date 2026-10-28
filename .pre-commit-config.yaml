@@ -52,6 +52,25 @@ repos:
         always_run: false
         description: "Advisory: Next Up count, active plan links, stale archive refs (policies/plans-and-todos.md)."
 
+      # Opt-in local SonarQube freshness gate. Exits 0 without git or network
+      # unless SONAR_FRESHNESS_GATE=1 (env or repo-root .env). See docs/sonarqube.md.
+      - id: sonar-freshness
+        name: "sonar: freshness gate (opt-in)"
+        entry: python scripts/check_sonar_freshness.py --stage commit
+        language: python
+        pass_filenames: false
+        always_run: true
+        description: "Blocks after SONAR_GATE_MAX_COMMITS commits since the last local scan; off by default."
+
+      - id: sonar-freshness-push
+        name: "sonar: freshness gate on push (opt-in)"
+        entry: python scripts/check_sonar_freshness.py --stage push
+        language: python
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+        description: "Blocks a push with any commit since the last local scan; off by default."
+
       # Typecheck on push (slower than lint; still catches errors before CI).
       - id: basedpyright
         name: "types: basedpyright"
