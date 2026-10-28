@@ -209,8 +209,9 @@ class StateTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / "0000.jpg"
+            chunks = iter([b"x"])
             with self.assertRaises(fetch.FetchError):
-                fetch.atomic_write(dest, iter([b"x"]), reject)
+                fetch.atomic_write(dest, chunks, reject)
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_pages_without_state_are_refused(self) -> None:

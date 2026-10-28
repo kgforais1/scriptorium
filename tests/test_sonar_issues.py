@@ -89,7 +89,9 @@ class FingerprintTests(unittest.TestCase):
         subprocess.check_call(["git", *args], cwd=self.root, env=self.env)
 
     def test_stable_when_nothing_changes(self) -> None:
-        self.assertEqual(mod.tree_fingerprint(), mod.tree_fingerprint())
+        first = mod.tree_fingerprint()
+        second = mod.tree_fingerprint()
+        self.assertEqual(first, second)
 
     def test_tracked_edit_changes_it(self) -> None:
         before = mod.tree_fingerprint()
