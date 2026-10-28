@@ -21,6 +21,14 @@ port 9000, reuse it and skip this step.
 docker compose -f compose.sonarqube.yaml up -d
 ```
 
+PostgreSQL reads `SONAR_DB_PASSWORD` only when it first creates its volume. To change the
+password later, delete the volume and start again. This also deletes all analysis history:
+
+```bash
+docker compose -f compose.sonarqube.yaml down -v
+docker compose -f compose.sonarqube.yaml up -d
+```
+
 [`compose.sonarqube.yaml`](../compose.sonarqube.yaml) runs SonarQube Community Build
 with PostgreSQL. It binds to `127.0.0.1:9000` only. Open `http://localhost:9000`, log in
 as `admin`/`admin`, and change the password.

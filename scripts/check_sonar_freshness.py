@@ -136,7 +136,7 @@ def load_state(state_path: Path) -> dict | None:
     """Return the state dict, or None after printing why it is unusable."""
     state: object = None
     if not state_path.exists():
-        reason = f"no scan on record ({DEFAULT_STATE_PATH} missing)"
+        reason = f"no scan on record ({state_path} missing)"
     else:
         try:
             state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -212,7 +212,7 @@ def run_gate(state_path: Path, max_commits: int, stage: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("--stage", choices=("commit", "push"), default="commit")
     parser.add_argument(
         "--state",

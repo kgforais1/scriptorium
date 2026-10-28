@@ -13,7 +13,7 @@ testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
 [tool.coverage.run]
-source = ["hooks/scripts", "ci/scripts"]
+source = ["hooks/scripts", "ci/scripts", "scripts"]
 omit = ["tests/*"]
 
 [tool.coverage.report]

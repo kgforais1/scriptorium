@@ -20,7 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def _load() -> ModuleType:
     path = ROOT / "scripts" / "fetch-iiif-corpus.py"
     spec = importlib.util.spec_from_file_location("fetch_iiif_corpus", path)
-    assert spec and spec.loader
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -36,8 +37,12 @@ def v3_canvas(body: object) -> dict:
 
 class CheckUrlTests(unittest.TestCase):
     def test_allows_allowlisted_https(self) -> None:
-        url = "https://iiif.archive.org/iiif/3/x/manifest.json"
+        url = "https://iiif.archive.org/iiif/3/x/manifest.json?a=1"
         self.assertEqual(fetch.check_url(url), url)
+
+    def test_rebuilt_url_drops_credentials_and_fragment(self) -> None:
+        url = "https://user:pw@IIIF.archive.org:443/p#frag"
+        self.assertEqual(fetch.check_url(url), "https://iiif.archive.org/p")
 
     def test_rejects_other_schemes_and_hosts(self) -> None:
         for url in (
@@ -47,6 +52,7 @@ class CheckUrlTests(unittest.TestCase):
             "https://169.254.169.254/latest",
             "https://example.com/x",
             "https://iiif.archive.org.evil.test/x",
+            "https://iiif.archive.org:8443/x",
         ):
             with self.subTest(url=url), self.assertRaises(fetch.FetchError):
                 fetch.check_url(url)
@@ -124,9 +130,16 @@ class ManifestParsingTests(unittest.TestCase):
         }
         self.assertEqual(fetch.image_urls(manifest), [None, None, None])
 
-    def test_canvas_cap(self) -> None:
+    def test_canvas_cap_applies_after_limit(self) -> None:
+        huge = {"items": [{}] * (fetch.MAX_CANVASES + 1)}
         with self.assertRaises(fetch.FetchError):
-            fetch.image_urls({"items": [{}] * (fetch.MAX_CANVASES + 1)})
+            fetch.image_urls(huge)
+        self.assertEqual(fetch.image_urls(huge, limit=2), [None, None])
+
+    def test_malformed_canvas_lists_are_refused(self) -> None:
+        for manifest in ({"items": None}, {"sequences": [{"canvases": None}]}, {"sequences": "x"}):
+            with self.subTest(manifest=manifest), self.assertRaises(fetch.FetchError):
+                fetch.image_urls(manifest)
 
 
 class StateTests(unittest.TestCase):

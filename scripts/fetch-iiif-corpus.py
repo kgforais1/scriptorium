@@ -68,13 +68,19 @@ class FetchError(Exception):
 
 
 def check_url(url: str) -> str:
-    """Allow only https URLs on an allowlisted public IIIF host."""
+    """Allow only https URLs on an allowlisted public IIIF host.
+
+    The returned URL is rebuilt with the host taken from ALLOWED_HOSTS itself, so no
+    caller-supplied host or credentials reach the request.
+    """
     parts = urllib.parse.urlparse(url)
     if parts.scheme != "https":
         raise FetchError(f"refusing non-https URL: {url!r}")
-    if (parts.hostname or "").lower() not in ALLOWED_HOSTS:
+    requested = (parts.hostname or "").lower()
+    host = next((h for h in ALLOWED_HOSTS if h == requested), None)
+    if host is None or parts.port not in (None, 443):
         raise FetchError(f"refusing host not in ALLOWED_HOSTS: {parts.hostname!r}")
-    return url
+    return urllib.parse.urlunparse(("https", host, parts.path, parts.params, parts.query, ""))
 
 
 def resolve_output_dir(path: Path) -> Path:
@@ -119,7 +125,10 @@ def stream(url: str, max_bytes: int) -> Iterator[bytes]:
 def fetch_manifest(url: str, attempts: int = 4) -> dict:
     for attempt in range(1, attempts + 1):
         try:
-            return json.loads(b"".join(stream(url, MAX_MANIFEST_BYTES)))
+            manifest = json.loads(b"".join(stream(url, MAX_MANIFEST_BYTES)))
+            if not isinstance(manifest, dict):
+                raise FetchError("manifest is not a JSON object")
+            return manifest
         except (OSError, FetchError, ValueError) as exc:
             if attempt == attempts:
                 raise FetchError(f"manifest failed after {attempts} attempts: {exc}") from exc
@@ -196,13 +205,21 @@ def canvas_url(canvas: object) -> str | None:
     return None
 
 
-def image_urls(manifest: dict) -> list[str | None]:
-    """One URL per canvas in reading order; None marks a canvas with no usable image."""
+def image_urls(manifest: dict, limit: int = 0) -> list[str | None]:
+    """One URL per canvas in reading order; None marks a canvas with no usable image.
+
+    `limit` keeps only the first N canvases and applies before the canvas cap, so a huge
+    manifest can still be sampled.
+    """
     if "sequences" in manifest:
         sequence = _first(manifest["sequences"])
-        canvases = sequence.get("canvases", []) if isinstance(sequence, dict) else []
+        canvases = sequence.get("canvases") if isinstance(sequence, dict) else None
     else:
-        canvases = manifest.get("items", [])
+        canvases = manifest.get("items")
+    if not isinstance(canvases, list):
+        raise FetchError("manifest has no canvas list")
+    if limit:
+        canvases = canvases[:limit]
     if len(canvases) > MAX_CANVASES:
         raise FetchError(f"manifest has {len(canvases)} canvases; limit is {MAX_CANVASES}")
     return [canvas_url(c) for c in canvases]
@@ -331,9 +348,8 @@ def main() -> int:
     try:
         done = load_state(out_dir, manifest_url)
         manifest = fetch_manifest(manifest_url)
-        urls = image_urls(manifest)
-        if args.limit:
-            urls = urls[: args.limit]
+        urls = image_urls(manifest, args.limit)
+        save_state(out_dir, manifest_url, done)  # claim the folder before the first page
         (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=1))
 
         skipped = [i for i, url in enumerate(urls) if not url]
@@ -346,7 +362,7 @@ def main() -> int:
             for result in results:
                 print(result, flush=True)
                 failures += result.startswith("FAIL")
-        save_state(out_dir, manifest_url, done)
+                save_state(out_dir, manifest_url, done)  # an interrupted run can resume
     except (FetchError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

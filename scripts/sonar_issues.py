@@ -110,9 +110,26 @@ def prune(dump_dir: Path, keep: int) -> None:
             (dump_dir / f"{stamp}{suffix}").unlink(missing_ok=True)
 
 
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def host_allowed(host: str) -> bool:
+    """Loopback only, like sonar_scan.sh, unless SONAR_ALLOW_REMOTE=1."""
+    if os.environ.get("SONAR_ALLOW_REMOTE", "0") == "1":
+        return True
+    parts = urllib.parse.urlparse(host)
+    return parts.scheme == "http" and (parts.hostname or "") in LOOPBACK_HOSTS
+
+
 def main() -> int:
     token = os.environ.get("SONAR_TOKEN", "")
     host = os.environ.get("SONAR_HOST_URL", "http://localhost:9000")
+    if not host_allowed(host):
+        print(
+            "sonar_issues: SONAR_HOST_URL is not loopback; set SONAR_ALLOW_REMOTE=1 to override.",
+            file=sys.stderr,
+        )
+        return 1
     if not token:
         print("sonar_issues: SONAR_TOKEN is not set.", file=sys.stderr)
         return 1

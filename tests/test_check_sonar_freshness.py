@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
+import io
 import os
 import socket
 import subprocess
@@ -145,3 +146,60 @@ class MaxCommitsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FreshnessGateOnTests(unittest.TestCase):
+    """Gate enabled against a real temporary git repository."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        env = {k: v for k, v in os.environ.items() if k not in GATE_VARS}
+        env.update(
+            {
+                "GIT_AUTHOR_NAME": "t",
+                "GIT_AUTHOR_EMAIL": "t@example.com",
+                "GIT_COMMITTER_NAME": "t",
+                "GIT_COMMITTER_EMAIL": "t@example.com",
+            }
+        )
+        for patcher in (
+            mock.patch.dict(os.environ, env, clear=True),
+            mock.patch.object(mod, "repo_root", return_value=self.root),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self._git("init", "-q")
+        self.scanned = self._commit()
+        self.state = self.root / "state.json"
+        self.state.write_text(f'{{"last_scan_commit": "{self.scanned}"}}', encoding="utf-8")
+
+    def _git(self, *args: str) -> str:
+        return subprocess.check_output(["git", *args], cwd=self.root, text=True).strip()
+
+    def _commit(self) -> str:
+        self._git("commit", "-q", "--allow-empty", "--no-verify", "-m", "c")
+        return self._git("rev-parse", "HEAD")
+
+    def _run(self, stage: str, budget: int = 3) -> int:
+        with contextlib.redirect_stderr(io.StringIO()):
+            return mod.run_gate(self.state, budget, stage)
+
+    def test_fresh_scan_passes_both_stages(self) -> None:
+        self.assertEqual(self._run("push"), 0)
+        self.assertEqual(self._run("commit"), 0)
+
+    def test_push_blocks_on_any_new_commit(self) -> None:
+        self._commit()
+        self.assertEqual(self._run("push"), 1)
+
+    def test_commit_blocks_at_budget(self) -> None:
+        self._commit()  # 1 since scan + the in-flight commit = 2 pending
+        self.assertEqual(self._run("commit", budget=3), 0)
+        self._commit()  # 3 pending
+        self.assertEqual(self._run("commit", budget=3), 1)
+
+    def test_rewritten_history_blocks(self) -> None:
+        self.state.write_text('{"last_scan_commit": "' + "0" * 40 + '"}', encoding="utf-8")
+        self.assertEqual(self._run("commit"), 1)
