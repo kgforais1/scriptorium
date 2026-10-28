@@ -57,11 +57,25 @@ still load.
 
 ## Planned: originals and display copies
 
-M1 ingest accepts formats the webview cannot show, such as TIFF and JPEG 2000. It will store
-each original beside a display copy. `file` stays the display image. A new optional page
-object, `source` (`file`, `byteSize`, `sha256`), points at the original. Because this adds a
-field, it ships as `formatVersion` 2 with a migration note. Input formats are listed in the
+M1 ingest accepts formats the webview cannot show, such as TIFF and JPEG 2000, and converts
+some JPEG, PNG, and WebP inputs. `file` stays the display image. When a display image was
+converted, the untouched original is kept. Input formats and conversion rules are in the
 [M1 plan](../plans/2026-08-23-m1-scan-viewer.md#input-formats-normative-for-m1).
+
+Planned shape for `formatVersion` 2:
+
+- Package layout gains `originals/`. Original files live there, named `<stem>.<ext>`.
+- `meta.json` gains an optional book-level `sources[]`. Each entry has `id`, `file`,
+  `format`, `byteSize`, and `sha256`.
+- A page entry gains an optional `source` with `ref` (a `sources[].id`) and an optional
+  0-based `frame`. Several pages may share one source, such as a multi-page TIFF or a PDF in
+  M1.5.
+- `sources[].file` follows the same path rules as `pages[].file`. Case-insensitive
+  uniqueness applies within `sources[]`, not across pages that share a source.
+- `load_book` verifies each `sources[]` sha256 once. Drift is `ChecksumMismatch`.
+- Free-space preflight counts originals plus display copies in `estimated_bytes`.
+
+v1 packages stay readable. A v1 package has no originals and loads unchanged.
 
 ## Evolution rule
 

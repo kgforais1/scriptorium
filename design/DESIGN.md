@@ -1,6 +1,6 @@
 # Design: Reader look and skins
 
-Last reviewed: 2026-10-27
+Last reviewed: 2026-10-28
 Date: 2026-10-27
 Author: product owner + Claude Code
 Status: approved

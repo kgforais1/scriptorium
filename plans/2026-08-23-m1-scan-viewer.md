@@ -85,29 +85,50 @@ folder pickers.
 
 ### Input formats (normative for M1)
 
-Ingest keeps each original file and gives the reader a file every target webview can show.
+Every page's `file` is a **display image** that every target webview can show: 8-bit
+sRGB JPEG, PNG, or WebP, stored upright. When the input already meets that, it is copied
+as-is and there is no separate original. Otherwise ingest writes a converted display copy
+and keeps the untouched original under `originals/`.
 
-| Input | Extensions | Reader gets |
+| Input | Extensions | Display image |
 |---|---|---|
-| JPEG, PNG, WebP | `.jpg` `.jpeg` `.png` `.webp` | The original |
+| JPEG, PNG, WebP | `.jpg` `.jpeg` `.png` `.webp` | The input itself, unless a conversion rule below applies |
 | BMP, GIF | `.bmp` `.gif` | A PNG copy (GIF: first frame only) |
-| TIFF | `.tif` `.tiff` | A JPEG copy at quality ≥ 92; each frame of a multi-page TIFF is one page |
-| JPEG 2000 | `.jp2` `.j2k` `.jpf` | A JPEG copy at quality ≥ 92 (OpenJPEG binding) |
+| TIFF | `.tif` `.tiff` | A JPEG copy at quality ≥ 92; each directory (frame) of a multi-page TIFF is one page |
+| JPEG 2000 | `.jp2` `.j2k` `.jpf` | A JPEG copy at quality ≥ 92 |
 
-Ingest rules for every format:
+A JPEG, PNG, or WebP input gets a converted copy when any of these is true:
 
-- Apply the EXIF orientation before measuring `width` and `height`.
-- Convert CMYK, 16-bit, and ICC-tagged images to 8-bit sRGB in the display copy.
-- Keep the original, unmodified, beside the display copy. Checksums cover both files.
+- It is CMYK, 16-bit, or carries a non-sRGB ICC profile. Convert to 8-bit sRGB. An image
+  with no profile is treated as sRGB; a CMYK image with no profile uses a bundled default
+  CMYK profile.
+- Its EXIF orientation is not 1. Rotate or flip the pixels and drop the tag. TIFF uses its
+  own orientation tag, with the same rule.
+
+Other rules:
+
+- `width` and `height` describe the stored display image after orientation.
 - A decode failure is `UnreadableFile` for that page, not a silent skip.
+- Platform floor: macOS 11 or later, because WKWebView decodes WebP only from Safari 14.
+  Set `bundle.macOS.minimumSystemVersion` to `11.0`.
 
-Storing originals adds a field to page entries, so it needs `formatVersion` 2. See
+Decoder choices, confirmed in Phase 1 with a small spike per crate:
+
+| Need | Candidate |
+|---|---|
+| JPEG, PNG, WebP, BMP, GIF decode and JPEG/PNG encode | `image` |
+| TIFF directory enumeration and orientation | `tiff` |
+| ICC and CMYK to sRGB | `lcms2`, statically linked |
+| JPEG 2000 | `jpeg2k` over OpenJPEG, statically linked so no runtime library ships |
+
+Originals need a book-level `sources[]` list and a per-page `source` reference, so M1 writes
+`formatVersion` 2. See
 [`docs/book-format.md`](../docs/book-format.md#planned-originals-and-display-copies).
 
 ### Natural-sort specification (normative for M1)
 
 Sort **filename stem** with natural order (numeric chunks as integers), case-insensitive
-extension ignored for ordering. Only the supported input formats below are included.
+extension ignored for ordering. Only the formats in [Input formats](#input-formats-normative-for-m1) are included.
 
 **Tie-break (normative):** after natural compare of stems is equal, order by:
 1. Longer zero-padded numeric representation wins for that chunk only when integer values
@@ -179,12 +200,18 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 
 ### Phase 1 — Book I/O (Rust)
 
+- [ ] Book format v2: schema adds `sources[]` and page `source`; Rust accepts v1 and v2 and
+      writes v2; v1→v2 migration note in `docs/book-format.md`; A1 validates against the v2
+      schema
+- [ ] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
+      fixture per row and per conversion rule (CMYK, 16-bit, ICC, EXIF orientation,
+      multi-page TIFF)
 - [ ] Natural sort + table tests
 - [ ] Atomic create_book_from_folder + free-space check + DestinationExists
 - [ ] Per-page width/height/sha256/byteSize written
 - [ ] load_book + schema validation
 - [ ] lastReadPage read/write keyed by book **`id`**; flush API for window close
-- [ ] load_book re-verifies per-page sha256 (negative test: A10)
+- [ ] load_book re-verifies per-page sha256 and each `sources[]` sha256 once (negative test: A10)
 - [ ] load_book canonical path prefix check (A12)
 - [ ] Ingest case-insensitive `id` collision check (A11)
 - [ ] Orphan temp-dir sweep + DuplicatePageStem tests
