@@ -16,7 +16,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 | Plan | Status | Note |
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
-| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | draft | First product slice; unblocked |
+| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | in-progress | Phase 0–1 first; refresh Phase 3 from ADR-0001 before the reader |
 
 ## Unplanned / small
 
@@ -35,7 +35,9 @@ Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to
   [M1 plan follow-ups](plans/2026-08-23-m1-scan-viewer.md#follow-ups-from-m0-senior-reviews-2026-08-25)
 - **Second skin (Gallery Daylight, mockup B) + skin picker** — M7 →
   [`design/DESIGN.md`](design/DESIGN.md#skins)
-- **Later product (M1.5–M8)** — PDF import, OCR, text/hybrid modes, library, hotspots, polish, web/IIIF →
+- **Later product (M1.5–M8)** — PDF import, OCR and curator-supplied text (M2), expandable
+  annotations and curator detail views (M6), fullscreen page view and deep zoom (M7), text/hybrid
+  modes, library, polish, web/IIIF →
   [roadmap](plans/2026-08-23-product-roadmap.md)
 - **cargo-audit unmaintained warnings** — 6 warnings, `cargo audit` still exits 0 in
   `src-tauri`: `proc-macro-error` 1.0.4 via glib-macros → glib → gtk → tauri

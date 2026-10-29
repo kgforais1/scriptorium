@@ -104,6 +104,8 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Transparent text layer aligned to scan (select + copy)
 - [ ] Background OCR job with progress (re-run when pages change)
 - [ ] Book metadata: `ocrStatus`, `ocrEngine`, `ocrGeneratedAt`
+- [ ] Curator-supplied page text (transcription or translation, typed or imported) stored beside
+      OCR with a `source` of `ocr`, `pdf`, or `curator`; curator text wins in search and the text layer
 
 ### M3 — Rendered text mode
 
@@ -134,12 +136,19 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Author mode: draw region on page (`xywh` or polygon)
 - [ ] Attach lore popup content (markdown/HTML, images, links)
 - [ ] Long-press on touch / click on desktop → popup
+- [ ] Expandable annotations: a marker opens a short note, which expands into the full notes
+      panel (long text, images, links); keyboard and screen-reader operable per `design/DESIGN.md`
+- [ ] Curator detail views: the curator marks a region as a detail; readers click or tap it to
+      open a zoomed view of that region at full scan resolution, with a caption
 - [ ] Import/export annotations JSON (interchange with IIIF-style bodies later)
 
 ### M7 — Polish & extraction
 
 - [ ] Figure/image extraction from page regions (crop to assets)
-- [ ] Deep-zoom inspect on a page or region (OpenSeadragon-style panel), with pinch-to-zoom on touch
+- [ ] Deep-zoom inspect on a page or region (OpenSeadragon-style panel), with pinch-to-zoom on touch;
+      also renders M6 curator detail views
+- [ ] Fullscreen page view: open one page alone, fitted to the screen at full scan resolution,
+      with keyboard, swipe, and Escape to return to the book
 - [ ] Book polish beyond the M1 engine: page thickness, cover open/close, richer paper detail
 - [ ] Second skin **Gallery Daylight** (mockup B) + skin picker; remember choice per user
 - [ ] Performance: lazy load pages, virtualized thumbnail scrubber (basic scrubber ships in M1), large book handling

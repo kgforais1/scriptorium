@@ -3,7 +3,7 @@
 Last reviewed: 2026-10-28
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
-Status: draft
+Status: in-progress (approved 2026-10-29)
 Linked issue/PR: n/a
 Depends on:
 - [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md) **complete**
@@ -212,7 +212,7 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 
 ### Phase 0 — Integration gate (ADR already done)
 
-- [ ] Confirm ADR library still loads in current shell
+- [x] Confirm ADR library still loads in current shell (spike on `main`, 2026-10-29)
 - [ ] Complete asset-protocol checklist above (macOS required; Windows if available)
 - [ ] Stop if G1–G6 from spike no longer hold
 - [ ] Close ADR-0001's open items: WebGL2 on WebView2 (Windows) and WebKitGTK (Linux), touch on
