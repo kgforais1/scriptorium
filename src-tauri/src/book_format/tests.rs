@@ -19,7 +19,7 @@ fn compile_schema(schema: &Value) -> jsonschema::Validator {
 
 #[test]
 fn sample_serialization_matches_schema() {
-    let book = BookMeta::sample();
+    let book = BookMeta::sample_v1();
     book.validate().expect("sample must validate");
     let json = serde_json::to_value(&book).unwrap();
     let schema = load_schema();
@@ -31,7 +31,7 @@ fn sample_serialization_matches_schema() {
 
 #[test]
 fn page_label_variants_validate() {
-    let mut with_label = BookMeta::sample();
+    let mut with_label = BookMeta::sample_v1();
     with_label.pages[0].page_label = Some("Cover".into());
 
     let schema = load_schema();
@@ -47,7 +47,7 @@ fn page_label_variants_validate() {
         "Some(page_label) variant must validate"
     );
 
-    let unlabeled = serde_json::to_value(BookMeta::sample()).unwrap();
+    let unlabeled = serde_json::to_value(BookMeta::sample_v1()).unwrap();
     assert!(
         unlabeled["pages"][0].get("pageLabel").is_none(),
         "None must be omitted"
@@ -57,7 +57,7 @@ fn page_label_variants_validate() {
 
 #[test]
 fn schema_rejects_missing_required_field() {
-    let book = BookMeta::sample();
+    let book = BookMeta::sample_v1();
     let mut json = serde_json::to_value(&book).unwrap();
     json.as_object_mut().unwrap().remove("title");
     let schema = load_schema();
@@ -70,7 +70,7 @@ fn schema_rejects_missing_required_field() {
 
 #[test]
 fn schema_rejects_zero_dimensions() {
-    let mut book = BookMeta::sample();
+    let mut book = BookMeta::sample_v1();
     book.pages[0].width = 0;
     let json = serde_json::to_value(&book).unwrap();
     let validator = compile_schema(&load_schema());
@@ -79,7 +79,7 @@ fn schema_rejects_zero_dimensions() {
 
 #[test]
 fn schema_rejects_path_traversal_file() {
-    let mut book = BookMeta::sample();
+    let mut book = BookMeta::sample_v1();
     book.pages[0].file = "../etc/passwd".into();
     let json = serde_json::to_value(&book).unwrap();
     let validator = compile_schema(&load_schema());
@@ -91,7 +91,7 @@ fn schema_rejects_path_traversal_file() {
 fn schema_rejects_terminal_parent_segment() {
     let validator = compile_schema(&load_schema());
     for bad in ["..", "pages/.."] {
-        let mut book = BookMeta::sample();
+        let mut book = BookMeta::sample_v1();
         book.pages[0].file = bad.into();
         let json = serde_json::to_value(&book).unwrap();
         assert!(
@@ -107,7 +107,7 @@ fn schema_rejects_terminal_parent_segment() {
 
 #[test]
 fn schema_rejects_integer_above_u32() {
-    let book = BookMeta::sample();
+    let book = BookMeta::sample_v1();
     let mut json = serde_json::to_value(&book).unwrap();
     json["pages"][0]["width"] = serde_json::json!(4_294_967_296u64);
     let validator = compile_schema(&load_schema());
@@ -119,7 +119,7 @@ fn schema_rejects_integer_above_u32() {
 
 #[test]
 fn validate_rejects_last_read_page_out_of_range() {
-    let mut book = BookMeta::sample();
+    let mut book = BookMeta::sample_v1();
     book.last_read_page = 999;
     match book.validate() {
         Err(BookMetaError::LastReadPageOutOfRange { .. }) => {}
@@ -134,7 +134,7 @@ fn validate_rejects_invalid_book_id() {
         "", "../etc", "Has Caps", ".", "bad/id", "con", "aux", "nul", "com1", "lpt9", "con.txt",
         "prn.png", "book.", "ok\n",
     ] {
-        let mut book = BookMeta::sample();
+        let mut book = BookMeta::sample_v1();
         book.id = bad.into();
         assert!(
             matches!(book.validate(), Err(BookMetaError::InvalidBookId { .. })),
@@ -166,7 +166,7 @@ fn validate_rejects_windows_reserved_page_paths() {
 
 #[test]
 fn validate_rejects_case_insensitive_path_collision() {
-    let mut book = BookMeta::sample();
+    let mut book = BookMeta::sample_v1();
     book.pages[0].file = "pages/Cover.png".into();
     book.pages.push(PageEntry {
         index: 1,
@@ -194,7 +194,7 @@ fn validate_rejects_case_insensitive_path_collision() {
 
 #[test]
 fn validate_rejects_title_too_long() {
-    let mut book = BookMeta::sample();
+    let mut book = BookMeta::sample_v1();
     book.title = "x".repeat(TITLE_MAX_LEN + 1);
     match book.validate() {
         Err(BookMetaError::TitleTooLong { len, max }) => {
@@ -220,7 +220,7 @@ fn validate_rejects_too_many_pages_bound_documented() {
         .as_u64()
         .expect("pages.maxItems") as usize;
     assert_eq!(max_items, PAGES_MAX_ITEMS);
-    let mut book = BookMeta::sample();
+    let mut book = BookMeta::sample_v1();
     book.pages = (0..=PAGES_MAX_ITEMS)
         .map(|i| PageEntry {
             index: i as u32,
@@ -247,7 +247,7 @@ fn validate_rejects_too_many_pages_bound_documented() {
 
 #[test]
 fn validate_rejects_zero_byte_size() {
-    let mut book = BookMeta::sample();
+    let mut book = BookMeta::sample_v1();
     book.pages[0].byte_size = 0;
     match book.validate() {
         Err(BookMetaError::ZeroByteSize { .. }) => {}
@@ -272,7 +272,7 @@ fn book_id_pattern_matches_schema() {
 
 #[test]
 fn deserialize_rejects_unknown_top_level_field() {
-    let mut json = serde_json::to_value(BookMeta::sample()).unwrap();
+    let mut json = serde_json::to_value(BookMeta::sample_v1()).unwrap();
     json.as_object_mut()
         .unwrap()
         .insert("unknownField".into(), serde_json::json!(1));
@@ -284,7 +284,7 @@ fn deserialize_rejects_unknown_top_level_field() {
 
 #[test]
 fn deserialize_rejects_unknown_page_field() {
-    let mut json = serde_json::to_value(BookMeta::sample()).unwrap();
+    let mut json = serde_json::to_value(BookMeta::sample_v1()).unwrap();
     json["pages"][0]["extra"] = serde_json::json!("nope");
     assert!(
         serde_json::from_value::<BookMeta>(json).is_err(),
@@ -294,7 +294,7 @@ fn deserialize_rejects_unknown_page_field() {
 
 #[test]
 fn validate_rejects_unsupported_format_version() {
-    let mut book = BookMeta::sample();
+    let mut book = BookMeta::sample_v1();
     book.format_version = 3;
     match book.validate() {
         Err(BookMetaError::UnsupportedFormatVersion(3)) => {}
@@ -304,7 +304,7 @@ fn validate_rejects_unsupported_format_version() {
 
 #[test]
 fn validate_rejects_empty_pages() {
-    let mut book = BookMeta::sample();
+    let mut book = BookMeta::sample_v1();
     book.pages.clear();
     match book.validate() {
         Err(BookMetaError::EmptyPages) => {}
@@ -335,7 +335,7 @@ fn validate_page_file_rejects_unsafe_paths() {
         if file.is_empty() || file.contains('\0') {
             continue;
         }
-        let mut book = BookMeta::sample();
+        let mut book = BookMeta::sample_v1();
         book.pages[0].file = file.into();
         let json = serde_json::to_value(&book).unwrap();
         assert!(
@@ -358,7 +358,7 @@ fn validate_page_file_rejects_null_byte() {
 
 #[test]
 fn validate_accepts_wrong_sha256_shape_only() {
-    let mut book = BookMeta::sample();
+    let mut book = BookMeta::sample_v1();
     book.pages[0].sha256 =
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into();
     book.pages[0]
@@ -372,7 +372,7 @@ fn validate_accepts_wrong_sha256_shape_only() {
 fn validate_rejects_page_index_mismatch_cases() {
     let good_sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-    let mut ok = BookMeta::sample();
+    let mut ok = BookMeta::sample_v1();
     ok.pages.push(PageEntry {
         index: 1,
         file: "pages/001.jpg".into(),
@@ -386,7 +386,7 @@ fn validate_rejects_page_index_mismatch_cases() {
     });
     ok.validate().expect("contiguous indexes 0,1 must pass");
 
-    let mut dupes = BookMeta::sample();
+    let mut dupes = BookMeta::sample_v1();
     dupes.pages.push(PageEntry {
         index: 0,
         file: "pages/001.jpg".into(),
@@ -406,7 +406,7 @@ fn validate_rejects_page_index_mismatch_cases() {
         other => panic!("duplicate indexes should fail at position 1, got {other:?}"),
     }
 
-    let mut gap = BookMeta::sample();
+    let mut gap = BookMeta::sample_v1();
     gap.pages.push(PageEntry {
         index: 2,
         file: "pages/002.jpg".into(),
@@ -426,7 +426,7 @@ fn validate_rejects_page_index_mismatch_cases() {
         other => panic!("gap at index 2 should fail at position 1, got {other:?}"),
     }
 
-    let mut huge = BookMeta::sample();
+    let mut huge = BookMeta::sample_v1();
     huge.pages.push(PageEntry {
         index: u32::MAX,
         file: "pages/huge.jpg".into(),
@@ -480,7 +480,7 @@ fn validate_rejects_invalid_timestamps() {
         ("createdAt", "2026-08-24"),
         ("updatedAt", "2026/08/24 00:00:00"),
     ] {
-        let mut book = BookMeta::sample();
+        let mut book = BookMeta::sample_v1();
         if field == "createdAt" {
             book.created_at = bad.into();
         } else {
@@ -491,7 +491,7 @@ fn validate_rejects_invalid_timestamps() {
             other => panic!("expected InvalidTimestamp for {field}={bad:?}, got {other:?}"),
         }
     }
-    let mut ok = BookMeta::sample();
+    let mut ok = BookMeta::sample_v1();
     ok.created_at = "2026-08-24T12:34:56+00:00".into();
     ok.updated_at = "2026-08-24T12:34:56.123Z".into();
     ok.validate()

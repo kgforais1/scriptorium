@@ -60,6 +60,7 @@ fn sample_v2() -> BookMeta {
 fn expect_source_err(book: &BookMeta, want: &str) {
     match book.validate() {
         Err(BookMetaError::InvalidSource { reason, .. })
+        | Err(BookMetaError::InvalidSources { reason })
         | Err(BookMetaError::InvalidPageSource { reason, .. })
             if reason.contains(want) => {}
         other => panic!("expected an error containing {want:?}, got {other:?}"),
@@ -102,7 +103,7 @@ fn v2_without_sources_is_valid_and_round_trips() {
 
 #[test]
 fn v1_package_still_reads() {
-    let book = BookMeta::sample();
+    let book = BookMeta::sample_v1();
     assert_eq!(book.format_version, 1);
     book.validate().expect("v1 stays readable");
     assert!(schema(1).is_valid(&serde_json::to_value(&book).unwrap()));
@@ -119,7 +120,7 @@ fn v1_rejects_v2_fields() {
             min_version: 2
         })
     );
-    let mut only_page_ref = BookMeta::sample();
+    let mut only_page_ref = BookMeta::sample_v1();
     only_page_ref.pages[0].source = src_ref("x", None);
     assert_eq!(
         only_page_ref.validate(),

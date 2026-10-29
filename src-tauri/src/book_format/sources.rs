@@ -100,13 +100,14 @@ pub(super) fn validate(
     }
     let sources = meta.sources.as_deref().unwrap_or(&[]);
     if meta.sources.is_some() && sources.is_empty() {
-        return Err(source_err("", "sources must be omitted rather than empty"));
+        return Err(BookMetaError::InvalidSources {
+            reason: "must be omitted rather than empty".into(),
+        });
     }
     if sources.len() > SOURCES_MAX_ITEMS {
-        return Err(source_err(
-            "",
-            format!("{} entries; max is {SOURCES_MAX_ITEMS}", sources.len()),
-        ));
+        return Err(BookMetaError::InvalidSources {
+            reason: format!("{} entries; max is {SOURCES_MAX_ITEMS}", sources.len()),
+        });
     }
     let by_id = validate_entries(sources, page_files)?;
     validate_page_refs(meta, &by_id)

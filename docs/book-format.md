@@ -83,12 +83,15 @@ some JPEG, PNG, and WebP inputs. `file` stays the display image. When a display 
 converted, the untouched original is kept. Input formats and conversion rules are in the
 [M1 plan](../plans/2026-08-23-m1-scan-viewer.md#input-formats-normative-for-m1).
 
-- Originals live under `originals/`, named `<stem>.<ext>` after the input file.
+- Originals live under `originals/`, numbered by position among the kept originals and keeping
+  the input's lowercase extension (`originals/0000.tif`). Input names may hold spaces or
+  non-ASCII characters that the path rules forbid, so they are never used in the package.
 - `sources[]` item fields: `id` (lowercase slug, 1–64 characters, unique in the book), `file`,
   `format` (`jpeg`, `png`, `webp`, `bmp`, `gif`, `tiff`, `jp2`, or `pdf`), `frames` (number of
   frames, 1 for a single image), `byteSize`, and `sha256`.
 - A page's `source` has `ref` and an optional `frame`. Pages of one multi-frame source share
-  it, one page per frame; a single-frame source is referenced by exactly one page.
+  it, at most one page per frame (ingest writes one page for every frame); a single-frame
+  source is referenced by exactly one page.
 - `frames` is written at ingest. `load_book` checks it against the frame count the file reports.
 - `load_book` verifies each `sources[]` sha256 once. Drift is `ChecksumMismatch`.
 - Free-space preflight counts originals plus display copies in `estimated_bytes`.
@@ -135,7 +138,8 @@ bumping `formatVersion` and a migration note describing how to upgrade packages.
 
 ## Loader validation
 
-After JSON Schema validation, loaders MUST run the Rust `BookMeta::validate` checks (or
+Loaders read `formatVersion` first and validate against that version's schema (the app
+embeds both schema files). After JSON Schema validation, loaders MUST run the Rust `BookMeta::validate` checks (or
 an equivalent):
 
 | Check | Behavior |
@@ -174,10 +178,11 @@ ingest pipeline returns on failure.
 
 | Rule | Behavior on violation | Error |
 |---|---|---|
+| **Page names** | Display images are named by final 0-based page position, at least four digits (`pages/0000.jpg`), never by input name. | — |
 | **Storage default** | Copy page bytes into `pages/`. Symlinks are rejected. `storage: "referenced"` is reserved and NOT implemented in M1. | — |
 | **Source collisions** | If two source files map to the same destination stem, including case-insensitive match on APFS/NTFS (e.g. `1.jpg` + `1.JPG`), ingest fails — never silently overwrite. | `DuplicatePageStem` |
 | **Atomic write** | Write to a temp dir under the destination parent → validate → rename into place. If a destination book id already exists, ingest fails. | `DestinationExists` |
-| **Orphan cleanup** | On startup and before ingest, delete orphaned `*.scriptorium-tmp` / `.ingest-tmp-*` dirs under the library root older than 1 hour (or any left from a previous crashed run). | — |
+| **Orphan cleanup** | On startup and before ingest, delete orphaned `*.scriptorium-tmp` / `.ingest-tmp-*` entries under the library root older than 1 hour. Younger entries may belong to a running ingest and are kept. | — |
 | **Checksums** | Compute `sha256` at ingest and store it in `meta.json`. `load_book` re-verifies the sha256 of each page file; drift is a hard failure. Skip re-verify only behind an explicit future flag — not in M1. | `ChecksumMismatch` |
 | **Free space** | Pre-flight check: refuse the copy if free space is less than `estimated_bytes × 1.1 + 50 MB` headroom. `estimated_bytes` is the total ingest will write: every display image plus every retained original (v2). | — |
 

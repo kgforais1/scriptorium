@@ -262,17 +262,22 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
       one JSON per page (text, word and line boxes in normalized page coordinates, `source` of
       `ocr`, `pdf`, or `curator`) plus `ocr/index.json` (per-page status and book rollup);
       `annotations.json` regions use normalized page coordinates. Shapes are provisional until M2/M6
-- [ ] Natural sort + table tests
-- [ ] Atomic create_book_from_folder + free-space check + DestinationExists
-- [ ] Per-page width/height/sha256/byteSize written
-- [ ] load_book + schema validation
-- [ ] lastReadPage read/write keyed by book **`id`**; flush API for window close
-- [ ] load_book re-verifies per-page sha256 and each `sources[]` sha256 once (negative test: A10),
+- [x] Natural sort + table tests
+- [x] Atomic create_book_from_folder + free-space check + DestinationExists
+- [x] Per-page width/height/sha256/byteSize written
+- [x] load_book + schema validation
+- [x] lastReadPage read/write keyed by book **`id`**; flush API for window close
+- [x] load_book re-verifies per-page sha256 and each `sources[]` sha256 once (negative test: A10),
       and checks each source's `frames` against the frame count the file reports
-- [ ] load_book canonical path prefix check (A12) for `pages/` and `originals/`
-- [ ] Ingest case-insensitive `id` collision check (A11)
-- [ ] Orphan temp-dir sweep + DuplicatePageStem tests
-- [ ] All error taxonomy variants tested with `tempfile`
+- [x] load_book canonical path prefix check (A12) for `pages/` and `originals/`
+- [x] Ingest case-insensitive `id` collision check (A11)
+- [x] Orphan temp-dir sweep + DuplicatePageStem tests
+- [x] All error taxonomy variants tested with `tempfile`. Done 2026-10-29 in
+      `src-tauri/src/library/` (create, load, progress, sort, sweep). Smoke on the Dulac corpus:
+      202 pages created in 6.1 s (every page decoded once to validate it) and loaded with full
+      checksum verification in 0.17 s. `lastReadPage` lives in the book's own `meta.json`, so it
+      follows the book `id`; `save_last_read_page` is synchronous and atomic, ready for the
+      Phase 2 close-flush command
 - [x] Schema bind: Rust sample serialize ↔ `docs/book-format.v2.schema.json` (and v1 samples ↔ v1 schema)
 
 ### Phase 2 — Commands + UI

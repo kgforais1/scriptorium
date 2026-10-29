@@ -107,6 +107,8 @@ pub enum BookMetaError {
         field: &'static str,
         min_version: u32,
     },
+    /// The `sources` list as a whole breaks a v2 rule (empty, or too many entries).
+    InvalidSources { reason: String },
     /// A `sources[]` entry breaks a v2 rule (id, path, shape, or is unreferenced).
     InvalidSource { id: String, reason: String },
     /// A page `source` reference breaks a v2 rule (unknown ref, frame rules).
@@ -180,6 +182,7 @@ impl std::fmt::Display for BookMetaError {
             Self::FieldRequiresVersion { field, min_version } => {
                 write!(f, "{field} requires formatVersion {min_version} or later")
             }
+            Self::InvalidSources { reason } => write!(f, "sources invalid: {reason}"),
             Self::InvalidSource { id, reason } => {
                 write!(f, "sources entry {id:?} invalid: {reason}")
             }
@@ -255,8 +258,16 @@ pub struct BookMeta {
 }
 
 impl BookMeta {
-    /// A minimal valid sample for tests and fixtures.
+    /// A minimal valid v2 sample for tests and fixtures (the version the app writes).
     pub fn sample() -> Self {
+        Self {
+            format_version: CURRENT_FORMAT_VERSION,
+            ..Self::sample_v1()
+        }
+    }
+
+    /// The same sample as a formatVersion 1 document, for v1 read tests.
+    pub fn sample_v1() -> Self {
         Self {
             format_version: 1,
             id: "sample-book-001".into(),
@@ -357,7 +368,7 @@ impl BookMeta {
 }
 
 /// Book `id` must be a safe library directory slug (matches schema pattern).
-fn validate_book_id(id: &str) -> Result<(), BookMetaError> {
+pub fn validate_book_id(id: &str) -> Result<(), BookMetaError> {
     let reason = if id.is_empty() {
         Some("empty id")
     } else if id.len() > 64 {

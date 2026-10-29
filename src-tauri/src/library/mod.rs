@@ -1,0 +1,147 @@
+//! The book library: creating packages from folders, loading them, and saving progress.
+//!
+//! Every failure is a [`BookError`] from the M1 error taxonomy, each with a message a reader
+//! can act on. Nothing here panics on bad input or aborts the process (acceptance A3).
+
+pub mod create;
+pub mod load;
+pub mod progress;
+pub mod sort;
+pub mod sweep;
+
+#[cfg(test)]
+mod tests;
+
+use std::path::{Path, PathBuf};
+
+/// Library errors (M1 plan, "Error taxonomy").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BookError {
+    /// The source folder has no files.
+    EmptyFolder { folder: PathBuf },
+    /// The source folder has files, but none in a supported input format.
+    NoSupportedImages { folder: PathBuf },
+    /// A file could not be read or decoded.
+    UnreadableFile { file: PathBuf, reason: String },
+    /// A book with this id already exists (case-insensitively).
+    DestinationExists { id: String },
+    /// Two input files share a name stem (case-insensitively).
+    DuplicatePageStem { first: PathBuf, second: PathBuf },
+    /// The library volume lacks room for the copy.
+    InsufficientDiskSpace { needed: u64, available: u64 },
+    /// The package's `formatVersion` is not one this build reads.
+    UnsupportedFormatVersion { found: u64 },
+    /// `meta.json` is missing or fails the schema or validation rules.
+    InvalidPackage { reason: String },
+    /// A page or original no longer matches its recorded checksum or size.
+    ChecksumMismatch { file: String },
+    /// The operating system refused access.
+    PermissionDenied { path: PathBuf },
+}
+
+impl std::fmt::Display for BookError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mb = |b: &u64| b.div_ceil(1_048_576);
+        match self {
+            Self::EmptyFolder { folder } => write!(f, "The folder {} has no files.", folder.display()),
+            Self::NoSupportedImages { folder } => write!(
+                f,
+                "No supported images found in {}. Use JPEG, PNG, WebP, BMP, GIF, TIFF, or JPEG 2000.",
+                folder.display()
+            ),
+            Self::UnreadableFile { file, reason } => write!(f, "Could not read {}: {reason}.", file.display()),
+            Self::DestinationExists { id } => {
+                write!(f, "A book named \"{id}\" already exists. It was not overwritten.")
+            }
+            Self::DuplicatePageStem { first, second } => write!(
+                f,
+                "Duplicate page names: {} and {} have the same name. Rename one and try again.",
+                first.display(),
+                second.display()
+            ),
+            Self::InsufficientDiskSpace { needed, available } => write!(
+                f,
+                "Not enough free space: the book needs about {} MB and {} MB is free.",
+                mb(needed),
+                mb(available)
+            ),
+            Self::UnsupportedFormatVersion { found } => write!(
+                f,
+                "This book uses format version {found}, which this version of Scriptorium cannot open."
+            ),
+            Self::InvalidPackage { reason } => write!(f, "This is not a valid Scriptorium book: {reason}."),
+            Self::ChecksumMismatch { file } => write!(
+                f,
+                "The book's files are corrupted or were modified: {file} no longer matches its checksum."
+            ),
+            Self::PermissionDenied { path } => write!(f, "Permission denied: {}.", path.display()),
+        }
+    }
+}
+
+impl std::error::Error for BookError {}
+
+/// Map an I/O error on `path`: permission problems become `PermissionDenied`, the rest
+/// `UnreadableFile`.
+pub(crate) fn io_error(path: &Path, err: &std::io::Error) -> BookError {
+    if err.kind() == std::io::ErrorKind::PermissionDenied {
+        BookError::PermissionDenied {
+            path: path.to_path_buf(),
+        }
+    } else {
+        BookError::UnreadableFile {
+            file: path.to_path_buf(),
+            reason: err.to_string(),
+        }
+    }
+}
+
+/// Lowercase hex SHA-256 of a file, streamed so large pages are not held in memory.
+pub(crate) fn sha256_file(path: &Path) -> Result<(String, u64), BookError> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).map_err(|e| io_error(path, &e))?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1 << 16];
+    let mut total = 0u64;
+    loop {
+        let n = file.read(&mut buf).map_err(|e| io_error(path, &e))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+        total += n as u64;
+    }
+    Ok((hex(&hasher.finalize()), total))
+}
+
+pub(crate) fn sha256_bytes(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    hex(&Sha256::digest(bytes))
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The current time as RFC 3339, for `createdAt` and `updatedAt`.
+pub(crate) fn now_rfc3339() -> String {
+    use time::format_description::well_known::Rfc3339;
+    time::OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into())
+}
+
+/// Write `bytes` to `path` atomically: a sibling temp file, fsync, then rename over.
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
+    use std::io::Write;
+    let tmp = path.with_extension("json.scriptorium-tmp");
+    let mut f = std::fs::File::create(&tmp).map_err(|e| io_error(&tmp, &e))?;
+    f.write_all(bytes).map_err(|e| io_error(&tmp, &e))?;
+    f.sync_all().map_err(|e| io_error(&tmp, &e))?;
+    drop(f);
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        io_error(path, &e)
+    })
+}

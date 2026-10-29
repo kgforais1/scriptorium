@@ -5,6 +5,7 @@
 
 pub mod book_format;
 pub mod ingest;
+pub mod library;
 // `dev` is Tauri's cfg for `tauri dev`, including `tauri dev --release`, where the spike UI runs.
 #[cfg(dev)]
 mod spike;
