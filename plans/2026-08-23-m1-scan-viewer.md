@@ -134,7 +134,9 @@ Spike result (2026-10-29, macOS): all four crates confirmed, with three findings
 Known limits, each `UnreadableFile` unless noted:
 
 - JPEG 2000: an embedded colour profile is ignored and the image treated as sRGB (not an
-  error). Subsampled, signed, YCC, and CMYK images are rejected; four components are read as
+  error). Images over 150 megapixels, zero-sized images, and images whose header size disagrees
+  with the decoded size or whose samples run short are rejected; the size is read from the
+  `jp2h`/`ihdr` box before decoding. Subsampled, signed, YCC, and CMYK images are rejected; four components are read as
   RGBA only when the file says sRGB.
 - TIFF: only 8- and 16-bit grey, RGB, and RGBA, plus 8-bit CMYK with a profile. Palette,
   YCbCr, Lab, grey with alpha, 16-bit CMYK, and 32/64-bit or float layouts are rejected.

@@ -653,13 +653,30 @@ fn jp2_header_size_is_read_and_bounded() {
         j2k.extend_from_slice(&v.to_be_bytes());
     }
     assert_eq!(jp2_dimensions(&j2k), Some((5000, 7000)));
-    // JP2 box: length, "ihdr", HEIGHT, WIDTH.
-    let mut jp2 = b"\0\0\0\x0cjP  \r\n\x87\n".to_vec();
-    jp2.extend_from_slice(&[0, 0, 0, 22]);
-    jp2.extend_from_slice(b"ihdr");
-    jp2.extend_from_slice(&40_000u32.to_be_bytes());
-    jp2.extend_from_slice(&50_000u32.to_be_bytes());
-    assert_eq!(jp2_dimensions(&jp2), Some((50_000, 40_000)));
+    // A JP2 file: signature box, then a decoy `ihdr` inside a uuid box claiming 1×1, then
+    // the real jp2h/ihdr. Only the real header counts.
+    let ihdr = |h: u32, w: u32| -> Vec<u8> {
+        let mut b = vec![0, 0, 0, 22];
+        b.extend_from_slice(b"ihdr");
+        b.extend_from_slice(&h.to_be_bytes());
+        b.extend_from_slice(&w.to_be_bytes());
+        b.extend_from_slice(&[0, 3, 7, 7, 0, 0]);
+        b
+    };
+    let boxed = |kind: &[u8; 4], payload: &[u8]| -> Vec<u8> {
+        let mut b = ((payload.len() + 8) as u32).to_be_bytes().to_vec();
+        b.extend_from_slice(kind);
+        b.extend_from_slice(payload);
+        b
+    };
+    let mut jp2 = boxed(b"jP  ", b"\r\n\x87\n");
+    jp2.extend(boxed(b"uuid", &ihdr(1, 1)));
+    jp2.extend(boxed(b"jp2h", &ihdr(40_000, 50_000)));
+    assert_eq!(
+        jp2_dimensions(&jp2),
+        Some((50_000, 40_000)),
+        "the decoy ihdr is ignored"
+    );
     const { assert!(50_000u64 * 40_000 > JP2_MAX_PIXELS) };
     // A file claiming 2 gigapixels is refused before OpenJPEG allocates anything.
     let d = Dir::new("jp2-bomb");

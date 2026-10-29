@@ -138,8 +138,9 @@ impl Drop for TempDir {
 }
 
 /// Display copies are re-encoded, so their size is not the input's. Each converted frame is
-/// budgeted at least 4 MB (a q92 JPEG of an 11 MP scan is 2–4 MB).
-const DISPLAY_FRAME_ESTIMATE: u64 = 4 * 1024 * 1024;
+/// budgeted at least 6 MB: a q92 JPEG of an 11 MP scan is 2–4 MB, with room for detailed or
+/// heavily compressed sources whose re-encode grows.
+const DISPLAY_FRAME_ESTIMATE: u64 = 6 * 1024 * 1024;
 
 /// Bytes ingest will write for one input: the file itself when copied as-is, or the kept
 /// original plus one display copy per frame when converted.

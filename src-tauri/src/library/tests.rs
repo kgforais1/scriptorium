@@ -578,10 +578,10 @@ fn space_estimate_counts_every_converted_frame() {
         5 * mb,
         "copied as-is"
     );
-    // A 20 MB, 30-frame TIFF: the original plus 30 display copies of at least 4 MB each.
+    // A 20 MB, 30-frame TIFF: the original plus 30 display copies of at least 6 MB each.
     assert_eq!(
         estimate_bytes(20 * mb, &info(30, true)),
-        20 * mb + 30 * 4 * mb
+        20 * mb + 30 * 6 * mb
     );
     // A large uncompressed TIFF budgets each frame at its share of the file.
     assert_eq!(

@@ -231,21 +231,59 @@ fn decode_tiff(bytes: &[u8], frame: u32) -> Result<Decoded, ConvertError> {
 /// OpenJPEG allocates the full image itself, so the header is checked before decoding.
 pub(super) const JP2_MAX_PIXELS: u64 = 150_000_000;
 
-/// Width and height from a JP2 `ihdr` box or a raw codestream's SIZ marker, without decoding.
+/// The `(type, payload)` boxes in `bytes`, walking box lengths (an 8-byte header, a 16-byte
+/// one when the length field is 1, and "to the end" when it is 0). Stops at a malformed box.
+fn jp2_boxes(bytes: &[u8]) -> Vec<([u8; 4], &[u8])> {
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i + 8 <= bytes.len() {
+        let len32 = u32::from_be_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]) as u64;
+        let kind = [bytes[i + 4], bytes[i + 5], bytes[i + 6], bytes[i + 7]];
+        let (header, len) = match len32 {
+            0 => (8u64, (bytes.len() - i) as u64),
+            1 => match bytes.get(i + 8..i + 16) {
+                Some(b) => (
+                    16,
+                    u64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]),
+                ),
+                None => break,
+            },
+            n => (8, n),
+        };
+        let Ok(end) = usize::try_from(len).map(|l| i.saturating_add(l)) else {
+            break;
+        };
+        if len < header || end > bytes.len() {
+            break;
+        }
+        out.push((kind, &bytes[i + header as usize..end]));
+        i = end;
+    }
+    out
+}
+
+/// Width and height from a JP2 file's `jp2h`/`ihdr` header box, or from a raw codestream's
+/// SIZ marker, without decoding. Only the real header counts: an `ihdr` byte pattern inside
+/// some other box is ignored.
 pub(super) fn jp2_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
-    let be32 = |at: usize| {
-        bytes
-            .get(at..at + 4)
-            .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    let be32 = |b: &[u8], at: usize| {
+        b.get(at..at + 4)
+            .map(|v| u32::from_be_bytes([v[0], v[1], v[2], v[3]]))
     };
     if bytes.starts_with(&[0xFF, 0x4F, 0xFF, 0x51]) {
         // SIZ: marker(2) Lsiz(2) Rsiz(2) Xsiz(4) Ysiz(4) XOsiz(4) YOsiz(4), after SOC.
-        let (x, y, xo, yo) = (be32(8)?, be32(12)?, be32(16)?, be32(20)?);
+        let (x, y) = (be32(bytes, 8)?, be32(bytes, 12)?);
+        let (xo, yo) = (be32(bytes, 16)?, be32(bytes, 20)?);
         return Some((x.checked_sub(xo)?, y.checked_sub(yo)?));
     }
-    // A JP2 file: find the `ihdr` box, whose payload starts HEIGHT(4) WIDTH(4).
-    let at = bytes.windows(4).position(|w| w == b"ihdr")?;
-    Some((be32(at + 8)?, be32(at + 4)?))
+    let (_, jp2h) = jp2_boxes(bytes).into_iter().find(|(k, _)| k == b"jp2h")?;
+    let (_, ihdr) = jp2_boxes(jp2h).into_iter().find(|(k, _)| k == b"ihdr")?;
+    // ihdr payload: HEIGHT(4) WIDTH(4) NC(2) BPC(1) C(1) UnkC(1) IPR(1).
+    Some((be32(ihdr, 4)?, be32(ihdr, 0)?))
+}
+
+fn over_limit(w: u32, h: u32) -> bool {
+    u64::from(w) * u64::from(h) > JP2_MAX_PIXELS
 }
 
 fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
@@ -255,7 +293,7 @@ fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
     if hw == 0 || hh == 0 {
         return Err(unreadable("JPEG 2000 image has zero width or height"));
     }
-    if u64::from(hw) * u64::from(hh) > JP2_MAX_PIXELS {
+    if over_limit(hw, hh) {
         return Err(unreadable(format!(
             "JPEG 2000 image is {hw}×{hh}, over the {JP2_MAX_PIXELS}-pixel limit"
         )));
@@ -263,6 +301,12 @@ fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
     let img = jpeg2k::Image::from_bytes(bytes).map_err(unreadable)?;
     let comps = img.components();
     let (w, h) = (img.width(), img.height());
+    // The decoder's own size must agree with the header; a lying header is refused here.
+    if (w, h) != (hw, hh) || over_limit(w, h) {
+        return Err(unreadable(format!(
+            "JPEG 2000 header says {hw}×{hh} but the image is {w}×{h}"
+        )));
+    }
     if comps.is_empty() || comps.iter().any(|c| c.width() != w || c.height() != h) {
         return Err(unreadable(
             "JPEG 2000 with subsampled or missing components",
