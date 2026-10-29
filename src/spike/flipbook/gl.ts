@@ -20,14 +20,23 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string) {
 }
 
 export function program(gl: WebGL2RenderingContext, vs: string, fs: string): Program {
+  // On a compile or link failure nothing reaches the caller, so free the partial program here.
   const p = gl.createProgram()!;
-  const a = compile(gl, gl.VERTEX_SHADER, vs), b = compile(gl, gl.FRAGMENT_SHADER, fs);
-  gl.attachShader(p, a);
-  gl.attachShader(p, b);
-  gl.linkProgram(p);
-  gl.deleteShader(a);
-  gl.deleteShader(b);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(`program link failed: ${gl.getProgramInfoLog(p)}`);
+  let a: WebGLShader | null = null, b: WebGLShader | null = null;
+  try {
+    a = compile(gl, gl.VERTEX_SHADER, vs);
+    b = compile(gl, gl.FRAGMENT_SHADER, fs);
+    gl.attachShader(p, a);
+    gl.attachShader(p, b);
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(`program link failed: ${gl.getProgramInfoLog(p)}`);
+  } catch (err) {
+    gl.deleteProgram(p);
+    throw err;
+  } finally {
+    gl.deleteShader(a);
+    gl.deleteShader(b);
+  }
   const u: Program["u"] = {};
   const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS) as number;
   for (let i = 0; i < n; i++) {
