@@ -6,6 +6,7 @@ Internal / developer-facing changes that do not belong in the public
 ## [Unreleased]
 
 ### Added
+- Ingest hardening from the Greptile review: a file's contents must match its extension; originals and copied pages are written from the same bytes that were inspected; the orphan sweep deletes only `.ingest-tmp-*` directories, and skips one whose `.ingest.lock` a running ingest holds.
 - CI `rust-cross` job: `cargo clippy --all-targets` and `cargo test` on `windows-latest` and `macos-latest` (matrix, `fail-fast: false`). macOS runs the `sips`-based ingest fixtures that skip on Linux.
 - JPEG 2000 safety: the image size is read from the file header and capped at 150 MP before OpenJPEG decodes anything, zero sizes are rejected, and a component with fewer samples than the image size is `UnreadableFile` instead of a panic. The free-space estimate now counts one display copy per converted frame.
 - Book library (`src-tauri/src/library/`): `create_book_from_folder` (natural sort per the M1 table, duplicate-stem and case-insensitive id checks, free-space preflight, conversion with originals kept, atomic temp-dir build), `load_book` (schema picked by `formatVersion` from the embedded v1/v2 schemas, `BookMeta::validate`, path-inside-package check, size and sha256 re-verification of pages and originals, original frame counts), `save_last_read_page` (atomic, upgrades v1 to v2), and the orphan temp sweep. `BookError` carries the M1 error taxonomy with user-facing messages. `jsonschema` moves to a runtime dependency; adds `sha2` and `fs4`.

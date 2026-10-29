@@ -4,7 +4,7 @@
 use super::create::{check_space, create_book_from_folder, estimate_bytes, CreateOptions};
 use super::load::{load_book, parse_meta};
 use super::progress::save_last_read_page;
-use super::sweep::{sweep_orphans, ORPHAN_AGE, TMP_PREFIX};
+use super::sweep::{lock_ingest_dir, sweep_orphans, ORPHAN_AGE, TMP_PREFIX};
 use super::BookError;
 use crate::book_format::{BookMeta, CURRENT_FORMAT_VERSION};
 use image::codecs::jpeg::JpegEncoder;
@@ -180,6 +180,10 @@ fn creates_a_v2_package_in_natural_order_with_originals() {
         "[]"
     );
     assert!(book.join("ocr").is_dir());
+    assert!(
+        !book.join(".ingest.lock").exists(),
+        "the build lock is not shipped"
+    );
     // A1: the written meta.json passes the v2 schema and the loader verifies every file.
     parse_meta(&std::fs::read_to_string(book.join("meta.json")).unwrap()).unwrap();
     let loaded = load_book(&book).unwrap();
@@ -464,22 +468,27 @@ fn progress_saves_atomically_and_upgrades_v1() {
 fn sweep_removes_only_old_temp_entries() {
     let t = Tmp::new("sweep");
     let lib = t.dir("library");
+    let write = |rel: &str| {
+        let p = lib.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, "x").unwrap();
+    };
     std::fs::create_dir(lib.join(format!("{TMP_PREFIX}crashed"))).unwrap();
     // A crash after meta.json was written but before the rename still leaves litter.
-    std::fs::create_dir(lib.join(format!("{TMP_PREFIX}late-crash"))).unwrap();
-    std::fs::write(lib.join(format!("{TMP_PREFIX}late-crash/meta.json")), "{}").unwrap();
-    std::fs::write(lib.join("meta.json.scriptorium-tmp"), "x").unwrap();
-    std::fs::create_dir(lib.join("a-real-book")).unwrap();
-    std::fs::write(lib.join("a-real-book/meta.json"), "{}").unwrap();
-    std::fs::write(lib.join("a-real-book/meta.json.1-0.scriptorium-tmp"), "x").unwrap();
-    // A valid book id may end in the temp suffix; a finished book is still never swept.
-    std::fs::create_dir(lib.join("odd.scriptorium-tmp")).unwrap();
-    std::fs::write(lib.join("odd.scriptorium-tmp/meta.json"), "{}").unwrap();
-    std::fs::write(
-        lib.join("odd.scriptorium-tmp/meta.json.1-1.scriptorium-tmp"),
-        "x",
-    )
-    .unwrap();
+    write(&format!("{TMP_PREFIX}late-crash/meta.json"));
+    write("meta.json.scriptorium-tmp");
+    write("a-real-book/meta.json");
+    write("a-real-book/meta.json.1-0.scriptorium-tmp");
+    // A valid book id may end in the temp suffix; such a directory is always a book.
+    write("odd.scriptorium-tmp/meta.json");
+    write("odd.scriptorium-tmp/meta.json.1-1.scriptorium-tmp");
+    // Even one that lost its meta.json keeps its scans.
+    write("lost.scriptorium-tmp/pages/0000.jpg");
+    // A running ingest holds its lock, so its temp dir is left alone however old it is.
+    let running = lib.join(format!("{TMP_PREFIX}running"));
+    std::fs::create_dir(&running).unwrap();
+    let held = lock_ingest_dir(&running).unwrap();
+
     assert_eq!(
         sweep_orphans(&lib, ORPHAN_AGE),
         0,
@@ -490,17 +499,31 @@ fn sweep_removes_only_old_temp_entries() {
         5,
         "three at the top, one inside each book"
     );
-    assert!(
-        lib.join("a-real-book/meta.json").exists(),
-        "the book itself is untouched"
-    );
     let mut left: Vec<_> = lib
         .read_dir()
         .unwrap()
         .map(|e| e.unwrap().file_name())
         .collect();
     left.sort();
-    assert_eq!(left, ["a-real-book", "odd.scriptorium-tmp"]);
+    let running_name = std::ffi::OsString::from(format!("{TMP_PREFIX}running"));
+    assert_eq!(
+        left,
+        [
+            running_name,
+            "a-real-book".into(),
+            "lost.scriptorium-tmp".into(),
+            "odd.scriptorium-tmp".into()
+        ]
+    );
+    assert!(
+        lib.join("lost.scriptorium-tmp/pages/0000.jpg").exists(),
+        "a damaged book's scans survive"
+    );
+
+    // Once the ingest is gone (lock released), its leftover dir is swept.
+    drop(held);
+    assert_eq!(sweep_orphans(&lib, Duration::ZERO), 1);
+    assert!(!running.exists());
 }
 
 #[test]

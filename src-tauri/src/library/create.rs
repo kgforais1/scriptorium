@@ -4,7 +4,7 @@
 //! renamed into place, so a crash never leaves a half-written book under its real name.
 
 use super::load::parse_meta;
-use super::{io_error, now_rfc3339, sha256_bytes, sha256_file, sort, sweep, BookError};
+use super::{io_error, now_rfc3339, sha256_bytes, sort, sweep, BookError};
 use crate::book_format::{
     validate_book_id, BookMeta, PageEntry, PageSource, RenderMode, SourceEntry, StorageMode,
     CURRENT_FORMAT_VERSION,
@@ -183,6 +183,9 @@ fn inspect_all(inputs: &[PathBuf]) -> Result<(Inspected<'_>, u64), BookError> {
 /// Pages and originals written so far into the temp package.
 struct Builder {
     tmp: PathBuf,
+    /// Held for the whole build, so the orphan sweep can tell a running ingest from a crashed
+    /// one. The OS releases it if the process dies.
+    lock: Option<std::fs::File>,
     page_count: usize,
     originals_count: usize,
     pages: Vec<PageEntry>,
@@ -206,12 +209,14 @@ impl Builder {
         ));
         std::fs::create_dir(&tmp).map_err(|e| io_error(&tmp, &e))?;
         let guard = TempDir(Some(tmp.clone()));
+        let lock = sweep::lock_ingest_dir(&tmp)?;
         for dir in ["pages", "ocr"] {
             let d = tmp.join(dir);
             std::fs::create_dir(&d).map_err(|e| io_error(&d, &e))?;
         }
         let builder = Self {
             tmp,
+            lock: Some(lock),
             page_count: opened.iter().map(|(_, i)| i.frames as usize).sum(),
             originals_count: opened.iter().filter(|(_, i)| i.needs_conversion).count(),
             pages: Vec::new(),
@@ -220,8 +225,10 @@ impl Builder {
         Ok((builder, guard))
     }
 
-    /// Copy `path` into `originals/` and record it. Returns the new source id.
-    fn add_original(&mut self, path: &Path, info: &Inspection) -> Result<String, BookError> {
+    /// Write the original into `originals/` from the bytes that were inspected, and record
+    /// it. Returns the new source id.
+    fn add_original(&mut self, path: &Path, source: &convert::Source) -> Result<String, BookError> {
+        let info = &source.info;
         let n = numbered(self.sources.len(), self.originals_count);
         let ext = path
             .extension()
@@ -231,8 +238,8 @@ impl Builder {
         let rel = format!("originals/{n}.{ext}");
         let dest = self.tmp.join(&rel);
         std::fs::create_dir_all(self.tmp.join("originals")).map_err(|e| io_error(&dest, &e))?;
-        std::fs::copy(path, &dest).map_err(|e| io_error(path, &e))?;
-        let (sha256, byte_size) = sha256_file(&dest)?;
+        std::fs::write(&dest, source.bytes()).map_err(|e| io_error(&dest, &e))?;
+        let (sha256, byte_size) = (sha256_bytes(source.bytes()), source.bytes().len() as u64);
         let id = format!("src-{n}");
         self.sources.push(SourceEntry {
             id: id.clone(),
@@ -248,23 +255,17 @@ impl Builder {
     /// Write one display page and record it.
     fn add_page(
         &mut self,
-        path: &Path,
+        input: &convert::Source,
         display: &DisplayImage,
         source: Option<PageSource>,
     ) -> Result<(), BookError> {
         let index = self.pages.len();
         let rel = format!("pages/{}.{}", numbered(index, self.page_count), display.ext);
         let dest = self.tmp.join(&rel);
-        let (sha256, byte_size) = match &display.bytes {
-            Some(bytes) => {
-                std::fs::write(&dest, bytes).map_err(|e| io_error(&dest, &e))?;
-                (sha256_bytes(bytes), bytes.len() as u64)
-            }
-            None => {
-                std::fs::copy(path, &dest).map_err(|e| io_error(path, &e))?;
-                sha256_file(&dest)?
-            }
-        };
+        // A page copied as-is is written from the inspected bytes, never re-read from disk.
+        let bytes = display.bytes.as_deref().unwrap_or(input.bytes());
+        std::fs::write(&dest, bytes).map_err(|e| io_error(&dest, &e))?;
+        let (sha256, byte_size) = (sha256_bytes(bytes), bytes.len() as u64);
         self.pages.push(PageEntry {
             index: index as u32,
             file: rel,
@@ -289,7 +290,7 @@ impl Builder {
             });
         }
         let source_id = if info.needs_conversion {
-            Some(self.add_original(path, info)?)
+            Some(self.add_original(path, &source)?)
         } else {
             None
         };
@@ -299,13 +300,13 @@ impl Builder {
                 source_ref: id.clone(),
                 frame: (info.frames > 1).then_some(frame),
             });
-            self.add_page(path, &display, page_source)?;
+            self.add_page(&source, &display, page_source)?;
         }
         Ok(())
     }
 
     /// Write `meta.json` and `annotations.json`, validating exactly what is written (A1).
-    fn finish(self, opts: &CreateOptions) -> Result<PathBuf, BookError> {
+    fn finish(mut self, opts: &CreateOptions) -> Result<PathBuf, BookError> {
         let now = now_rfc3339();
         let meta = BookMeta {
             format_version: CURRENT_FORMAT_VERSION,
@@ -331,6 +332,11 @@ impl Builder {
             let p = self.tmp.join(name);
             std::fs::write(&p, body).map_err(|e| io_error(&p, &e))?;
         }
+        // Release and remove the lock last: the package must not ship it, and Windows cannot
+        // rename a directory with a file open inside it.
+        drop(self.lock.take());
+        let lock_path = self.tmp.join(sweep::INGEST_LOCK);
+        std::fs::remove_file(&lock_path).map_err(|e| io_error(&lock_path, &e))?;
         Ok(self.tmp)
     }
 }

@@ -688,3 +688,19 @@ fn jp2_header_size_is_read_and_bounded() {
     assert_eq!(jp2_dimensions(b"nothing here"), None);
     assert_eq!(jp2_dimensions(&j2k[..10]), None, "truncated SIZ");
 }
+
+#[test]
+fn contents_must_match_the_extension() {
+    let d = Dir::new("renamed");
+    // A TIFF renamed .png would otherwise be copied as a "PNG" the webview cannot show.
+    let p = d.file("scan.png", &tiff(&[picture()], None));
+    match inspect(&p) {
+        Err(ConvertError::UnreadableFile(r)) => {
+            assert!(r.contains("Tiff") && r.contains("Png"), "{r}")
+        }
+        other => panic!("expected a format mismatch, got {other:?}"),
+    }
+    // `.jpeg` and `.tiff` spellings still match their contents.
+    assert!(inspect(&d.file("a.jpeg", &jpeg(&picture()))).is_ok());
+    assert!(inspect(&d.file("a.tiff", &tiff(&[picture()], None))).is_ok());
+}

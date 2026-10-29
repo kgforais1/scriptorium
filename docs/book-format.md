@@ -182,7 +182,8 @@ ingest pipeline returns on failure.
 | **Storage default** | Copy page bytes into `pages/`. Symlinks are rejected. `storage: "referenced"` is reserved and NOT implemented in M1. | — |
 | **Source collisions** | If two source files map to the same destination stem, including case-insensitive match on APFS/NTFS (e.g. `1.jpg` + `1.JPG`), ingest fails — never silently overwrite. | `DuplicatePageStem` |
 | **Atomic write** | Write to a temp dir under the destination parent → validate → rename into place. If a destination book id already exists, ingest fails. | `DestinationExists` |
-| **Orphan cleanup** | On startup and before ingest, delete orphaned `.ingest-tmp-*` and `*.scriptorium-tmp` entries under the library root, and `*.scriptorium-tmp` files inside each book, older than 1 hour. Younger entries may belong to a running ingest or save and are kept. | — |
+| **Input format** | A file's contents must match its extension (a TIFF named `.png` is refused), because the extension decides how the page is stored. | `UnreadableFile` |
+| **Orphan cleanup** | On startup and before ingest, delete `.ingest-tmp-*` directories older than 1 hour unless a running ingest holds their `.ingest.lock`, and `*.scriptorium-tmp` files older than 1 hour at the library root and inside each book. Only `.ingest-tmp-*` directories are ever deleted: a directory that merely ends in the temp suffix is treated as a book. | — |
 | **Checksums** | Compute `sha256` at ingest and store it in `meta.json`. `load_book` re-verifies the sha256 of each page file; drift is a hard failure. Skip re-verify only behind an explicit future flag — not in M1. | `ChecksumMismatch` |
 | **Free space** | Pre-flight check: refuse the copy if free space is less than `estimated_bytes × 1.1 + 50 MB` headroom. `estimated_bytes` is the total ingest will write: every display image plus every retained original (v2). | — |
 

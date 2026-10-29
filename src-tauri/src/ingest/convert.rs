@@ -132,11 +132,56 @@ pub struct Source {
     bytes: Vec<u8>,
 }
 
+impl Source {
+    /// The file's bytes as read by `open`. Ingest writes originals and copied pages from
+    /// these, so every page and original comes from the same read that was inspected.
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+/// The input format the bytes actually hold, from their signature.
+fn sniff(bytes: &[u8]) -> Option<InputKind> {
+    let at = |off: usize, sig: &[u8]| bytes.get(off..off + sig.len()) == Some(sig);
+    Some(if at(0, &[0xFF, 0xD8, 0xFF]) {
+        InputKind::Jpeg
+    } else if at(0, b"\x89PNG\r\n\x1a\n") {
+        InputKind::Png
+    } else if at(0, b"RIFF") && at(8, b"WEBP") {
+        InputKind::Webp
+    } else if at(0, b"BM") {
+        InputKind::Bmp
+    } else if at(0, b"GIF87a") || at(0, b"GIF89a") {
+        InputKind::Gif
+    } else if at(0, b"II*\0") || at(0, b"MM\0*") || at(0, b"II+\0") || at(0, b"MM\0+") {
+        InputKind::Tiff
+    } else if at(0, b"\0\0\0\x0cjP  \r\n\x87\n") || at(0, &[0xFF, 0x4F, 0xFF, 0x51]) {
+        InputKind::Jp2
+    } else {
+        return None;
+    })
+}
+
 /// Read and classify a file, deciding whether it must be converted. Decodes only what the
 /// rules need (a JPEG's component count, bit depth, ICC profile, orientation).
 pub fn open(path: &Path) -> Result<Source, ConvertError> {
     let kind = InputKind::from_path(path).ok_or(ConvertError::UnsupportedFormat)?;
     let bytes = std::fs::read(path).map_err(unreadable)?;
+    // The extension decides the format, so the contents must agree: a TIFF renamed `.png`
+    // would otherwise be copied as a "PNG" the webview cannot show.
+    match sniff(&bytes) {
+        Some(found) if found == kind => {}
+        Some(found) => {
+            return Err(unreadable(format!(
+                "the file is {found:?} but its extension says {kind:?}; rename it to match"
+            )))
+        }
+        None => {
+            return Err(unreadable(
+                "the file's contents are not a recognized image format",
+            ))
+        }
+    }
     let frames = match kind {
         InputKind::Tiff => decode::tiff_frame_count(&bytes)?,
         _ => 1,

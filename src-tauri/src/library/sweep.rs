@@ -10,10 +10,33 @@ pub const TMP_SUFFIX: &str = ".scriptorium-tmp";
 /// Only entries older than this are removed, so a concurrent ingest is never disturbed.
 pub const ORPHAN_AGE: Duration = Duration::from_secs(60 * 60);
 
-/// Delete orphaned temp entries under `library` older than `max_age`: ingest directories and
-/// stray temp files at the top level, and temp files a crashed save left inside a book.
-/// Returns how many were removed. Errors are ignored: a sweep must never block ingest or
-/// startup.
+/// Name of the lock file an ingest holds inside its temp directory while it runs.
+pub const INGEST_LOCK: &str = ".ingest.lock";
+
+/// Create and exclusively lock the ingest lock file in `dir`. Keep the returned file open for
+/// the whole build; the OS drops the lock if the process crashes.
+pub(crate) fn lock_ingest_dir(dir: &Path) -> Result<std::fs::File, super::BookError> {
+    let path = dir.join(INGEST_LOCK);
+    let file = std::fs::File::create(&path).map_err(|e| super::io_error(&path, &e))?;
+    file.lock().map_err(|e| super::io_error(&path, &e))?;
+    Ok(file)
+}
+
+/// True while another ingest holds `dir`'s lock. A missing lock file means the ingest died
+/// before taking it, so the directory is litter.
+fn ingest_running(dir: &Path) -> bool {
+    match std::fs::File::open(dir.join(INGEST_LOCK)) {
+        Ok(file) => file.try_lock().is_err(),
+        Err(_) => false,
+    }
+}
+
+/// Delete orphaned temp entries under `library` older than `max_age`. Directories are removed
+/// only when they are ingest temp dirs (`.ingest-tmp-*`), which a book id can never be, and only
+/// when no running ingest holds their lock. Stray temp files are removed at the top level and
+/// inside each book. A directory that merely ends in the temp suffix is treated as a book,
+/// whether or not its `meta.json` survives. Returns how many entries were removed. Errors are
+/// ignored: a sweep must never block ingest or startup.
 pub fn sweep_orphans(library: &Path, max_age: Duration) -> usize {
     let Ok(entries) = std::fs::read_dir(library) else {
         return 0;
@@ -24,25 +47,17 @@ pub fn sweep_orphans(library: &Path, max_age: Duration) -> usize {
         let Ok(kind) = entry.file_type() else {
             continue;
         };
-        // A finished book whose id happens to end in the suffix is a book, not litter. Book ids
-        // start with [a-z0-9], so an ingest temp dir (".ingest-tmp-…") is never mistaken for
-        // one, even after a crash left a meta.json inside it.
-        let is_book = kind.is_dir()
-            && !name.starts_with(TMP_PREFIX)
-            && entry.path().join("meta.json").is_file();
-        if !is_book && (name.starts_with(TMP_PREFIX) || name.ends_with(TMP_SUFFIX)) {
-            if !is_old(&entry, max_age) {
-                continue;
+        let path = entry.path();
+        if kind.is_dir() && name.starts_with(TMP_PREFIX) {
+            if is_old(&entry, max_age) && !ingest_running(&path) {
+                removed += usize::from(std::fs::remove_dir_all(&path).is_ok());
             }
-            let path = entry.path();
-            let ok = if kind.is_dir() {
-                std::fs::remove_dir_all(&path)
-            } else {
-                std::fs::remove_file(&path)
-            };
-            removed += usize::from(ok.is_ok());
+        } else if kind.is_file() && name.ends_with(TMP_SUFFIX) {
+            if is_old(&entry, max_age) {
+                removed += usize::from(std::fs::remove_file(&path).is_ok());
+            }
         } else if kind.is_dir() {
-            removed += sweep_book(&entry.path(), max_age);
+            removed += sweep_book(&path, max_age);
         }
     }
     removed
