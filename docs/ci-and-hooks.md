@@ -45,6 +45,7 @@ After the first green `CI` run, set default-branch ruleset required checks to:
 - `Secret scan (gitleaks)`
 - `SAST — Semgrep` (from Security workflow)
 - `Rust (src-tauri)` — **required from M0** once `src-tauri/` exists (`cargo fmt` / `clippy` / `test` / `check`; exact job name must match `ci.yml`)
+- `Rust (windows-latest)` and `Rust (macos-latest)` — the `rust-cross` matrix (`clippy --all-targets`, `test`). Not required yet; make them required once they have been green on a few PRs
 - `Type check (TypeScript)` — `pnpm install` + `tsc --noEmit`
 - `Dependency audit` — `pnpm audit --prod` + `cargo audit` (uses `src-tauri/.cargo/audit.toml`). Informational findings pass. The job fails closed on a vulnerability and when the audit did not complete: an advisory-database fetch failure, a command error, or exhausted registry retries.
 - `CodeQL` — GitHub **default setup** (`dynamic/github-code-scanning/codeql`). Already required by the branch ruleset as code scanning (alert threshold errors; security alerts high or higher), not a status-check context and not a workflow file

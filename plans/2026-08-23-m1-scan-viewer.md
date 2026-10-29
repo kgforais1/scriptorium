@@ -241,9 +241,10 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] Stop if G1–G6 from spike no longer hold
 - [ ] Close ADR-0001's open items: WebGL2 on WebView2 (Windows) and WebKitGTK (Linux), touch on
       real hardware, frame rate in WKWebView, and a process RSS sample
-- [ ] CI on Windows and macOS for the Rust crate (`cargo test`, clippy). Today every job is Linux,
-      so Windows path handling is untested and the two `sips` fixtures (CMYK with a profile,
-      JPEG 2000) skip. Known test gap until then
+- [ ] CI on Windows and macOS for the Rust crate (`cargo test`, clippy): the `rust-cross` job in
+      `ci.yml` (added 2026-10-29). Tick once both are green and marked required in the branch
+      ruleset. Until then Windows path handling is untested, and the two `sips` fixtures (CMYK
+      with a profile, JPEG 2000) run only on macOS
 
 ### Phase 1 — Book I/O (Rust)
 

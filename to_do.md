@@ -20,12 +20,9 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Unplanned / small
 
-- **Windows and macOS CI for Rust** — every CI job runs on `ubuntu-latest`, but the app must run
-  on Windows. Add a `cargo test` + clippy job on `windows-latest` (path rules, case-insensitive
-  NTFS, `\\?\` canonical paths, static C builds) and one on `macos-latest`, where the
-  `sips`-based CMYK-with-profile and JPEG 2000 tests actually run; on Linux they skip. The repo
-  is public, so standard runners are free; check run time against
-  [`policies/github-actions-usage.md`](policies/github-actions-usage.md) first. Tracked in the
+- **Windows and macOS CI for Rust** — the `rust-cross` job in `ci.yml` runs `cargo test` and
+  clippy on `windows-latest` and `macos-latest`. Remaining: get both green, then mark them
+  required in the branch ruleset. Tracked in the
   [M1 plan](plans/2026-08-23-m1-scan-viewer.md#phase-0--integration-gate-adr-already-done)
 
 ## Icebox
