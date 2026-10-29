@@ -96,14 +96,15 @@ fn opts(id: &str) -> CreateOptions {
     }
 }
 
-/// `1.jpg`, `2.tif` (three frames), `3.png`, `cover.bmp`, plus a stray text file.
+/// `1.jpg`, `2.TIF` (three frames), `3.png`, `cover (front).bmp`, plus a stray text file. The
+/// uppercase extension and the spaced name must never reach the package.
 fn mixed_folder(t: &Tmp) -> PathBuf {
     let src = t.dir("src");
     std::fs::write(src.join("3.png"), png(&picture(30))).unwrap();
-    std::fs::write(src.join("cover.bmp"), bmp(&picture(40))).unwrap();
+    std::fs::write(src.join("cover (front).bmp"), bmp(&picture(40))).unwrap();
     std::fs::write(src.join("1.jpg"), jpeg(&picture(10))).unwrap();
     std::fs::write(
-        src.join("2.tif"),
+        src.join("2.TIF"),
         tiff(&[picture(21), picture(22), picture(23)]),
     )
     .unwrap();
@@ -183,7 +184,11 @@ fn creates_a_v2_package_in_natural_order_with_originals() {
     parse_meta(&std::fs::read_to_string(book.join("meta.json")).unwrap()).unwrap();
     let loaded = load_book(&book).unwrap();
     assert_eq!(loaded.meta, meta);
-    assert!(loaded.page_path(5).unwrap().is_file());
+    let page = loaded.page_path(5).unwrap();
+    assert!(
+        page.is_file() && page.starts_with(&loaded.root),
+        "verified canonical path"
+    );
     assert!(!lib.read_dir().unwrap().any(|e| e
         .unwrap()
         .file_name()
@@ -424,7 +429,18 @@ fn progress_saves_atomically_and_upgrades_v1() {
         4,
         "a refused save leaves the file alone"
     );
-    assert!(!book.join("meta.json.scriptorium-tmp").exists());
+    let leftovers = book
+        .read_dir()
+        .unwrap()
+        .filter(|e| {
+            e.as_ref()
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".scriptorium-tmp")
+        })
+        .count();
+    assert_eq!(leftovers, 0, "no temp file left behind");
 
     // A v1 package (no originals) is upgraded to v2 on its first save.
     let v1 = t.dir("v1book");
@@ -451,12 +467,22 @@ fn sweep_removes_only_old_temp_entries() {
     std::fs::create_dir(lib.join(format!("{TMP_PREFIX}crashed"))).unwrap();
     std::fs::write(lib.join("meta.json.scriptorium-tmp"), "x").unwrap();
     std::fs::create_dir(lib.join("a-real-book")).unwrap();
+    std::fs::write(lib.join("a-real-book/meta.json"), "{}").unwrap();
+    std::fs::write(lib.join("a-real-book/meta.json.1-0.scriptorium-tmp"), "x").unwrap();
     assert_eq!(
         sweep_orphans(&lib, ORPHAN_AGE),
         0,
         "fresh temp entries may belong to a live ingest"
     );
-    assert_eq!(sweep_orphans(&lib, Duration::ZERO), 2);
+    assert_eq!(
+        sweep_orphans(&lib, Duration::ZERO),
+        3,
+        "two at the top, one inside the book"
+    );
+    assert!(
+        lib.join("a-real-book/meta.json").exists(),
+        "the book itself is untouched"
+    );
     let left: Vec<_> = lib
         .read_dir()
         .unwrap()

@@ -154,7 +154,9 @@ pub fn create_book_from_folder(
     check_duplicate_stems(&inputs)?;
     sort::sort_pages(&mut inputs);
 
-    // Inspect everything before writing anything, so a bad file fails fast.
+    // Inspect everything before writing anything, so a bad file fails fast. Only the
+    // inspection is kept: each file is read again when its pages are written, so memory
+    // holds one input at a time, not the whole folder.
     let mut opened = Vec::with_capacity(inputs.len());
     let mut estimated = 0u64;
     for path in &inputs {
@@ -170,7 +172,7 @@ pub fn create_book_from_folder(
         } else {
             size
         };
-        opened.push((path, source));
+        opened.push((path, source.info));
     }
     check_space(library, estimated)?;
 
@@ -191,15 +193,18 @@ pub fn create_book_from_folder(
         std::fs::create_dir(&d).map_err(|e| io_error(&d, &e))?;
     }
 
-    let page_count: usize = opened.iter().map(|(_, s)| s.info.frames as usize).sum();
-    let originals_count = opened
-        .iter()
-        .filter(|(_, s)| s.info.needs_conversion)
-        .count();
+    let page_count: usize = opened.iter().map(|(_, i)| i.frames as usize).sum();
+    let originals_count = opened.iter().filter(|(_, i)| i.needs_conversion).count();
     let mut pages = Vec::with_capacity(page_count);
     let mut sources = Vec::new();
-    for (path, source) in &opened {
-        let info = &source.info;
+    for (path, info) in &opened {
+        let source = convert::open(path).map_err(|e| unreadable(path, e))?;
+        if source.info != *info {
+            return Err(BookError::UnreadableFile {
+                file: path.to_path_buf(),
+                reason: "the file changed while the book was being created".into(),
+            });
+        }
         let source_id = if info.needs_conversion {
             let n = numbered(sources.len(), originals_count);
             let ext = path
@@ -284,8 +289,19 @@ pub fn create_book_from_folder(
     write("annotations.json", "[]\n")?;
 
     let dest = library.join(&opts.id);
+    // Re-check right before the rename: on POSIX, rename silently replaces an empty
+    // directory, so the name must still be free.
     check_destination(library, &opts.id)?;
-    std::fs::rename(&tmp_path, &dest).map_err(|e| io_error(&dest, &e))?;
+    std::fs::rename(&tmp_path, &dest).map_err(|e| {
+        // Another book took the name between the check and the rename.
+        if dest.exists() {
+            BookError::DestinationExists {
+                id: opts.id.clone(),
+            }
+        } else {
+            io_error(&dest, &e)
+        }
+    })?;
     std::mem::forget(guard);
     Ok(dest)
 }

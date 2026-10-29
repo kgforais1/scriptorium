@@ -20,12 +20,15 @@ pub struct LoadedBook {
     /// Canonical package directory.
     pub root: PathBuf,
     pub meta: BookMeta,
+    /// Canonical path of each page's display image, verified inside `root` at load.
+    page_paths: Vec<PathBuf>,
 }
 
 impl LoadedBook {
-    /// Absolute path of page `index`'s display image.
-    pub fn page_path(&self, index: usize) -> Option<PathBuf> {
-        self.meta.pages.get(index).map(|p| self.root.join(&p.file))
+    /// The verified canonical path of page `index`'s display image, as checked at load (A12).
+    /// Hand this to the asset protocol, never a fresh join of `meta.pages[i].file`.
+    pub fn page_path(&self, index: usize) -> Option<&Path> {
+        self.page_paths.get(index).map(PathBuf::as_path)
     }
 }
 
@@ -119,12 +122,22 @@ pub fn load_book(dir: &Path) -> Result<LoadedBook, BookError> {
         _ => io_error(&meta_path, &e),
     })?;
     let meta = parse_meta(&text)?;
+    let mut page_paths = Vec::with_capacity(meta.pages.len());
     for page in &meta.pages {
-        verify_file(&root, &page.file, page.byte_size, &page.sha256)?;
+        page_paths.push(verify_file(
+            &root,
+            &page.file,
+            page.byte_size,
+            &page.sha256,
+        )?);
     }
     for src in meta.sources.iter().flatten() {
         let path = verify_file(&root, &src.file, src.byte_size, &src.sha256)?;
-        // `frames` must match what the file itself reports.
+        // `frames` must match what the file itself reports. Formats ingest cannot decode yet
+        // (PDF before M1.5) are checked by checksum only.
+        if convert::InputKind::from_path(&path).is_none() {
+            continue;
+        }
         let found = convert::inspect(&path)
             .map_err(|e| invalid(format!("original {} cannot be read: {e}", src.file)))?
             .frames;
@@ -135,5 +148,9 @@ pub fn load_book(dir: &Path) -> Result<LoadedBook, BookError> {
             )));
         }
     }
-    Ok(LoadedBook { root, meta })
+    Ok(LoadedBook {
+        root,
+        meta,
+        page_paths,
+    })
 }

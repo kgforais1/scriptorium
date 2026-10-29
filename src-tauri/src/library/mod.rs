@@ -59,6 +59,10 @@ impl std::fmt::Display for BookError {
                 first.display(),
                 second.display()
             ),
+            Self::InsufficientDiskSpace { needed: 0, .. } => write!(
+                f,
+                "Not enough free space: the disk filled up while the book was being written."
+            ),
             Self::InsufficientDiskSpace { needed, available } => write!(
                 f,
                 "Not enough free space: the book needs about {} MB and {} MB is free.",
@@ -87,6 +91,12 @@ pub(crate) fn io_error(path: &Path, err: &std::io::Error) -> BookError {
     if err.kind() == std::io::ErrorKind::PermissionDenied {
         BookError::PermissionDenied {
             path: path.to_path_buf(),
+        }
+    } else if err.kind() == std::io::ErrorKind::StorageFull {
+        // The volume filled up mid-copy despite the preflight estimate.
+        BookError::InsufficientDiskSpace {
+            needed: 0,
+            available: 0,
         }
     } else {
         BookError::UnreadableFile {
@@ -132,10 +142,21 @@ pub(crate) fn now_rfc3339() -> String {
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into())
 }
 
-/// Write `bytes` to `path` atomically: a sibling temp file, fsync, then rename over.
+/// Write `bytes` to `path` atomically: a uniquely named sibling temp file, fsync, rename
+/// over, then fsync the directory.
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
     use std::io::Write;
-    let tmp = path.with_extension("json.scriptorium-tmp");
+    use std::sync::atomic::{AtomicU64, Ordering};
+    // A unique name keeps two overlapping saves (a page turn and the close flush) from
+    // sharing one temp file.
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let tmp = path.with_file_name(format!(
+        "{name}.{}-{}{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed),
+        sweep::TMP_SUFFIX
+    ));
     let mut f = std::fs::File::create(&tmp).map_err(|e| io_error(&tmp, &e))?;
     f.write_all(bytes).map_err(|e| io_error(&tmp, &e))?;
     f.sync_all().map_err(|e| io_error(&tmp, &e))?;
@@ -143,5 +164,11 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         io_error(path, &e)
-    })
+    })?;
+    // Sync the directory too, so the rename itself survives a crash.
+    #[cfg(unix)]
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::File::open(dir).and_then(|d| d.sync_all());
+    }
+    Ok(())
 }
