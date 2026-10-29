@@ -7,12 +7,12 @@ import {
 } from "./geometry";
 import { drawMesh, freeMesh, fullscreenTriangle, mesh, meshFrom, program, type Mesh, type Program } from "./gl";
 import {
-  IDENTITY, PI, clamp, easeInOut, easeOut, invert, lerp, lookAt, multiply, perspective, transform, type Mat4, type Vec3,
+  IDENTITY, PI, clamp, easeInOut, easeOut, invert, lerp, lookAt, multiply, perspective, type Mat4, type Vec3,
 } from "./math";
 import { decodePage, type DecodedPage } from "./pages";
 import type { Scene } from "./scene";
 import { FS_BAKE, VS_FULL, VS_LIT, applySceneUniforms, fsLit } from "./shaders";
-import { cornerAt, dragProgress, turnCompletes, type Drag } from "./gesture";
+import { cornerAt, dragProgress, pickLocal, turnCompletes, type Drag } from "./gesture";
 import { PageTextures, type TextureStats } from "./textures";
 
 export type EngineState = { spread: number; spreads: number; turning: boolean; loaded: number; stats: EngineStats };
@@ -34,14 +34,15 @@ export class FlipbookEngine {
   private book: Book;
   private nSlots: number;
   private nLeaf: number;
-  private lit: Program;
-  private bakeProg: Program;
-  private M: { board: Mesh; table: Mesh; ribbon: Mesh; ribbonSh: Mesh; leaf: Mesh; fsTri: WebGLVertexArrayObject; fsBuf: WebGLBuffer };
+  // Assigned in start(); dispose() tolerates a start that threw part way.
+  private lit!: Program;
+  private bakeProg!: Program;
+  private M!: { board: Mesh; table: Mesh; ribbon: Mesh; ribbonSh: Mesh; leaf: Mesh; fsTri: WebGLVertexArrayObject; fsBuf: WebGLBuffer };
   private leafV = new Float32Array(LEAF_FLOATS);
   private foot = new Float32Array(NV * 4);
   private bakeTex: WebGLTexture | null = null;
   private bakeFB: WebGLFramebuffer | null = null;
-  private pages: PageTextures;
+  private pages!: PageTextures;
   private cam = { VP: IDENTITY, inv: IDENTITY, eye: [0, 0, 5] as Vec3, k: 1 };
   private cssW = 1;
   private cssH = 1;
@@ -65,11 +66,15 @@ export class FlipbookEngine {
       first.bitmap.close();
       signal.throwIfAborted();
     }
+    let engine: FlipbookEngine | null = null;
     try {
-      return new FlipbookEngine(canvas, opts, first);
+      engine = new FlipbookEngine(canvas, opts, first);
+      engine.start(first);
+      return engine;
     } catch (err) {
-      // A failed start (no WebGL2, shader error) never reaches upload, so release the bitmap here.
+      // A failed start (no WebGL2, shader error) may never reach upload, and frees what it built.
       first.bitmap.close();
+      engine?.dispose();
       throw err;
     }
   }
@@ -82,7 +87,10 @@ export class FlipbookEngine {
     this.nSlots = opts.pages.length + 1 + ((opts.pages.length + 1) % 2);
     this.nLeaf = this.nSlots / 2 - 1;
     this.book = makeBook(first.height / first.width, this.nLeaf);
-    const b = this.book;
+  }
+
+  private start(first: DecodedPage) {
+    const gl = this.gl, b = this.book, opts = this.opts;
     this.lit = program(gl, VS_LIT, fsLit({ W: b.W, H: b.H, MRG: b.MRG, NV }));
     this.bakeProg = program(gl, VS_FULL, FS_BAKE);
     const [fsTri, fsBuf] = fullscreenTriangle(gl);
@@ -148,15 +156,16 @@ export class FlipbookEngine {
     cancelAnimationFrame(this.raf);
     for (const off of this.cleanup) off();
     const gl = this.gl;
-    this.pages.dispose();
-    if (this.bakeTex) gl.deleteTexture(this.bakeTex);
-    if (this.bakeFB) gl.deleteFramebuffer(this.bakeFB);
+    this.pages?.dispose();
+    gl.deleteTexture(this.bakeTex);
+    gl.deleteFramebuffer(this.bakeFB);
     this.freeStacks();
-    for (const m of [this.M.board, this.M.table, this.M.ribbon, this.M.ribbonSh, this.M.leaf]) freeMesh(gl, m);
-    gl.deleteVertexArray(this.M.fsTri);
-    gl.deleteBuffer(this.M.fsBuf);
-    gl.deleteProgram(this.lit.p);
-    gl.deleteProgram(this.bakeProg.p);
+    const M = this.M;
+    if (M) for (const m of [M.board, M.table, M.ribbon, M.ribbonSh, M.leaf]) freeMesh(gl, m);
+    gl.deleteVertexArray(M?.fsTri ?? null);
+    gl.deleteBuffer(M?.fsBuf ?? null);
+    gl.deleteProgram(this.lit?.p ?? null);
+    gl.deleteProgram(this.bakeProg?.p ?? null);
     // Do not call WEBGL_lose_context here: a StrictMode remount gets the same context back
     // from getContext, and a lost context would leave the remounted book blank.
   }
@@ -418,18 +427,9 @@ export class FlipbookEngine {
 
   // ---------- input ----------
 
-  private pickLocal(mx: number, my: number, zp = 0.07): [number, number] {
-    const nx = (mx / this.cssW) * 2 - 1, ny = 1 - (my / this.cssH) * 2;
-    let a = transform(this.cam.inv, [nx, ny, -1, 1]), b = transform(this.cam.inv, [nx, ny, 1, 1]);
-    a = a.map((v) => v / a[3]) as typeof a;
-    b = b.map((v) => v / b[3]) as typeof b;
-    const t = (zp - a[2]) / (b[2] - a[2]);
-    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-  }
-
   private local(e: PointerEvent) {
     const r = this.canvas.getBoundingClientRect();
-    return this.pickLocal(e.clientX - r.left, e.clientY - r.top);
+    return pickLocal(this.cam.inv, this.cssW, this.cssH, e.clientX - r.left, e.clientY - r.top);
   }
 
   private onMove = (e: PointerEvent) => {
@@ -508,7 +508,7 @@ export class FlipbookEngine {
       else this.animateTo(T.dir > 0 ? 0 : 1, 0.3, easeOut);
       return;
     }
-    const target = T.dir > 0 === turnCompletes(T, d, e.type === "pointerup") ? 1 : 0;
+    const target = (T.dir > 0) === turnCompletes(T, d, e.type === "pointerup") ? 1 : 0;
     this.animateTo(target, 0.3 + 0.55 * Math.abs(target - T.t), easeOut);
   };
 

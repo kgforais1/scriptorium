@@ -1,10 +1,21 @@
 // Pure gesture rules for the page-turn engine: hit areas, drag progress, and release outcome.
 // Coordinates are book-local world units (page width 1, gutter at x = 0).
 
-import { clamp } from "./math";
+import { clamp, transform, type Mat4 } from "./math";
 import type { Book, Turn } from "./geometry";
 
 export type Drag = { id: number; sx: number; sy: number; x0: number; lx: number; lt: number; vx: number; moved: boolean };
+
+// Casts a ray from a CSS pixel through the inverse view-projection and returns where it meets
+// the plane z = zp, in book-local x and y.
+export function pickLocal(inv: Mat4, cssW: number, cssH: number, mx: number, my: number, zp = 0.07): [number, number] {
+  const nx = (mx / cssW) * 2 - 1, ny = 1 - (my / cssH) * 2;
+  let a = transform(inv, [nx, ny, -1, 1]), b = transform(inv, [nx, ny, 1, 1]);
+  a = a.map((v) => v / a[3]) as typeof a;
+  b = b.map((v) => v / b[3]) as typeof b;
+  const t = (zp - a[2]) / (b[2] - a[2]);
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
 
 // The grab zone around each outer page corner, or null. cv is 0 for a top corner and 1 for a bottom one.
 export function cornerAt(book: Book, l: [number, number]) {

@@ -19,6 +19,7 @@ export class PageTextures {
   private failed = new Set<number>();
   private abort = new AbortController();
   private paperTex: WebGLTexture;
+  private maxTex: number;
 
   constructor(
     private gl: WebGL2RenderingContext,
@@ -30,6 +31,7 @@ export class PageTextures {
     private onError: (slot: number, err: unknown) => void,
   ) {
     this.paperTex = textureFrom(gl, composePage(null, boxAspect, 4, paper));
+    this.maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
   }
 
   get size() {
@@ -70,7 +72,7 @@ export class PageTextures {
   upload(slot: number, page: DecodedPage) {
     const gl = this.gl, t0 = performance.now();
     // Width is height / boxAspect, so a wide book must lower the height to keep both sides in the GPU limit.
-    const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+    const max = this.maxTex;
     const texH = Math.max(1, Math.floor(Math.min(TEX_HEIGHT, max, max * this.boxAspect)));
     const canvas = composePage(page, this.boxAspect, texH, this.paper);
     page.bitmap.close();

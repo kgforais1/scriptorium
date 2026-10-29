@@ -93,7 +93,8 @@ Interaction requirements from the plan:
 
 - **Max pages smoke-tested:** 202 (Dulac corpus, 102 spreads) in WKWebView. Twenty-five rapid
   turns kept the cache at its cap.
-- **Texture memory:** pages upload at 2048 px tall with mipmaps (about 15 MB each). The LRU
+- **Texture memory:** pages upload at 2048 px tall with mipmaps (about 15 MB each). A wide book or a
+  smaller GPU limit lowers the height so both sides fit `MAX_TEXTURE_SIZE`. The LRU
   keeps 12 textures around the open spread, about 180 MB of VRAM. The open spread and the
   turning leaf are never evicted.
 - **Upload cost:** fetch, decode, letterbox, and upload average 16–37 ms per page in Chromium
