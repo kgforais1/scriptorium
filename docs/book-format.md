@@ -198,8 +198,9 @@ bundle format is specified here before M5 builds it. Planned shape, provisional:
 - Import unpacks into an `.ingest-tmp-*` directory under the library root, so the orphan sweep
   covers a crashed import. It rejects entries with absolute paths, `..`, or symlinks, caps the
   unpacked size, and extracts only `meta.json`, `annotations.json`, `bundle.json`, the files
-  `meta.json` names, and files under `ocr/`. Anything else is rejected. Then `load_book` runs
-  before the book joins the library.
+  `meta.json` names, and files under `ocr/` (bounded only by the size cap, since `meta.json`
+  does not list them). Anything else is rejected. `bundle.json` is read for validation and
+  not kept in the package. Then `load_book` runs before the book joins the library.
 - A taken `id` is never overwritten. Importing under a new id rewrites both the directory name
   and `meta.json`'s `id`, and the new id follows the usual id rules.
 

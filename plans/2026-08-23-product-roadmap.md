@@ -143,10 +143,11 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Bookshelf (library home): an inventory of every book built on this machine, as a grid or
       list with cover thumbnail, title, page count, and reading progress. It scans the library
       root (`<app-data>/books/`) and reads each `meta.json`; a cached index speeds startup but the
-      folders stay the source of truth, so a book copied in by hand still appears. A package
-      that fails to load is listed as damaged with its `BookError` message, never hidden.
-      Full `load_book` re-hashes every file, so the shelf reads `meta.json` only and keys its
-      cache on file size and mtime; a book is fully verified when it is opened
+      folders stay the source of truth, so a book copied in by hand still appears. Full
+      `load_book` re-hashes every file, so the shelf reads and validates `meta.json` only. A
+      book whose `meta.json` is missing or invalid is listed as damaged with its `BookError`
+      message, never hidden; checksum drift is caught when the book is opened. The cache key is
+      `meta.json`'s size and mtime plus the book directory's mtime (files added or removed)
 - [ ] Create / import / remove books; remove asks first and moves the package to the OS trash
 - [ ] Export a built book as a single `.scriptorium` file: a zip of the package folder, stored
       uncompressed because pages are already compressed. Spec the bundle in
