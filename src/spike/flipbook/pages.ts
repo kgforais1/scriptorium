@@ -7,7 +7,8 @@ export type DecodedPage = { bitmap: ImageBitmap; width: number; height: number }
 
 export async function decodePage(url: string, signal: AbortSignal): Promise<DecodedPage> {
   const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`page fetch failed: ${res.status} ${url}`);
+  // The URL holds a local path, so the error carries only the status.
+  if (!res.ok) throw new Error(`page fetch failed: HTTP ${res.status}`);
   const bitmap = await createImageBitmap(await res.blob());
   if (signal.aborted) {
     bitmap.close();

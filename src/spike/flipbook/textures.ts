@@ -76,7 +76,14 @@ export class PageTextures {
     const texH = Math.max(1, Math.floor(Math.min(TEX_HEIGHT, max, max * this.boxAspect)));
     const canvas = composePage(page, this.boxAspect, texH, this.paper);
     page.bitmap.close();
+    // Clear stale error flags, then reject an upload the GPU refused instead of caching it.
+    while (gl.getError() !== gl.NO_ERROR);
     const tex = textureFrom(gl, canvas);
+    const glErr = gl.getError();
+    if (glErr !== gl.NO_ERROR) {
+      gl.deleteTexture(tex);
+      throw new Error(`texture upload failed: GL error 0x${glErr.toString(16)}`);
+    }
     const ms = performance.now() - t0, s = this.stats;
     s.uploads++;
     s.lastUploadMs = ms;

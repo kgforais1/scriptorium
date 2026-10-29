@@ -8,6 +8,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
 - [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) — engine per [ADR-0001](docs/adr/0001-flipbook-engine.md); acceptance A1–A13
+- [M1 Phase 0 engine gate](plans/2026-08-23-m1-scan-viewer.md#phase-0--integration-gate-adr-already-done) — ADR-0001 open items: Windows/Linux webviews, real touch, WKWebView fps, RSS
 - [M0.5 harness follow-ups](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri-scaffold--when-app-code-exists) — TS lint, coverage gates, S9–S11
 
 ## Active plans

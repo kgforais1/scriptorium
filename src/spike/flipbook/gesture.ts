@@ -20,7 +20,8 @@ export function pickLocal(inv: Mat4, cssW: number, cssH: number, mx: number, my:
 // The grab zone around each outer page corner, or null. cv is 0 for a top corner and 1 for a bottom one.
 export function cornerAt(book: Book, l: [number, number]) {
   const ax = Math.abs(l[0]), ay = Math.abs(l[1]), h2 = book.H / 2;
-  if (ax > 0.8 && ax < 1.08 && ay > h2 - 0.2 && ay < h2 + 0.06) return { side: Math.sign(l[0]), cv: l[1] < 0 ? 1 : 0 };
+  // The zone reaches 0.2 in from the head or tail, but never past the middle of a short page.
+  if (ax > 0.8 && ax < 1.08 && ay > Math.max(h2 - 0.2, h2 / 2) && ay < h2 + 0.06) return { side: Math.sign(l[0]), cv: l[1] < 0 ? 1 : 0 };
   return null;
 }
 

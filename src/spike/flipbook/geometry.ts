@@ -270,7 +270,8 @@ function catmull(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: number): Vec3 {
 
 // Ribbon bookmark: runs down the gutter, out of the tail of the block, and onto the desk.
 export function ribbonMesh(b: Book, width: number): MeshData & { len: number } {
-  const YB = b.H / 2 + b.MRG, top = -b.H / 2 + 0.19;
+  // The ribbon starts 0.19 above the tail, clamped onto the board for very short pages.
+  const YB = b.H / 2 + b.MRG, top = Math.min(-b.H / 2 + 0.19, b.H / 2);
   const pts: Vec3[] = [
     [0.003, top, b.ZG - 0.014], [0.004, top - 0.16, b.ZG - 0.01], [0.006, -YB + 0.033, b.BT + 0.004],
     [0.009, -YB + 0.006, b.BT + 0.001], [0.013, -YB - 0.006, 0.02], [0.018, -YB - 0.016, 0.0035],

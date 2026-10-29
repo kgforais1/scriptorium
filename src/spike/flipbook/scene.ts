@@ -43,6 +43,12 @@ function vec<N extends 2 | 3>(v: unknown, n: N, path: string): N extends 2 ? [nu
   return v.map((x, i) => num(x, `${path}[${i}]`)) as N extends 2 ? [number, number] : Rgb;
 }
 
+function nonNegative(v: unknown, path: string): number {
+  const n = num(v, path);
+  if (n < 0) throw new SceneError(`${path}: must not be negative`);
+  return n;
+}
+
 function unit(v: unknown, path: string): number {
   const n = num(v, path);
   if (n < 0 || n > 1) throw new SceneError(`${path}: must be between 0 and 1`);
@@ -81,14 +87,14 @@ export function parseScene(raw: unknown): Scene {
   const leather = obj(m.coverLeather, "material.coverLeather");
   const desk = obj(m.desk, "material.desk");
   const fov = num(cam.fovDegrees, "camera.fovDegrees");
-  if (fov <= 1 || fov >= 120) throw new SceneError("camera.fovDegrees: must be between 1 and 120");
+  if (fov < 1 || fov > 120) throw new SceneError("camera.fovDegrees: must be between 1 and 120");
   return {
     skin: str(s.skin, "skin"),
     camera: { fovDegrees: fov },
     background: { srgb: vec(bg.srgb, 3, "background.srgb") },
     light: parseLight(s.light),
     ambient: vec(s.ambient, 3, "ambient"),
-    exposure: num(s.exposure, "exposure"),
+    exposure: nonNegative(s.exposure, "exposure"),
     vignette: unit(s.vignette, "vignette"),
     material: {
       coverLeather: {

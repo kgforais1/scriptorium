@@ -215,6 +215,8 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] Confirm ADR library still loads in current shell
 - [ ] Complete asset-protocol checklist above (macOS required; Windows if available)
 - [ ] Stop if G1–G6 from spike no longer hold
+- [ ] Close ADR-0001's open items: WebGL2 on WebView2 (Windows) and WebKitGTK (Linux), touch on
+      real hardware, frame rate in WKWebView, and a process RSS sample
 
 ### Phase 1 — Book I/O (Rust)
 

@@ -8,8 +8,10 @@ corpus="$root/tmp/fixtures/corpus"
 out="$root/tmp/fixtures/spike-pages"
 dulac="$corpus/dulac-picture-book/jpg"
 goblin="$corpus/princess-and-goblin/jpg"
-for d in "$dulac" "$goblin"; do
-  [[ -d "$d" ]] || { echo "missing corpus: $d (see tests/fixtures/README.md)" >&2; exit 1; }
+# Check every input before deleting the previous set, so a failed run keeps the old pages.
+command -v sips >/dev/null || { echo "sips not found (this script needs macOS)" >&2; exit 1; }
+for f in "$dulac"/{0011,0020,0027,0035,0039,0049,0061}.jpg "$goblin"/{0012,0020,0030}.jpg; do
+  [[ -f "$f" ]] || { echo "missing scan: $f (see tests/fixtures/README.md)" >&2; exit 1; }
 done
 rm -rf "$out" && mkdir -p "$out"
 cp "$dulac/0011.jpg" "$out/00.jpg"

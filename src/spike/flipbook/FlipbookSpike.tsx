@@ -42,6 +42,7 @@ export default function FlipbookSpike() {
   const [error, setError] = useState<string | null>(null);
   const [mountKey, setMountKey] = useState(0);
   const sceneRef = useRef(sceneId);
+  const startFailed = useRef(false);
   sceneRef.current = sceneId;
 
   // One engine per mount. StrictMode runs this effect twice in development; the first engine is
@@ -51,6 +52,8 @@ export default function FlipbookSpike() {
     const ac = new AbortController();
     let engine: FlipbookEngine | null = null;
     setError(null);
+    setState(null);
+    startFailed.current = false;
     (async () => {
       const pages = await listPages();
       ac.signal.throwIfAborted();
@@ -64,7 +67,9 @@ export default function FlipbookSpike() {
       if (sceneRef.current !== startScene) engine.setScene(sceneFor(sceneRef.current));
       (window as unknown as { __flipbook?: FlipbookEngine }).__flipbook = engine;
     })().catch((err) => {
-      if (!ac.signal.aborted) setError(String(err?.message ?? err));
+      if (ac.signal.aborted) return;
+      startFailed.current = true;
+      setError(String(err?.message ?? err));
     });
     return () => {
       ac.abort();
@@ -74,7 +79,11 @@ export default function FlipbookSpike() {
   }, [mountKey]);
 
   useEffect(() => {
-    if (!engineRef.current) return;
+    // After a failed start (for example an unknown ?scene=), picking a scene retries the start.
+    if (!engineRef.current) {
+      if (startFailed.current) setMountKey((k) => k + 1);
+      return;
+    }
     try {
       engineRef.current.setScene(sceneFor(sceneId));
     } catch (err) {
