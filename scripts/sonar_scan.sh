@@ -77,7 +77,7 @@ fi
 # The parsed-URL check lives in sonar_issues.py so both scripts agree. SONAR_ALLOW_REMOTE is
 # read only from the exported environment, never from .env.
 if ! SONAR_HOST_URL="$SONAR_HOST_URL" "$PYTHON" "$ROOT_DIR/scripts/sonar_issues.py" --check-host; then
-  echo "sonar_scan: SONAR_HOST_URL is not loopback; export SONAR_ALLOW_REMOTE=1 and use https to override." >&2
+  echo "sonar_scan: SONAR_HOST_URL must be a loopback URL with no query or fragment, or https with SONAR_ALLOW_REMOTE=1 exported." >&2
   exit 1
 fi
 
