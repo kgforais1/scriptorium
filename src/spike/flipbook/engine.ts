@@ -56,7 +56,10 @@ export class FlipbookEngine {
   static async create(canvas: HTMLCanvasElement, opts: EngineOptions, signal: AbortSignal): Promise<FlipbookEngine> {
     if (!opts.pages.length) throw new Error("no pages to show");
     const first = await decodePage(opts.pages[0], signal);
-    signal.throwIfAborted();
+    if (signal.aborted) {
+      first.bitmap.close();
+      signal.throwIfAborted();
+    }
     return new FlipbookEngine(canvas, opts, first);
   }
 
@@ -107,6 +110,7 @@ export class FlipbookEngine {
   goTo(spread: number) {
     const s = clamp(Math.round(spread), 0, this.nLeaf);
     if (s === this.K || this.turn) return;
+    this.queue = 0;
     const dir = Math.sign(s - this.K) as 1 | -1;
     if (Math.abs(s - this.K) > 1) {
       this.K = s - dir;
@@ -120,7 +124,7 @@ export class FlipbookEngine {
   setScene(scene: Scene) {
     this.opts = { ...this.opts, scene };
     this.pages.setPaper(scene.material.paper);
-    this.bake();
+    this.layout();
     this.prefetch();
     this.dirty = true;
   }
@@ -391,6 +395,11 @@ export class FlipbookEngine {
   private drainQueue() {
     if (this.queue === 0) return;
     const d = Math.sign(this.queue) as 1 | -1;
+    // A step past either end of the book is dropped, along with the rest of the queue.
+    if ((d > 0 && this.K >= this.nLeaf) || (d < 0 && this.K <= 0)) {
+      this.queue = 0;
+      return;
+    }
     this.queue -= d;
     this.go(d, 0.75);
   }
@@ -466,7 +475,8 @@ export class FlipbookEngine {
       const T = this.beginTurn(c.side > 0 ? 1 : -1, "peek", c.cv);
       if (T) T.pkT = 1;
     } else if (this.turn?.kind === "peek") {
-      this.turn.pkT = c && this.turn.dir === c.side ? 1 : 0;
+      // Once navigation has queued a step, the peek must settle; hovering cannot re-arm it.
+      this.turn.pkT = this.queue === 0 && c && this.turn.dir === c.side ? 1 : 0;
     }
   };
 

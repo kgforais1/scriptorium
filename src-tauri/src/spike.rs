@@ -1,5 +1,5 @@
-//! Pre-M1 flipbook spike: lists a folder of page scans for the webview and admits that folder
-//! to the asset protocol scope. Debug builds only. M1 replaces this with real book loading.
+//! Pre-M1 flipbook spike: lists a folder of page scans for the webview and admits those
+//! files to the asset protocol scope. Debug builds only. M1 replaces this with real book loading.
 
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
@@ -33,9 +33,11 @@ pub fn spike_pages(app: AppHandle) -> Result<Vec<String>, String> {
         })
         .collect();
     pages.sort();
-    app.asset_protocol_scope()
-        .allow_directory(&dir, false)
-        .map_err(|e| e.to_string())?;
+    // Admit only the listed images, not every file in the folder.
+    let scope = app.asset_protocol_scope();
+    for page in &pages {
+        scope.allow_file(page).map_err(|e| e.to_string())?;
+    }
     Ok(pages
         .into_iter()
         .map(|p| p.to_string_lossy().into_owned())

@@ -108,10 +108,13 @@ Interaction requirements from the plan:
 
 The spike is throwaway. M1 keeps the geometry, shaders, and scene loader, and rewrites the rest:
 
+- Replace the dev-only spike entry in `src/App.tsx`. Release builds show the placeholder shell.
 - Move the code to `src/features/reader/`, and replace the spike harness with E's chrome
   (header, bottom bar with thumbnail scrubber, notes panel) driven by `tokens.json`.
 - Feed pages from the book package (`meta.json`) instead of the spike folder command
-  (`spike_pages`, debug builds only). Scope the asset protocol to the opened book.
+  (`spike_pages`, debug builds only, which admits only the listed files). Scope the asset
+  protocol to the opened book. The `protocol-asset` feature and `assetProtocol.enable` ship in
+  every build today with an empty static scope.
 - Decode off the main thread (worker plus `OffscreenCanvas`) and pick the texture size from
   the display, not a fixed 2048.
 - Handle `webglcontextlost` and `webglcontextrestored`. The spike ignores them.
@@ -154,6 +157,10 @@ pnpm tauri dev                   # WKWebView, pages via the asset protocol
 pnpm dev                         # browser only, http://localhost:1420
 SCRIPTORIUM_SPIKE_DIR="$PWD/tmp/fixtures/corpus/dulac-picture-book/jpg" pnpm tauri dev   # 202-page smoke
 ```
+
+The fixture script needs the Dulac and Princess corpora in `tmp/fixtures/corpus/` (see
+`tests/fixtures/README.md`). `pnpm tauri dev` starts its own Vite on port 1420, so stop any
+other `pnpm dev` first. The spike shows only in dev builds.
 
 Arrow keys or Page Up / Page Down turn the page. Drag a page to turn it by hand. The bar's
 **Scene** button swaps to the daylight placeholder, and **Remount** disposes and recreates the engine.

@@ -18,12 +18,14 @@ background popups, and optional embeddings. **Menu, not mandate** — pick the m
 | Hotspots on media | ThingLink and similar commercial tools | Vendor lock-in; not scan-folder → book pipeline |
 | OCR + search on scans | Tesseract, PaddleOCR, cloud OCR; elk-flipbook OCR fallback | Authoring + library + long-press lore popups still custom |
 
-**Practical takeaway:** reuse **page-flip** + **OCR** + **annotation/region** libraries; own the
+**Practical takeaway:** reuse **OCR** + **annotation/region** libraries; own the page turn (Scriptorium
+chose its own WebGL2 engine over page-flip, see [ADR-0001](../docs/adr/0001-flipbook-engine.md)), the
 **authoring model** (books, regions, lore), **library**, and **ingest** (folder → ordered pages).
 
 Two product architectures both fit; choose deliberately later:
 
-1. **Flipbook-first** — StPageFlip (or wrapper) over pre-rendered page images; overlays for hotspots.
+1. **Flipbook-first** — a page-turn renderer over pre-rendered page images; overlays for hotspots.
+   Scriptorium took this path with its own WebGL2 engine ([ADR-0001](../docs/adr/0001-flipbook-engine.md)).
 2. **IIIF-first** — Presentation manifests + OpenSeadragon/Mirador-class viewers; book-mode paging;
    W3C Web Annotations for regions. Better for GLAM interoperability; weaker “paper book” feel
    unless you layer a flip UI on top.

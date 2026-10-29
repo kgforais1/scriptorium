@@ -52,7 +52,7 @@ Lamplit ships in M1; Gallery Daylight (mockup B) follows in M7. Detail:
 - [x] Rust CI: fmt / clippy -D warnings / test / check; commit `Cargo.lock`
 - [x] `.envrc.example`, agent tooling contract
 
-### M0.25 — Flipbook spike (blocks M1)
+### M0.25 — Flipbook spike (complete)
 
 **Completed plan:** [`2026-08-23-pre-m1-flipbook-spike.md`](archive/completed/2026-08-23-pre-m1-flipbook-spike.md)
 

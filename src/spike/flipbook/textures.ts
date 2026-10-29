@@ -97,6 +97,8 @@ export class PageTextures {
     this.paperTex = textureFrom(this.gl, composePage(null, this.boxAspect, 4, paper));
     for (const e of this.tex.values()) this.gl.deleteTexture(e.tex);
     this.tex.clear();
+    this.stats.textures = 0;
+    this.stats.textureMB = 0;
   }
 
   dispose() {

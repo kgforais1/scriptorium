@@ -9,6 +9,10 @@ export async function decodePage(url: string, signal: AbortSignal): Promise<Deco
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error(`page fetch failed: ${res.status} ${url}`);
   const bitmap = await createImageBitmap(await res.blob());
+  if (signal.aborted) {
+    bitmap.close();
+    signal.throwIfAborted();
+  }
   return { bitmap, width: bitmap.width, height: bitmap.height };
 }
 

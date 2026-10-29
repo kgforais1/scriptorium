@@ -7,7 +7,7 @@ Status: complete
 Linked issue/PR: n/a
 Depends on: harness CI/hooks already on `main`
 Blocks: [`../../2026-08-23-m1-scan-viewer.md`](../../2026-08-23-m1-scan-viewer.md)
-Parallel OK: [`../../2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md) after Phase 1 window exists
+Parallel OK: [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md) after Phase 1 window exists
 
 ## Goal
 
@@ -144,6 +144,6 @@ book-format on EXIF/XMP: M1 copies bytes as-is; stripping/policy deferred but do
 ## Related
 
 - Roadmap: [`../../2026-08-23-product-roadmap.md`](../../2026-08-23-product-roadmap.md)
-- Spike: [`../../2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md)
+- Spike: [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md)
 - Next product: [`../../2026-08-23-m1-scan-viewer.md`](../../2026-08-23-m1-scan-viewer.md)
 - Superseded draft: [`../superseded/2026-08-23-mvp-scaffold.md`](../superseded/2026-08-23-mvp-scaffold.md)

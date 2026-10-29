@@ -7,10 +7,14 @@ import { FlipbookEngine, type EngineState } from "./engine";
 import { parseScene, type Scene } from "./scene";
 import daylightRaw from "./scenes/daylight-placeholder.json";
 
-const SCENES: Record<string, Scene> = {
-  lamplit: parseScene(lamplitRaw),
-  daylight: parseScene(daylightRaw),
-};
+const RAW_SCENES: Record<string, unknown> = { lamplit: lamplitRaw, daylight: daylightRaw };
+const parsed: Record<string, Scene> = {};
+
+// Parsed on first use, so a malformed scene file reaches the error banner instead of breaking the import.
+function sceneFor(id: string): Scene {
+  if (!(id in RAW_SCENES)) throw new Error(`unknown scene ${id}`);
+  return (parsed[id] ??= parseScene(RAW_SCENES[id]));
+}
 
 async function listPages(): Promise<string[]> {
   if (isTauri()) {
@@ -48,8 +52,7 @@ export default function FlipbookSpike() {
     (async () => {
       const pages = await listPages();
       ac.signal.throwIfAborted();
-      const scene = SCENES[sceneRef.current];
-      if (!scene) throw new Error(`unknown scene ${sceneRef.current}`);
+      const scene = sceneFor(sceneRef.current);
       engine = await FlipbookEngine.create(canvas, { pages, scene, onState: setState }, ac.signal);
       if (ac.signal.aborted) return engine.dispose();
       engineRef.current = engine;
@@ -65,8 +68,12 @@ export default function FlipbookSpike() {
   }, [mountKey]);
 
   useEffect(() => {
-    const s = SCENES[sceneId];
-    if (s) engineRef.current?.setScene(s);
+    if (!engineRef.current) return;
+    try {
+      engineRef.current.setScene(sceneFor(sceneId));
+    } catch (err) {
+      setError(String((err as Error)?.message ?? err));
+    }
   }, [sceneId]);
 
   const st = state?.stats;
