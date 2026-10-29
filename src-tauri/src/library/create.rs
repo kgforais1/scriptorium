@@ -9,7 +9,7 @@ use crate::book_format::{
     validate_book_id, BookMeta, PageEntry, PageSource, RenderMode, SourceEntry, StorageMode,
     CURRENT_FORMAT_VERSION,
 };
-use crate::ingest::convert::{self, InputKind};
+use crate::ingest::convert::{self, DisplayImage, InputKind, Inspection};
 use std::path::{Path, PathBuf};
 
 /// Headroom the free-space check keeps on top of the estimate (plan: 50 MB).
@@ -137,6 +137,207 @@ impl Drop for TempDir {
     }
 }
 
+/// Each input path with its inspection, in page order.
+type Inspected<'a> = Vec<(&'a Path, Inspection)>;
+
+/// Inspect every input before writing anything, so a bad file fails fast. Only the
+/// inspection is kept: each file is read again when its pages are written, so memory holds
+/// one input at a time, not the whole folder. Returns the inspections and a size estimate.
+fn inspect_all(inputs: &[PathBuf]) -> Result<(Inspected<'_>, u64), BookError> {
+    let mut opened = Vec::with_capacity(inputs.len());
+    let mut estimated = 0u64;
+    for path in inputs {
+        // Open first so an OS refusal is reported as PermissionDenied, not a decode failure.
+        std::fs::File::open(path).map_err(|e| io_error(path, &e))?;
+        let info = convert::open(path).map_err(|e| unreadable(path, e))?.info;
+        let size = std::fs::metadata(path)
+            .map_err(|e| io_error(path, &e))?
+            .len();
+        // A converted file keeps its original and adds a display copy of similar size.
+        estimated += if info.needs_conversion {
+            size * 2
+        } else {
+            size
+        };
+        opened.push((path.as_path(), info));
+    }
+    Ok((opened, estimated))
+}
+
+/// Pages and originals written so far into the temp package.
+struct Builder {
+    tmp: PathBuf,
+    page_count: usize,
+    originals_count: usize,
+    pages: Vec<PageEntry>,
+    sources: Vec<SourceEntry>,
+}
+
+impl Builder {
+    fn new(
+        library: &Path,
+        id: &str,
+        opened: &[(&Path, Inspection)],
+    ) -> Result<(Self, TempDir), BookError> {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let tmp = library.join(format!(
+            "{}{id}-{}-{nanos}",
+            sweep::TMP_PREFIX,
+            std::process::id()
+        ));
+        std::fs::create_dir(&tmp).map_err(|e| io_error(&tmp, &e))?;
+        let guard = TempDir(Some(tmp.clone()));
+        for dir in ["pages", "ocr"] {
+            let d = tmp.join(dir);
+            std::fs::create_dir(&d).map_err(|e| io_error(&d, &e))?;
+        }
+        let builder = Self {
+            tmp,
+            page_count: opened.iter().map(|(_, i)| i.frames as usize).sum(),
+            originals_count: opened.iter().filter(|(_, i)| i.needs_conversion).count(),
+            pages: Vec::new(),
+            sources: Vec::new(),
+        };
+        Ok((builder, guard))
+    }
+
+    /// Copy `path` into `originals/` and record it. Returns the new source id.
+    fn add_original(&mut self, path: &Path, info: &Inspection) -> Result<String, BookError> {
+        let n = numbered(self.sources.len(), self.originals_count);
+        let ext = path
+            .extension()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_ascii_lowercase();
+        let rel = format!("originals/{n}.{ext}");
+        let dest = self.tmp.join(&rel);
+        std::fs::create_dir_all(self.tmp.join("originals")).map_err(|e| io_error(&dest, &e))?;
+        std::fs::copy(path, &dest).map_err(|e| io_error(path, &e))?;
+        let (sha256, byte_size) = sha256_file(&dest)?;
+        let id = format!("src-{n}");
+        self.sources.push(SourceEntry {
+            id: id.clone(),
+            file: rel,
+            format: info.kind.source_format(),
+            frames: info.frames,
+            byte_size,
+            sha256,
+        });
+        Ok(id)
+    }
+
+    /// Write one display page and record it.
+    fn add_page(
+        &mut self,
+        path: &Path,
+        display: &DisplayImage,
+        source: Option<PageSource>,
+    ) -> Result<(), BookError> {
+        let index = self.pages.len();
+        let rel = format!("pages/{}.{}", numbered(index, self.page_count), display.ext);
+        let dest = self.tmp.join(&rel);
+        let (sha256, byte_size) = match &display.bytes {
+            Some(bytes) => {
+                std::fs::write(&dest, bytes).map_err(|e| io_error(&dest, &e))?;
+                (sha256_bytes(bytes), bytes.len() as u64)
+            }
+            None => {
+                std::fs::copy(path, &dest).map_err(|e| io_error(path, &e))?;
+                sha256_file(&dest)?
+            }
+        };
+        self.pages.push(PageEntry {
+            index: index as u32,
+            file: rel,
+            width: display.width,
+            height: display.height,
+            byte_size,
+            sha256,
+            page_label: None,
+            storage: StorageMode::Copied,
+            source,
+        });
+        Ok(())
+    }
+
+    /// Write every page of one input, plus its original when it was converted.
+    fn add_input(&mut self, path: &Path, info: &Inspection) -> Result<(), BookError> {
+        let source = convert::open(path).map_err(|e| unreadable(path, e))?;
+        if source.info != *info {
+            return Err(BookError::UnreadableFile {
+                file: path.to_path_buf(),
+                reason: "the file changed while the book was being created".into(),
+            });
+        }
+        let source_id = if info.needs_conversion {
+            Some(self.add_original(path, info)?)
+        } else {
+            None
+        };
+        for frame in 0..info.frames {
+            let display = source.frame(frame).map_err(|e| unreadable(path, e))?;
+            let page_source = source_id.as_ref().map(|id| PageSource {
+                source_ref: id.clone(),
+                frame: (info.frames > 1).then_some(frame),
+            });
+            self.add_page(path, &display, page_source)?;
+        }
+        Ok(())
+    }
+
+    /// Write `meta.json` and `annotations.json`, validating exactly what is written (A1).
+    fn finish(self, opts: &CreateOptions) -> Result<PathBuf, BookError> {
+        let now = now_rfc3339();
+        let meta = BookMeta {
+            format_version: CURRENT_FORMAT_VERSION,
+            id: opts.id.clone(),
+            title: opts.title.clone(),
+            created_at: now.clone(),
+            updated_at: now,
+            render_mode: RenderMode::Scan,
+            last_read_page: 0,
+            rights: opts.rights.clone(),
+            attribution: opts.attribution.clone(),
+            pages: self.pages,
+            sources: (!self.sources.is_empty()).then_some(self.sources),
+        };
+        let text = serde_json::to_string_pretty(&meta).map_err(|e| BookError::InvalidPackage {
+            reason: e.to_string(),
+        })?;
+        parse_meta(&text)?;
+        for (name, body) in [
+            ("meta.json", text + "\n"),
+            ("annotations.json", "[]\n".to_string()),
+        ] {
+            let p = self.tmp.join(name);
+            std::fs::write(&p, body).map_err(|e| io_error(&p, &e))?;
+        }
+        Ok(self.tmp)
+    }
+}
+
+/// Rename the finished temp package to its real name.
+fn commit(tmp: &Path, library: &Path, id: &str) -> Result<PathBuf, BookError> {
+    let dest = library.join(id);
+    // Re-check right before the rename: on POSIX, rename silently replaces an empty
+    // directory, so the name must still be free.
+    check_destination(library, id)?;
+    std::fs::rename(tmp, &dest).map_err(|e| {
+        // Another book took the name between the check and the rename. A rename that fails
+        // for another reason while the name is taken is reported the same way; the re-check
+        // just above makes the race the likely cause.
+        if dest.exists() {
+            BookError::DestinationExists { id: id.to_string() }
+        } else {
+            io_error(&dest, &e)
+        }
+    })?;
+    Ok(dest)
+}
+
 /// Build a new book in `library` from the images in `folder`. Returns the package path.
 pub fn create_book_from_folder(
     folder: &Path,
@@ -153,157 +354,15 @@ pub fn create_book_from_folder(
     let mut inputs = list_inputs(folder)?;
     check_duplicate_stems(&inputs)?;
     sort::sort_pages(&mut inputs);
-
-    // Inspect everything before writing anything, so a bad file fails fast. Only the
-    // inspection is kept: each file is read again when its pages are written, so memory
-    // holds one input at a time, not the whole folder.
-    let mut opened = Vec::with_capacity(inputs.len());
-    let mut estimated = 0u64;
-    for path in &inputs {
-        // Open first so an OS refusal is reported as PermissionDenied, not a decode failure.
-        std::fs::File::open(path).map_err(|e| io_error(path, &e))?;
-        let source = convert::open(path).map_err(|e| unreadable(path, e))?;
-        let size = std::fs::metadata(path)
-            .map_err(|e| io_error(path, &e))?
-            .len();
-        // A converted file keeps its original and adds a display copy of similar size.
-        estimated += if source.info.needs_conversion {
-            size * 2
-        } else {
-            size
-        };
-        opened.push((path, source.info));
-    }
+    let (opened, estimated) = inspect_all(&inputs)?;
     check_space(library, estimated)?;
 
-    let tmp_path = library.join(format!(
-        "{}{}-{}-{}",
-        sweep::TMP_PREFIX,
-        opts.id,
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
-    ));
-    std::fs::create_dir(&tmp_path).map_err(|e| io_error(&tmp_path, &e))?;
-    let guard = TempDir(Some(tmp_path.clone()));
-    for dir in ["pages", "ocr"] {
-        let d = tmp_path.join(dir);
-        std::fs::create_dir(&d).map_err(|e| io_error(&d, &e))?;
-    }
-
-    let page_count: usize = opened.iter().map(|(_, i)| i.frames as usize).sum();
-    let originals_count = opened.iter().filter(|(_, i)| i.needs_conversion).count();
-    let mut pages = Vec::with_capacity(page_count);
-    let mut sources = Vec::new();
+    let (mut builder, guard) = Builder::new(library, &opts.id, &opened)?;
     for (path, info) in &opened {
-        let source = convert::open(path).map_err(|e| unreadable(path, e))?;
-        if source.info != *info {
-            return Err(BookError::UnreadableFile {
-                file: path.to_path_buf(),
-                reason: "the file changed while the book was being created".into(),
-            });
-        }
-        let source_id = if info.needs_conversion {
-            let n = numbered(sources.len(), originals_count);
-            let ext = path
-                .extension()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_ascii_lowercase();
-            let rel = format!("originals/{n}.{ext}");
-            let dest = tmp_path.join(&rel);
-            std::fs::create_dir_all(tmp_path.join("originals")).map_err(|e| io_error(&dest, &e))?;
-            std::fs::copy(path, &dest).map_err(|e| io_error(path, &e))?;
-            let (sha256, byte_size) = sha256_file(&dest)?;
-            let id = format!("src-{n}");
-            sources.push(SourceEntry {
-                id: id.clone(),
-                file: rel,
-                format: info.kind.source_format(),
-                frames: info.frames,
-                byte_size,
-                sha256,
-            });
-            Some(id)
-        } else {
-            None
-        };
-        for frame in 0..info.frames {
-            let display = source.frame(frame).map_err(|e| unreadable(path, e))?;
-            let index = pages.len();
-            let rel = format!("pages/{}.{}", numbered(index, page_count), display.ext);
-            let dest = tmp_path.join(&rel);
-            let (sha256, byte_size) = match &display.bytes {
-                Some(bytes) => {
-                    std::fs::write(&dest, bytes).map_err(|e| io_error(&dest, &e))?;
-                    (sha256_bytes(bytes), bytes.len() as u64)
-                }
-                None => {
-                    std::fs::copy(path, &dest).map_err(|e| io_error(path, &e))?;
-                    sha256_file(&dest)?
-                }
-            };
-            pages.push(PageEntry {
-                index: index as u32,
-                file: rel,
-                width: display.width,
-                height: display.height,
-                byte_size,
-                sha256,
-                page_label: None,
-                storage: StorageMode::Copied,
-                source: source_id.as_ref().map(|id| PageSource {
-                    source_ref: id.clone(),
-                    frame: (info.frames > 1).then_some(frame),
-                }),
-            });
-        }
+        builder.add_input(path, info)?;
     }
-
-    let now = now_rfc3339();
-    let meta = BookMeta {
-        format_version: CURRENT_FORMAT_VERSION,
-        id: opts.id.clone(),
-        title: opts.title.clone(),
-        created_at: now.clone(),
-        updated_at: now,
-        render_mode: RenderMode::Scan,
-        last_read_page: 0,
-        rights: opts.rights.clone(),
-        attribution: opts.attribution.clone(),
-        pages,
-        sources: (!sources.is_empty()).then_some(sources),
-    };
-    let text = serde_json::to_string_pretty(&meta).map_err(|e| BookError::InvalidPackage {
-        reason: e.to_string(),
-    })?;
-    // Validate exactly what will be written, schema included (A1).
-    parse_meta(&text)?;
-    let write = |name: &str, body: &str| {
-        let p = tmp_path.join(name);
-        std::fs::write(&p, body).map_err(|e| io_error(&p, &e))
-    };
-    write("meta.json", &(text + "\n"))?;
-    write("annotations.json", "[]\n")?;
-
-    let dest = library.join(&opts.id);
-    // Re-check right before the rename: on POSIX, rename silently replaces an empty
-    // directory, so the name must still be free.
-    check_destination(library, &opts.id)?;
-    std::fs::rename(&tmp_path, &dest).map_err(|e| {
-        // Another book took the name between the check and the rename. A rename that fails
-        // for another reason while the name is taken is reported the same way; the re-check
-        // just above makes the race the likely cause.
-        if dest.exists() {
-            BookError::DestinationExists {
-                id: opts.id.clone(),
-            }
-        } else {
-            io_error(&dest, &e)
-        }
-    })?;
+    let tmp = builder.finish(opts)?;
+    let dest = commit(&tmp, library, &opts.id)?;
     std::mem::forget(guard);
     Ok(dest)
 }
