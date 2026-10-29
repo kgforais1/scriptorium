@@ -9,7 +9,7 @@ out="$root/tmp/fixtures/spike-pages"
 dulac="$corpus/dulac-picture-book/jpg"
 goblin="$corpus/princess-and-goblin/jpg"
 for d in "$dulac" "$goblin"; do
-  test -d "$d" || { echo "missing corpus: $d (see tests/fixtures/README.md)" >&2; exit 1; }
+  [[ -d "$d" ]] || { echo "missing corpus: $d (see tests/fixtures/README.md)" >&2; exit 1; }
 done
 rm -rf "$out" && mkdir -p "$out"
 cp "$dulac/0011.jpg" "$out/00.jpg"
