@@ -43,6 +43,12 @@ function vec<N extends 2 | 3>(v: unknown, n: N, path: string): N extends 2 ? [nu
   return v.map((x, i) => num(x, `${path}[${i}]`)) as N extends 2 ? [number, number] : Rgb;
 }
 
+function unit(v: unknown, path: string): number {
+  const n = num(v, path);
+  if (n < 0 || n > 1) throw new SceneError(`${path}: must be between 0 and 1`);
+  return n;
+}
+
 function str(v: unknown, path: string): string {
   if (typeof v !== "string" || !v) throw new SceneError(`${path}: expected a string`);
   return v;
@@ -83,7 +89,7 @@ export function parseScene(raw: unknown): Scene {
     light: parseLight(s.light),
     ambient: vec(s.ambient, 3, "ambient"),
     exposure: num(s.exposure, "exposure"),
-    vignette: num(s.vignette, "vignette"),
+    vignette: unit(s.vignette, "vignette"),
     material: {
       coverLeather: {
         dark: vec(leather.dark, 3, "material.coverLeather.dark"),

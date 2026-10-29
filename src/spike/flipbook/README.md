@@ -10,6 +10,7 @@ deletes this folder. Decisions, measurements, and the rewrite scope are in
 | `engine.ts` | Engine class: camera, render loop, turning state machine, input |
 | `geometry.ts` | Board, page blocks, curling leaf, ribbon (pure, no WebGL) |
 | `shaders.ts` | Lit scene and baked desk GLSL; scene values arrive as uniforms |
+| `gesture.ts` | Pure hit-area, drag-progress, and release rules |
 | `textures.ts` | LRU page textures around the open spread |
 | `pages.ts` | Scan decode and the pad-to-uniform letterbox |
 | `scene.ts` | `scene.json` parser; a missing key is an error |

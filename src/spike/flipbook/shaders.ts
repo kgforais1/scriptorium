@@ -1,6 +1,9 @@
 // GLSL for the lit book scene and the baked desk, ported from mockup E. Scene colours and the
-// light come in as uniforms (see engine.ts applyScene), so a skin changes them with no code change.
+// light come in as uniforms (see applySceneUniforms below), so a skin changes them with no code change.
 // Book size is baked in as constants because it is fixed per book (pad-to-uniform aspect).
+
+import type { Program } from "./gl";
+import type { Scene } from "./scene";
 
 export type ShaderGeometry = { W: number; H: number; MRG: number; NV: number };
 
@@ -132,3 +135,24 @@ vec4 wood(vec2 p){
 void main(){vec4 a=vec4(0);
  a+=wood(groundAt(gl_FragCoord.xy+vec2(-.3,-.1)));a+=wood(groundAt(gl_FragCoord.xy+vec2(.1,-.3)));
  a+=wood(groundAt(gl_FragCoord.xy+vec2(.3,.1)));a+=wood(groundAt(gl_FragCoord.xy+vec2(-.1,.3)));o=a*.25;}`;
+
+// Uploads the skin's light and material values. Every key comes from scene.json.
+export function applySceneUniforms(gl: WebGL2RenderingContext, u: Program["u"], sc: Scene) {
+  const l = sc.light, m = sc.material;
+  gl.uniform1i(u.uLightType, l.type === "point" ? 0 : 1);
+  gl.uniform3fv(u.uLightCol, l.color);
+  if (l.type === "point") {
+    gl.uniform3fv(u.uLightPos, l.position);
+    gl.uniform2fv(u.uPool, l.poolCenter);
+  } else {
+    gl.uniform3fv(u.uLightDir, l.direction);
+  }
+  gl.uniform3fv(u.uAmbient, sc.ambient);
+  gl.uniform1f(u.uExposure, sc.exposure);
+  gl.uniform1f(u.uVignette, sc.vignette);
+  gl.uniform3fv(u.uLeatherDark, m.coverLeather.dark);
+  gl.uniform3fv(u.uLeatherLight, m.coverLeather.light);
+  gl.uniform3fv(u.uGilt, m.gilt);
+  gl.uniform3fv(u.uRibbon, m.ribbon);
+  gl.uniform3fv(u.uPageEdge, m.pageEdge);
+}

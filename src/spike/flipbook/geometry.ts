@@ -201,30 +201,12 @@ export function updateLeaf(b: Book, T: Turn, leafV: Float32Array, foot: Float32A
     prZ[i] = z;
   }
   prA[0] = prA[1];
-  const C = curlOf(b, T, tp), curl = C.Dq > 1e-4 && C.phi > 1e-3, r = curl ? C.Dq / C.phi : 1;
+  const C = curlOf(b, T, tp), curl = C.Dq > 1e-4 && C.phi > 1e-3 ? C : null;
   for (let j = 0; j < NV; j++) {
     const vn = j / (NV - 1), y = b.H / 2 - vn * b.H;
     let mn = 1e9, mx = -1e9, hz = 0;
     for (let i = 0; i < NU; i++) {
-      const s = i * ds;
-      let sp = s, yp = y, h = 0;
-      if (curl) {
-        const q = (s - b.W) * C.dx + (y - C.yc) * C.dy, a = C.Dq - q;
-        if (a > 0) {
-          const ph = a / r;
-          let qn: number;
-          if (ph < PI) {
-            qn = C.Dq - r * Math.sin(ph);
-            h = r * (1 - Math.cos(ph));
-          } else {
-            qn = C.Dq + (a - PI * r);
-            h = 2 * r;
-          }
-          const sh = qn - q;
-          sp = s + C.dx * sh;
-          yp = y + C.dy * sh;
-        }
-      }
+      const { sp, yp, h } = curlPoint(curl, b.W, i * ds, y);
       const fi = clamp(sp / ds, 0, NU - 1), i0 = Math.min(NU - 2, Math.floor(fi)), f = fi - i0;
       const X = lerp(prX[i0], prX[i0 + 1], f), Z = lerp(prZ[i0], prZ[i0 + 1], f), th = lerp(prA[i0], prA[i0 + 1], f);
       const nx = fwd ? -Math.sin(th) : Math.sin(th), nz = fwd ? Math.cos(th) : -Math.cos(th);
@@ -244,6 +226,27 @@ export function updateLeaf(b: Book, T: Turn, leafV: Float32Array, foot: Float32A
     foot[j * 4 + 2] = Math.max(0, hz - b.ZG - 0.055);
     foot[j * 4 + 3] = 0;
   }
+  leafNormals(leafV);
+}
+
+type Curl = ReturnType<typeof curlOf>;
+
+// Wraps material point (s, y) round the corner-lift cylinder. Returns its new material position
+// along the bend profile and its height off the unlifted surface.
+function curlPoint(C: Curl | null, W: number, s: number, y: number) {
+  if (!C) return { sp: s, yp: y, h: 0 };
+  const q = (s - W) * C.dx + (y - C.yc) * C.dy, a = C.Dq - q;
+  if (a <= 0) return { sp: s, yp: y, h: 0 };
+  const r = C.Dq / C.phi, ph = a / r;
+  const rolled = ph < PI;
+  const qn = rolled ? C.Dq - r * Math.sin(ph) : C.Dq + (a - PI * r);
+  const h = rolled ? r * (1 - Math.cos(ph)) : 2 * r;
+  const sh = qn - q;
+  return { sp: s + C.dx * sh, yp: y + C.dy * sh, h };
+}
+
+// Per-vertex normals from central differences across the leaf grid.
+function leafNormals(leafV: Float32Array) {
   const p = (jj: number, ii: number) => (jj * NU + ii) * 8;
   for (let j = 0; j < NV; j++)
     for (let i = 0; i < NU; i++) {

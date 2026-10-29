@@ -11,18 +11,23 @@ import {
 } from "./math";
 import { decodePage, type DecodedPage } from "./pages";
 import type { Scene } from "./scene";
-import { FS_BAKE, VS_FULL, VS_LIT, fsLit } from "./shaders";
+import { FS_BAKE, VS_FULL, VS_LIT, applySceneUniforms, fsLit } from "./shaders";
+import { cornerAt, dragProgress, turnCompletes, type Drag } from "./gesture";
 import { PageTextures, type TextureStats } from "./textures";
 
 export type EngineState = { spread: number; spreads: number; turning: boolean; loaded: number; stats: EngineStats };
 export type EngineStats = TextureStats;
-export type EngineOptions = { pages: string[]; scene: Scene; onState?: (s: EngineState) => void };
+export type EngineOptions = {
+  pages: string[];
+  scene: Scene;
+  onState?: (s: EngineState) => void;
+  onPageError?: (page: number, err: unknown) => void;
+};
 
 const EXTRA = 7; // visual padding leaves under each block
 const INSETS = { top: 24, bot: 88, side: 28 };
 
 type Stacks = { L: { top: Mesh; edge: Mesh; prof: Profile }; R: { top: Mesh; edge: Mesh; prof: Profile }; lp: number; rp: number };
-type Drag = { id: number; sx: number; sy: number; x0: number; lx: number; lt: number; vx: number; moved: boolean };
 
 export class FlipbookEngine {
   private gl: WebGL2RenderingContext;
@@ -60,7 +65,13 @@ export class FlipbookEngine {
       first.bitmap.close();
       signal.throwIfAborted();
     }
-    return new FlipbookEngine(canvas, opts, first);
+    try {
+      return new FlipbookEngine(canvas, opts, first);
+    } catch (err) {
+      // A failed start (no WebGL2, shader error) never reaches upload, so release the bitmap here.
+      first.bitmap.close();
+      throw err;
+    }
   }
 
   private constructor(private canvas: HTMLCanvasElement, private opts: EngineOptions, first: DecodedPage) {
@@ -84,10 +95,12 @@ export class FlipbookEngine {
       fsTri,
       fsBuf,
     };
-    this.pages = new PageTextures(gl, b.H, opts.scene.material.paper, (slot) => this.slotUrl(slot), () => this.pinnedSlots(), () => {
+    const onLoad = () => {
       this.dirty = true;
       this.emit();
-    });
+    };
+    const onError = (slot: number, err: unknown) => this.opts.onPageError?.(slot - 1, err);
+    this.pages = new PageTextures(gl, b.H, opts.scene.material.paper, (s) => this.slotUrl(s), () => this.pinnedSlots(), onLoad, onError);
     this.pages.upload(1, first);
     this.listen();
     this.layout();
@@ -260,26 +273,6 @@ export class FlipbookEngine {
     gl.bindTexture(gl.TEXTURE_2D, b || a);
   }
 
-  private applyScene(u: Program["u"]) {
-    const gl = this.gl, sc = this.opts.scene, l = sc.light, m = sc.material;
-    gl.uniform1i(u.uLightType, l.type === "point" ? 0 : 1);
-    gl.uniform3fv(u.uLightCol, l.color);
-    if (l.type === "point") {
-      gl.uniform3fv(u.uLightPos, l.position);
-      gl.uniform2fv(u.uPool, l.poolCenter);
-    } else {
-      gl.uniform3fv(u.uLightDir, l.direction);
-    }
-    gl.uniform3fv(u.uAmbient, sc.ambient);
-    gl.uniform1f(u.uExposure, sc.exposure);
-    gl.uniform1f(u.uVignette, sc.vignette);
-    gl.uniform3fv(u.uLeatherDark, m.coverLeather.dark);
-    gl.uniform3fv(u.uLeatherLight, m.coverLeather.light);
-    gl.uniform3fv(u.uGilt, m.gilt);
-    gl.uniform3fv(u.uRibbon, m.ribbon);
-    gl.uniform3fv(u.uPageEdge, m.pageEdge);
-  }
-
   private render() {
     const gl = this.gl, u = this.lit.u, ST = this.ST!, bg = this.opts.scene.background.srgb;
     const W = this.canvas.width, H = this.canvas.height;
@@ -297,7 +290,7 @@ export class FlipbookEngine {
     gl.uniform1i(u.uTexB, 1);
     gl.uniformMatrix4fv(u.uVP, false, this.cam.VP);
     gl.uniform3fv(u.uCam, this.cam.eye);
-    this.applyScene(u);
+    applySceneUniforms(gl, u, this.opts.scene);
     gl.uniform2f(u.uRes, W, H);
     gl.uniformMatrix4fv(u.uBookInv, false, IDENTITY);
     gl.uniform1f(u.uShadow, this.turn ? 1 : 0);
@@ -439,36 +432,34 @@ export class FlipbookEngine {
     return this.pickLocal(e.clientX - r.left, e.clientY - r.top);
   }
 
-  private cornerAt(l: [number, number]) {
-    const ax = Math.abs(l[0]), ay = Math.abs(l[1]), h2 = this.book.H / 2;
-    if (ax > 0.8 && ax < 1.08 && ay > h2 - 0.2 && ay < h2 + 0.06) return { side: Math.sign(l[0]), cv: l[1] < 0 ? 1 : 0 };
-    return null;
+  private onMove = (e: PointerEvent) => {
+    const l = this.local(e);
+    if (this.drag) this.dragMove(e, l, this.drag);
+    // Hover peek is a mouse-only polish; touch and pen get the same turn by dragging.
+    else if (e.pointerType === "mouse") this.hoverMove(l);
+  };
+
+  private dragMove(e: PointerEvent, l: [number, number], d: Drag) {
+    const T = this.turn;
+    if (!T || e.pointerId !== d.id) return;
+    if (Math.abs(e.clientX - d.sx) > 4 || Math.abs(e.clientY - d.sy) > 4) d.moved = true;
+    if (!d.moved) return;
+    if (T.kind === "peek") T.lift = T.pk;
+    if (T.kind !== "drag") {
+      T.kind = "drag";
+      this.emit();
+    }
+    T.anim = null;
+    T.cancel = 0;
+    const now = performance.now(), dt = Math.max(1, now - d.lt);
+    d.vx = lerp(d.vx, ((l[0] - d.lx) / dt) * 1000, 0.5);
+    d.lx = l[0];
+    d.lt = now;
+    T.t = dragProgress(T.dir, d.x0, l[0]);
   }
 
-  private onMove = (e: PointerEvent) => {
-    const l = this.local(e), d = this.drag;
-    if (d) {
-      const T = this.turn;
-      if (!T || e.pointerId !== d.id) return;
-      if (Math.abs(e.clientX - d.sx) > 4 || Math.abs(e.clientY - d.sy) > 4) d.moved = true;
-      if (!d.moved) return;
-      if (T.kind === "peek") T.lift = T.pk;
-      if (T.kind !== "drag") {
-        T.kind = "drag";
-        this.emit();
-      }
-      T.anim = null;
-      T.cancel = 0;
-      const now = performance.now(), dt = Math.max(1, now - d.lt);
-      d.vx = lerp(d.vx, ((l[0] - d.lx) / dt) * 1000, 0.5);
-      d.lx = l[0];
-      d.lt = now;
-      T.t = T.dir > 0 ? clamp((d.x0 - l[0]) / (d.x0 + 0.95), 0, 1) : 1 - clamp((l[0] - d.x0) / (0.95 - d.x0), 0, 1);
-      return;
-    }
-    // Hover peek is a mouse-only polish; touch and pen get the same turn by dragging.
-    if (e.pointerType !== "mouse") return;
-    const c = this.cornerAt(l), h2 = this.book.H / 2;
+  private hoverMove(l: [number, number]) {
+    const c = cornerAt(this.book, l), h2 = this.book.H / 2;
     const onPage = Math.abs(l[1]) < h2 && Math.abs(l[0]) < 1.05 && Math.abs(l[0]) > 0.04;
     this.canvas.style.cursor = c || onPage ? "grab" : "default";
     if (c && !this.turn) {
@@ -478,7 +469,7 @@ export class FlipbookEngine {
       // Once navigation has queued a step, the peek must settle; hovering cannot re-arm it.
       this.turn.pkT = this.queue === 0 && c && this.turn.dir === c.side ? 1 : 0;
     }
-  };
+  }
 
   private onLeave = () => {
     if (this.turn?.kind === "peek") this.turn.pkT = 0;
@@ -517,13 +508,10 @@ export class FlipbookEngine {
       else this.animateTo(T.dir > 0 ? 0 : 1, 0.3, easeOut);
       return;
     }
-    const fwd = T.dir > 0;
-    const done = e.type !== "pointerup"
-      ? (fwd ? T.t > 0.5 : T.t < 0.5)
-      : fwd ? (T.t > 0.45 || d.vx < -1.2) && d.vx < 1 : (T.t < 0.55 || d.vx > 1.2) && d.vx > -1;
-    const target = fwd === done ? 1 : 0;
+    const target = T.dir > 0 === turnCompletes(T, d, e.type === "pointerup") ? 1 : 0;
     this.animateTo(target, 0.3 + 0.55 * Math.abs(target - T.t), easeOut);
   };
+
 
   private onKey = (e: KeyboardEvent) => {
     if (e.defaultPrevented || e.target instanceof HTMLInputElement) return;

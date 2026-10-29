@@ -50,12 +50,16 @@ export default function FlipbookSpike() {
     const canvas = canvasRef.current!;
     const ac = new AbortController();
     let engine: FlipbookEngine | null = null;
+    setError(null);
     (async () => {
       const pages = await listPages();
       ac.signal.throwIfAborted();
-      const scene = sceneFor(sceneRef.current);
-      engine = await FlipbookEngine.create(canvas, { pages, scene, onState: setState }, ac.signal);
+      const startScene = sceneRef.current;
+      const onPageError = (page: number) => setError(`Page ${page + 1} failed to load; it shows as blank paper.`);
+      engine = await FlipbookEngine.create(canvas, { pages, scene: sceneFor(startScene), onState: setState, onPageError }, ac.signal);
       if (ac.signal.aborted) return engine.dispose();
+      // The scene effect skips while startup runs, so apply a scene picked in the meantime.
+      if (sceneRef.current !== startScene) engine.setScene(sceneFor(sceneRef.current));
       engineRef.current = engine;
       (window as unknown as { __flipbook?: FlipbookEngine }).__flipbook = engine;
     })().catch((err) => {

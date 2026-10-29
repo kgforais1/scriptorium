@@ -16,6 +16,7 @@ export class PageTextures {
   readonly stats: TextureStats = { textures: 0, textureMB: 0, lastUploadMs: 0, meanUploadMs: 0, uploads: 0 };
   private tex = new Map<number, Entry>();
   private loading = new Set<number>();
+  private failed = new Set<number>();
   private abort = new AbortController();
   private paperTex: WebGLTexture;
 
@@ -26,6 +27,7 @@ export class PageTextures {
     private urlOf: (slot: number) => string | null,
     private pinned: () => number[],
     private onChange: () => void,
+    private onError: (slot: number, err: unknown) => void,
   ) {
     this.paperTex = textureFrom(gl, composePage(null, boxAspect, 4, paper));
   }
@@ -47,7 +49,8 @@ export class PageTextures {
 
   load(slot: number) {
     const url = this.urlOf(slot);
-    if (!url || this.loading.has(slot) || this.tex.has(slot)) return;
+    // A failed page is not retried on every frame; it stays plain paper and is reported once.
+    if (!url || this.loading.has(slot) || this.tex.has(slot) || this.failed.has(slot)) return;
     this.loading.add(slot);
     decodePage(url, this.abort.signal)
       .then((page) => {
@@ -56,14 +59,20 @@ export class PageTextures {
         this.onChange();
       })
       .catch((err) => {
-        if (!this.abort.signal.aborted) console.error(`[flipbook] page ${slot - 1} failed to load`, err);
+        if (this.abort.signal.aborted) return;
+        this.failed.add(slot);
+        console.error(`[flipbook] page ${slot - 1} failed to load`, err);
+        this.onError(slot, err);
       })
       .finally(() => this.loading.delete(slot));
   }
 
   upload(slot: number, page: DecodedPage) {
     const gl = this.gl, t0 = performance.now();
-    const canvas = composePage(page, this.boxAspect, Math.min(TEX_HEIGHT, gl.getParameter(gl.MAX_TEXTURE_SIZE)), this.paper);
+    // Width is height / boxAspect, so a wide book must lower the height to keep both sides in the GPU limit.
+    const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+    const texH = Math.max(1, Math.floor(Math.min(TEX_HEIGHT, max, max * this.boxAspect)));
+    const canvas = composePage(page, this.boxAspect, texH, this.paper);
     page.bitmap.close();
     const tex = textureFrom(gl, canvas);
     const ms = performance.now() - t0, s = this.stats;
