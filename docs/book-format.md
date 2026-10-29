@@ -87,7 +87,9 @@ converted, the untouched original is kept. Input formats and conversion rules ar
 - `sources[]` item fields: `id` (lowercase slug, 1–64 characters, unique in the book), `file`,
   `format` (`jpeg`, `png`, `webp`, `bmp`, `gif`, `tiff`, `jp2`, or `pdf`), `frames` (number of
   frames, 1 for a single image), `byteSize`, and `sha256`.
-- A page's `source` has `ref` and an optional `frame`. Several pages may share one source.
+- A page's `source` has `ref` and an optional `frame`. Pages of one multi-frame source share
+  it, one page per frame; a single-frame source is referenced by exactly one page.
+- `frames` is written at ingest. `load_book` checks it against the frame count the file reports.
 - `load_book` verifies each `sources[]` sha256 once. Drift is `ChecksumMismatch`.
 - Free-space preflight counts originals plus display copies in `estimated_bytes`.
 
@@ -107,7 +109,8 @@ Validation rules (in addition to the [loader table](#loader-validation)):
 
 A v1 package is a valid v2 package once `formatVersion` is set to `2`: v1 has no originals,
 so no other field changes. The app reads v1 as-is and writes v2 the next time it saves the
-package, for example when it records `lastReadPage`.
+package, for example when it records `lastReadPage`. After that save, a build that reads only
+v1 refuses the package. That is accepted before 1.0.
 
 ## Evolution rule
 

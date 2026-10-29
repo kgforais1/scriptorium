@@ -34,6 +34,8 @@ pub const TITLE_MAX_LEN: usize = 4096;
 pub const TEXT_FIELD_MAX_LEN: usize = 8192;
 /// Max number of pages in a package (matches schema `maxItems`).
 pub const PAGES_MAX_ITEMS: usize = 100_000;
+/// Max number of v2 `sources[]` entries (matches schema `maxItems`).
+pub const SOURCES_MAX_ITEMS: usize = 100_000;
 
 /// How a book renders. Default is `Scan`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

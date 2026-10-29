@@ -61,7 +61,7 @@ folder pickers.
 | A5 | Keys: **←/→** and on-screen prev/next; at last page next is no-op; at first page prev is no-op | Manual script |
 | A6 | `lastReadPage` persists across quit/relaunch for the same book **`id`** (not filesystem path); progress flush on window close (not only debounced flip) | Manual script |
 | A7 | Open… on an existing package directory loads without re-copy | Manual script |
-| A8 | Unsupported `formatVersion` → `SchemaVersionUnsupported` message | `cargo test` |
+| A8 | Unsupported `formatVersion` → `UnsupportedFormatVersion` message | `cargo test` |
 | A9 | Perf budget (below) holds on the **named reference class** against the **pinned gate corpus** | Manual timed run; record results in PR |
 | A10 | Mutating one byte of a page file, or of a `sources[]` original, causes `ChecksumMismatch` on load | `cargo test` |
 | A11 | Ingest rejects `id` that case-folds equal to an existing book directory on case-insensitive FS | `cargo test` |
@@ -78,7 +78,7 @@ folder pickers.
 | `DestinationExists` | Target book path exists (incl. case-insensitive `id` collision on macOS/Windows) | Refuse overwrite |
 | `DuplicatePageStem` | Two sources map to same stem (incl. case-insensitive) | Duplicate page names |
 | `InsufficientDiskSpace` | Pre-flight fail | Need more free space |
-| `SchemaVersionUnsupported` | Unknown/newer formatVersion | Unsupported book version |
+| `UnsupportedFormatVersion` | Unknown/newer formatVersion | Unsupported book version |
 | `InvalidPackage` | missing meta / schema fail | Not a valid Scriptorium book |
 | `ChecksumMismatch` | Page or original bytes ≠ stored sha256 | Book files corrupted or modified |
 | `PermissionDenied` | OS denied | Permission denied |
@@ -123,7 +123,7 @@ Decoder choices, confirmed in Phase 1 with a small spike per crate:
 
 Originals need a book-level `sources[]` list and a per-page `source` reference, so M1 writes
 `formatVersion` 2. See
-[`docs/book-format.md`](../docs/book-format.md#planned-originals-and-display-copies).
+[`docs/book-format.md`](../docs/book-format.md#originals-formatversion-2).
 
 ### Natural-sort specification (normative for M1)
 
@@ -223,7 +223,7 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [x] Book format v2: rename the current schema to `book-format.v1.schema.json` and add
       `book-format.v2.schema.json` with `sources[]` and page `source`. The loader reads
       `formatVersion` first, then picks the schema; any other version is
-      `SchemaVersionUnsupported` (A8). Rust reads v1 and v2 and writes v2. Add the `sources[]`
+      `UnsupportedFormatVersion` (A8). Rust reads v1 and v2 and writes v2. Add the `sources[]`
       validation rules and the v1→v2 migration note to `docs/book-format.md`. Update every
       reference to the old schema path (`src-tauri/src/book_format.rs` `load_schema`,
       `tests/test_generate_fixture_book.py`, README, `docs/NAVIGATION.md`, `CHANGELOG.md`,
@@ -242,8 +242,9 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] Per-page width/height/sha256/byteSize written
 - [ ] load_book + schema validation
 - [ ] lastReadPage read/write keyed by book **`id`**; flush API for window close
-- [ ] load_book re-verifies per-page sha256 and each `sources[]` sha256 once (negative test: A10)
-- [ ] load_book canonical path prefix check (A12)
+- [ ] load_book re-verifies per-page sha256 and each `sources[]` sha256 once (negative test: A10),
+      and checks each source's `frames` against the frame count the file reports
+- [ ] load_book canonical path prefix check (A12) for `pages/` and `originals/`
 - [ ] Ingest case-insensitive `id` collision check (A11)
 - [ ] Orphan temp-dir sweep + DuplicatePageStem tests
 - [ ] All error taxonomy variants tested with `tempfile`

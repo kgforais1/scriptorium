@@ -266,7 +266,7 @@ fn book_id_pattern_matches_schema() {
         .expect("schema id.pattern must be a string");
     assert_eq!(
         pattern, BOOK_ID_PATTERN,
-        "Rust BOOK_ID_PATTERN must match docs/book-format.schema.json"
+        "Rust BOOK_ID_PATTERN must match docs/book-format.v1.schema.json"
     );
 }
 

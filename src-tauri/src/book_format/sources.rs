@@ -3,7 +3,9 @@
 //! A page whose display image was converted keeps its untouched original under
 //! `originals/`. Several pages may share one multi-frame source, such as a multi-page TIFF.
 
-use super::{is_lowercase_hex_sha256, package_path_problem, BookMeta, BookMetaError};
+use super::{
+    is_lowercase_hex_sha256, package_path_problem, BookMeta, BookMetaError, SOURCES_MAX_ITEMS,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -79,19 +81,32 @@ pub(super) fn validate(
     meta: &BookMeta,
     page_files: &HashMap<String, String>,
 ) -> Result<(), BookMetaError> {
-    let uses_sources = meta.sources.is_some() || meta.pages.iter().any(|p| p.source.is_some());
     if meta.format_version < 2 {
-        if uses_sources {
-            return Err(BookMetaError::FieldRequiresVersion {
-                field: "sources",
+        // Name the v2 field that is actually present, so the message matches the document.
+        let field = if meta.sources.is_some() {
+            Some("sources")
+        } else if meta.pages.iter().any(|p| p.source.is_some()) {
+            Some("pages[].source")
+        } else {
+            None
+        };
+        return match field {
+            Some(field) => Err(BookMetaError::FieldRequiresVersion {
+                field,
                 min_version: 2,
-            });
-        }
-        return Ok(());
+            }),
+            None => Ok(()),
+        };
     }
     let sources = meta.sources.as_deref().unwrap_or(&[]);
     if meta.sources.is_some() && sources.is_empty() {
         return Err(source_err("", "sources must be omitted rather than empty"));
+    }
+    if sources.len() > SOURCES_MAX_ITEMS {
+        return Err(source_err(
+            "",
+            format!("{} entries; max is {SOURCES_MAX_ITEMS}", sources.len()),
+        ));
     }
     let by_id = validate_entries(sources, page_files)?;
     validate_page_refs(meta, &by_id)
@@ -192,10 +207,9 @@ fn validate_page_refs(
             ));
         }
     }
-    for id in by_id.keys() {
-        if !used.iter().any(|(used_id, _)| used_id == id) {
-            return Err(source_err(id, "not referenced by any page"));
-        }
+    let referenced: HashSet<&str> = used.iter().map(|(id, _)| *id).collect();
+    if let Some(id) = by_id.keys().find(|id| !referenced.contains(*id)) {
+        return Err(source_err(id, "not referenced by any page"));
     }
     Ok(())
 }

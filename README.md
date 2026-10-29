@@ -59,7 +59,7 @@ Spec: [`docs/book-format.md`](docs/book-format.md).
 |---|---|
 | [`src-tauri/`](src-tauri/) | Tauri 2 Rust host + `book_format` types |
 | [`src/`](src/) | Vite + React + TypeScript UI shell |
-| [`docs/book-format.md`](docs/book-format.md) | Book package format (formatVersion 1) |
+| [`docs/book-format.md`](docs/book-format.md) | Book package format (formatVersion 2; reads 1) |
 | [`scripts/generate-fixture-book.py`](scripts/generate-fixture-book.py) | Deterministic fixture generator |
 | [`prompts/`](prompts/) | Reusable agent prompts: bootstrap, session-start, maintenance, reviews, audits |
 | [`templates/`](templates/) | Fill-in artifacts: briefs, plans, designs, ADRs, runbooks, release checklists, reviews, assessments |

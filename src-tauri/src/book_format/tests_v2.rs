@@ -121,10 +121,13 @@ fn v1_rejects_v2_fields() {
     );
     let mut only_page_ref = BookMeta::sample();
     only_page_ref.pages[0].source = src_ref("x", None);
-    assert!(matches!(
+    assert_eq!(
         only_page_ref.validate(),
-        Err(BookMetaError::FieldRequiresVersion { .. })
-    ));
+        Err(BookMetaError::FieldRequiresVersion {
+            field: "pages[].source",
+            min_version: 2
+        })
+    );
 }
 
 #[test]
@@ -230,4 +233,46 @@ fn deserialize_rejects_unknown_source_keys() {
     let mut json = serde_json::to_value(sample_v2()).unwrap();
     json["sources"][0]["extra"] = Value::from(true);
     assert!(serde_json::from_value::<BookMeta>(json).is_err());
+}
+
+#[test]
+fn source_file_collides_with_a_page_file() {
+    let mut book = sample_v2();
+    book.pages[0].file = "originals/2.TIF".into();
+    expect_source_err(&book, "collides");
+}
+
+#[test]
+fn single_frame_source_takes_one_page() {
+    let mut book = sample_v2();
+    book.sources.as_mut().unwrap()[0].frames = 1;
+    book.pages[1].source = src_ref("scan-2", None);
+    book.pages[2].source = src_ref("scan-2", None);
+    book.pages.truncate(3);
+    expect_source_err(&book, "already uses");
+}
+
+#[test]
+fn v1_and_v2_schemas_share_id_and_file_patterns() {
+    let read = |v: u32| -> Value {
+        let path = format!(
+            "{}/../docs/book-format.v{v}.schema.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    };
+    let (v1, v2) = (read(1), read(2));
+    let id = |s: &Value| s["properties"]["id"]["pattern"].clone();
+    let file = |s: &Value| s["$defs"]["pageEntry"]["properties"]["file"]["pattern"].clone();
+    assert_eq!(id(&v1), id(&v2), "id pattern drifted between v1 and v2");
+    assert_eq!(
+        id(&v2),
+        Value::from(BOOK_ID_PATTERN),
+        "Rust BOOK_ID_PATTERN must match v2"
+    );
+    assert_eq!(
+        file(&v1),
+        file(&v2),
+        "page file pattern drifted between v1 and v2"
+    );
 }
