@@ -1,7 +1,7 @@
 //! Library tests: create, load, verify, progress, sweep, and every error variant (A1, A3,
 //! A8, A10–A12). Fixtures are generated in temp directories at test time.
 
-use super::create::{check_space, create_book_from_folder, CreateOptions};
+use super::create::{check_space, create_book_from_folder, estimate_bytes, CreateOptions};
 use super::load::{load_book, parse_meta};
 use super::progress::save_last_read_page;
 use super::sweep::{sweep_orphans, ORPHAN_AGE, TMP_PREFIX};
@@ -561,4 +561,31 @@ fn every_error_has_a_user_message() {
         let msg = err.to_string();
         assert!(msg.contains(want), "{err:?} -> {msg:?}");
     }
+}
+
+#[test]
+fn space_estimate_counts_every_converted_frame() {
+    use crate::ingest::convert::{InputKind, Inspection};
+    let info = |frames, needs_conversion| Inspection {
+        kind: InputKind::Tiff,
+        frames,
+        needs_conversion,
+        display_ext: "jpg",
+    };
+    let mb = 1024 * 1024;
+    assert_eq!(
+        estimate_bytes(5 * mb, &info(1, false)),
+        5 * mb,
+        "copied as-is"
+    );
+    // A 20 MB, 30-frame TIFF: the original plus 30 display copies of at least 4 MB each.
+    assert_eq!(
+        estimate_bytes(20 * mb, &info(30, true)),
+        20 * mb + 30 * 4 * mb
+    );
+    // A large uncompressed TIFF budgets each frame at its share of the file.
+    assert_eq!(
+        estimate_bytes(300 * mb, &info(3, true)),
+        300 * mb + 300 * mb
+    );
 }

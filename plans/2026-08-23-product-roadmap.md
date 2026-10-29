@@ -194,6 +194,19 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Optional vector semantic search over OCR (separate from page-image fidelity)
 - [ ] OCR engine upgrade path (e.g. PaddleOCR) if Tesseract quality insufficient
 
+## Documentation and help (cross-cutting)
+
+User-facing docs grow with each milestone instead of landing at the end.
+
+- [ ] M1: getting-started guide and a short tutorial in `docs/user/` (see the M1 plan, Phase 4)
+- [ ] Each later milestone updates the guide for its feature (PDF import, OCR and corrections,
+      library, export and import, authoring, skins) in the same change that ships it
+- [ ] Onboarding: a first-run screen that offers the sample book and the tutorial, skippable
+      and never shown again once dismissed
+- [ ] In-app help (M7): a Help panel that renders the `docs/user/` pages offline, a keyboard
+      shortcut sheet, and context links from error dialogs to the page that explains the fix
+- [ ] A docs check in CI so user docs keep working links and current screenshots
+
 ## Book package schema (evolving)
 
 **Source of truth:** authored in M0 as `docs/book-format.md` + `docs/book-format.schema.json` (split into `v1` and `v2` schemas in M1)

@@ -241,6 +241,9 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] Stop if G1–G6 from spike no longer hold
 - [ ] Close ADR-0001's open items: WebGL2 on WebView2 (Windows) and WebKitGTK (Linux), touch on
       real hardware, frame rate in WKWebView, and a process RSS sample
+- [ ] CI on Windows and macOS for the Rust crate (`cargo test`, clippy). Today every job is Linux,
+      so Windows path handling is untested and the two `sips` fixtures (CMYK with a profile,
+      JPEG 2000) skip. Known test gap until then
 
 ### Phase 1 — Book I/O (Rust)
 
@@ -311,6 +314,9 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 ### Phase 4 — Docs & release
 
 - [ ] `docs/manual-test-m1.md` + README try-it
+- [ ] User docs, first pass: a getting-started guide for curators (install, build a book from a
+      folder, read it, where books live) and a short tutorial using a public-domain sample book.
+      Keep them in `docs/user/` so later in-app help can reuse the same text
 - [ ] Third-party notices file for statically linked C libraries (OpenJPEG BSD-2, LittleCMS
       MIT) shipped with the app bundle; re-check the bundled OpenJPEG version (2.5.3) for advisories,
       since `cargo audit` cannot see C code

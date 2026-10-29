@@ -227,8 +227,39 @@ fn decode_tiff(bytes: &[u8], frame: u32) -> Result<Decoded, ConvertError> {
     })
 }
 
+/// Largest JPEG 2000 image ingest will decode (150 megapixels; a scanned page is ~11 MP).
+/// OpenJPEG allocates the full image itself, so the header is checked before decoding.
+pub(super) const JP2_MAX_PIXELS: u64 = 150_000_000;
+
+/// Width and height from a JP2 `ihdr` box or a raw codestream's SIZ marker, without decoding.
+pub(super) fn jp2_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    let be32 = |at: usize| {
+        bytes
+            .get(at..at + 4)
+            .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    };
+    if bytes.starts_with(&[0xFF, 0x4F, 0xFF, 0x51]) {
+        // SIZ: marker(2) Lsiz(2) Rsiz(2) Xsiz(4) Ysiz(4) XOsiz(4) YOsiz(4), after SOC.
+        let (x, y, xo, yo) = (be32(8)?, be32(12)?, be32(16)?, be32(20)?);
+        return Some((x.checked_sub(xo)?, y.checked_sub(yo)?));
+    }
+    // A JP2 file: find the `ihdr` box, whose payload starts HEIGHT(4) WIDTH(4).
+    let at = bytes.windows(4).position(|w| w == b"ihdr")?;
+    Some((be32(at + 8)?, be32(at + 4)?))
+}
+
 fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
     use jpeg2k::ColorSpace;
+    let (hw, hh) =
+        jp2_dimensions(bytes).ok_or_else(|| unreadable("JPEG 2000 header has no image size"))?;
+    if hw == 0 || hh == 0 {
+        return Err(unreadable("JPEG 2000 image has zero width or height"));
+    }
+    if u64::from(hw) * u64::from(hh) > JP2_MAX_PIXELS {
+        return Err(unreadable(format!(
+            "JPEG 2000 image is {hw}×{hh}, over the {JP2_MAX_PIXELS}-pixel limit"
+        )));
+    }
     let img = jpeg2k::Image::from_bytes(bytes).map_err(unreadable)?;
     let comps = img.components();
     let (w, h) = (img.width(), img.height());
@@ -257,6 +288,12 @@ fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
         ColorSpace::Gray | ColorSpace::Unspecified | ColorSpace::Unknown
     );
     let n = usize::try_from(u64::from(w) * u64::from(h)).map_err(unreadable)?;
+    // A damaged file can report fewer samples than its size; never index past them.
+    if w == 0 || h == 0 || comps.iter().any(|c| c.data().len() < n) {
+        return Err(unreadable(
+            "JPEG 2000 sample data is shorter than the image size",
+        ));
+    }
     // Scale every sample to 8 bits from the component's own precision.
     let to8 = |c: &jpeg2k::ImageComponent| -> Vec<u8> {
         let max = ((1u32 << c.precision()) - 1) as f32;

@@ -137,6 +137,20 @@ impl Drop for TempDir {
     }
 }
 
+/// Display copies are re-encoded, so their size is not the input's. Each converted frame is
+/// budgeted at least 4 MB (a q92 JPEG of an 11 MP scan is 2–4 MB).
+const DISPLAY_FRAME_ESTIMATE: u64 = 4 * 1024 * 1024;
+
+/// Bytes ingest will write for one input: the file itself when copied as-is, or the kept
+/// original plus one display copy per frame when converted.
+pub(crate) fn estimate_bytes(size: u64, info: &Inspection) -> u64 {
+    if !info.needs_conversion {
+        return size;
+    }
+    let frames = u64::from(info.frames.max(1));
+    size.saturating_add(frames.saturating_mul((size / frames).max(DISPLAY_FRAME_ESTIMATE)))
+}
+
 /// Each input path with its inspection, in page order.
 type Inspected<'a> = Vec<(&'a Path, Inspection)>;
 
@@ -153,12 +167,7 @@ fn inspect_all(inputs: &[PathBuf]) -> Result<(Inspected<'_>, u64), BookError> {
         let size = std::fs::metadata(path)
             .map_err(|e| io_error(path, &e))?
             .len();
-        // A converted file keeps its original and adds a display copy of similar size.
-        estimated += if info.needs_conversion {
-            size * 2
-        } else {
-            size
-        };
+        estimated += estimate_bytes(size, &info);
         opened.push((path.as_path(), info));
     }
     Ok((opened, estimated))

@@ -2,7 +2,7 @@
 //! CMYK-with-profile and JPEG 2000 inputs need macOS `sips` and skip elsewhere.
 
 use super::convert::{display_frame, inspect, open, ConvertError, InputKind, Inspection};
-use super::decode::{jpeg_has_adobe_marker, jpeg_is_cmyk};
+use super::decode::{jp2_dimensions, jpeg_has_adobe_marker, jpeg_is_cmyk, JP2_MAX_PIXELS};
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::codecs::webp::WebPEncoder;
@@ -643,4 +643,31 @@ fn grey_alpha_png_with_a_grey_profile_keeps_its_alpha() {
         (255, 40),
         "alpha survives"
     );
+}
+
+#[test]
+fn jp2_header_size_is_read_and_bounded() {
+    // Raw codestream: SOC, SIZ with Xsiz/Ysiz and offsets.
+    let mut j2k = vec![0xFF, 0x4F, 0xFF, 0x51, 0, 41, 0, 0];
+    for v in [5000u32, 7000, 0, 0] {
+        j2k.extend_from_slice(&v.to_be_bytes());
+    }
+    assert_eq!(jp2_dimensions(&j2k), Some((5000, 7000)));
+    // JP2 box: length, "ihdr", HEIGHT, WIDTH.
+    let mut jp2 = b"\0\0\0\x0cjP  \r\n\x87\n".to_vec();
+    jp2.extend_from_slice(&[0, 0, 0, 22]);
+    jp2.extend_from_slice(b"ihdr");
+    jp2.extend_from_slice(&40_000u32.to_be_bytes());
+    jp2.extend_from_slice(&50_000u32.to_be_bytes());
+    assert_eq!(jp2_dimensions(&jp2), Some((50_000, 40_000)));
+    const { assert!(50_000u64 * 40_000 > JP2_MAX_PIXELS) };
+    // A file claiming 2 gigapixels is refused before OpenJPEG allocates anything.
+    let d = Dir::new("jp2-bomb");
+    let p = d.file("bomb.jp2", &jp2);
+    match open(&p).and_then(|s| s.frame(0)) {
+        Err(ConvertError::UnreadableFile(r)) => assert!(r.contains("limit"), "{r}"),
+        other => panic!("expected the pixel limit, got {other:?}"),
+    }
+    assert_eq!(jp2_dimensions(b"nothing here"), None);
+    assert_eq!(jp2_dimensions(&j2k[..10]), None, "truncated SIZ");
 }
