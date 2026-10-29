@@ -131,8 +131,17 @@ Spike result (2026-10-29, macOS): all four crates confirmed, with three findings
 - `lcms2` links a system LittleCMS when one is installed. Its `static` feature is on, so the
   binary links no image library dynamically.
 
-Known limits: a JPEG 2000 file's embedded colour profile is ignored and treated as sRGB, and
-TIFF palette, YCbCr, Lab, and float layouts are `UnreadableFile`.
+Known limits, each `UnreadableFile` unless noted:
+
+- JPEG 2000: an embedded colour profile is ignored and the image treated as sRGB (not an
+  error). Subsampled, signed, YCC, and CMYK images are rejected; four components are read as
+  RGBA only when the file says sRGB.
+- TIFF: only 8- and 16-bit grey, RGB, and RGBA, plus 8-bit CMYK with a profile. Palette,
+  YCbCr, Lab, grey with alpha, 16-bit CMYK, and 32/64-bit or float layouts are rejected.
+- A corrupt embedded ICC profile rejects the page rather than assuming sRGB, and a grey
+  profile on a colour image is rejected rather than turning the page grey.
+- A JPEG that only needs a rotation or a colour fix is re-encoded at q92. A lossless JPEG
+  rotation is a possible later improvement.
 
 Originals need a book-level `sources[]` list and a per-page `source` reference, so M1 writes
 `formatVersion` 2. See
@@ -295,6 +304,9 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 ### Phase 4 — Docs & release
 
 - [ ] `docs/manual-test-m1.md` + README try-it
+- [ ] Third-party notices file for statically linked C libraries (OpenJPEG BSD-2, LittleCMS
+      MIT) shipped with the app bundle; re-check the bundled OpenJPEG version (2.5.3) for advisories,
+      since `cargo audit` cannot see C code
 - [ ] `VERSION` → **0.2.0**; `CHANGELOG.md` user-facing
 - [ ] Update roadmap / `to_do.md`; archive this plan when verified
 

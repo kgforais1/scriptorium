@@ -1,7 +1,8 @@
 //! Conversion tests. Fixtures are generated at test time, so no binaries live in git.
 //! CMYK-with-profile and JPEG 2000 inputs need macOS `sips` and skip elsewhere.
 
-use super::convert::{display_frame, inspect, ConvertError, InputKind, Inspection};
+use super::convert::{display_frame, inspect, open, ConvertError, InputKind, Inspection};
+use super::decode::{jpeg_has_adobe_marker, jpeg_is_cmyk};
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::codecs::webp::WebPEncoder;
@@ -438,4 +439,145 @@ fn jpeg_2000_becomes_jpeg() {
     let out = decoded(&jp2, 0);
     assert_eq!((out.width(), out.height()), (W, H));
     assert!(corner(&out, false, false) > 200, "marker survives decoding");
+    // A mid-tone pixel catches a channel-order or scaling bug the corner check would miss.
+    let (want, got) = (
+        picture().get_pixel(30, 40).0,
+        out.to_rgb8().get_pixel(30, 40).0,
+    );
+    for k in 0..3 {
+        assert!(
+            (want[k] as i32 - got[k] as i32).abs() < 12,
+            "JP2 pixel {want:?} vs {got:?}"
+        );
+    }
+}
+
+// ---- JPEG header walking ----
+
+/// A JPEG header: SOI, the given segments, then a SOF0 with `components`, then SOS.
+fn jpeg_header(before_sof: &[&[u8]], components: u8) -> Vec<u8> {
+    let mut out = vec![0xFF, 0xD8];
+    for seg in before_sof {
+        out.extend_from_slice(seg);
+    }
+    out.extend_from_slice(&[
+        0xFF,
+        0xC0,
+        0,
+        8 + 3 * components as u16 as u8,
+        8,
+        0,
+        10,
+        0,
+        10,
+        components,
+    ]);
+    out.extend(std::iter::repeat_n(0u8, 3 * components as usize));
+    out.extend_from_slice(&[0xFF, 0xDA, 0, 2]);
+    out
+}
+
+#[test]
+fn jpeg_walker_handles_fill_bytes_standalone_markers_and_truncation() {
+    let app0: &[u8] = &[0xFF, 0xE0, 0, 4, b'J', b'F'];
+    let adobe: &[u8] = &[0xFF, 0xEE, 0, 7, b'A', b'd', b'o', b'b', b'e'];
+    assert!(jpeg_is_cmyk(&jpeg_header(&[app0], 4)));
+    assert!(!jpeg_is_cmyk(&jpeg_header(&[app0], 3)));
+    // Fill bytes before a marker, and standalone TEM / RST markers, must not desync the walk.
+    assert!(jpeg_is_cmyk(&jpeg_header(&[&[0xFF, 0xFF, 0xFF], app0], 4)));
+    assert!(jpeg_is_cmyk(&jpeg_header(
+        &[&[0xFF, 0x01], &[0xFF, 0xD3], app0],
+        4
+    )));
+    assert!(jpeg_has_adobe_marker(&jpeg_header(
+        &[&[0xFF, 0xFF], adobe],
+        4
+    )));
+    assert!(!jpeg_has_adobe_marker(&jpeg_header(&[app0], 4)));
+    // Progressive SOF2 counts as a frame header too.
+    let mut sof2 = jpeg_header(&[], 4);
+    sof2[3] = 0xC2;
+    assert!(jpeg_is_cmyk(&sof2));
+    // Truncated or garbage headers answer "no", never panic.
+    let full = jpeg_header(&[adobe], 4);
+    for cut in 0..full.len() {
+        let _ = (
+            jpeg_is_cmyk(&full[..cut]),
+            jpeg_has_adobe_marker(&full[..cut]),
+        );
+    }
+    assert!(!jpeg_is_cmyk(b"not a jpeg"));
+    assert!(
+        !jpeg_is_cmyk(&[0xFF, 0xD8, 0xFF, 0xE0, 0, 1]),
+        "length below 2"
+    );
+}
+
+#[test]
+fn jpeg_with_a_wide_gamut_profile_converts() {
+    let d = Dir::new("jpeg-icc");
+    let mut bytes = Vec::new();
+    let mut enc = JpegEncoder::new_with_quality(&mut bytes, 95);
+    enc.set_icc_profile(adobe_rgb_icc()).unwrap();
+    enc.encode_image(&picture()).unwrap();
+    let p = d.file("wide.jpg", &bytes);
+    expect(inspect(&p).unwrap(), InputKind::Jpeg, 1, true, "jpg");
+    assert_ne!(
+        decoded(&p, 0).to_rgb8().get_pixel(30, 40),
+        picture().get_pixel(30, 40)
+    );
+}
+
+fn grey_gamma_icc(gamma: f64) -> Vec<u8> {
+    let white = lcms2::CIExyY {
+        x: 0.3127,
+        y: 0.3290,
+        Y: 1.0,
+    };
+    lcms2::Profile::new_gray(&white, &lcms2::ToneCurve::new(gamma))
+        .unwrap()
+        .icc()
+        .unwrap()
+}
+
+#[test]
+fn grey_profile_on_a_colour_image_is_rejected_not_greyscaled() {
+    let d = Dir::new("grey-on-colour");
+    let p = d.file(
+        "c.png",
+        &png_with_icc(&picture(), Some(grey_gamma_icc(1.8))),
+    );
+    match display_frame(&p, 0) {
+        Err(ConvertError::UnreadableFile(r)) => assert!(r.contains("grey ICC profile"), "{r}"),
+        other => panic!("expected UnreadableFile, got {other:?}"),
+    }
+}
+
+#[test]
+fn deep_grey_tiff_stays_grey_in_its_jpeg() {
+    use tiff::encoder::{colortype, TiffEncoder};
+    let d = Dir::new("grey-tiff");
+    let mut out = std::io::Cursor::new(Vec::new());
+    let data: Vec<u16> = (0..W * H).map(|i| (i % W * 1600) as u16).collect();
+    TiffEncoder::new(&mut out)
+        .unwrap()
+        .write_image::<colortype::Gray16>(W, H, &data)
+        .unwrap();
+    let p = d.file("g.tif", &out.into_inner());
+    assert_eq!(decoded(&p, 0).color(), image::ColorType::L8);
+}
+
+#[test]
+fn one_open_serves_every_frame() {
+    let d = Dir::new("open-once");
+    let img = picture();
+    let p = d.file("m.tif", &tiff(&[img.clone(), img.clone()], None));
+    let src = open(&p).unwrap();
+    std::fs::remove_file(&p).unwrap();
+    for f in 0..src.info.frames {
+        assert!(
+            src.frame(f).unwrap().bytes.is_some(),
+            "frame {f} decodes from the kept buffer"
+        );
+    }
 }

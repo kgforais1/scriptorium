@@ -6,6 +6,11 @@ use lcms2::{ColorSpaceSignature, Intent, PixelFormat, Profile, Transform};
 
 /// Largest per-channel difference (0–255) at which a profile still counts as sRGB.
 const SRGB_TOLERANCE: i16 = 2;
+/// Rendering intent for every transform, so the sRGB probe and the conversion agree.
+const INTENT: Intent = Intent::Perceptual;
+
+// A corrupt embedded profile makes the page `UnreadableFile` rather than silently treating
+// it as sRGB: the curator should know the colours cannot be trusted.
 
 /// True when an embedded RGB or grey profile maps its probe colours onto sRGB within
 /// `SRGB_TOLERANCE`, so the pixels can be used unchanged.
@@ -23,28 +28,16 @@ pub(super) fn is_srgb_equivalent(icc: &[u8]) -> Result<bool, ConvertError> {
     ];
     match src.color_space() {
         ColorSpaceSignature::RgbData => {
-            let tr = Transform::new(
-                &src,
-                PixelFormat::RGB_8,
-                &srgb,
-                PixelFormat::RGB_8,
-                Intent::RelativeColorimetric,
-            )
-            .map_err(unreadable)?;
+            let tr = Transform::new(&src, PixelFormat::RGB_8, &srgb, PixelFormat::RGB_8, INTENT)
+                .map_err(unreadable)?;
             let mut out = probes;
             tr.transform_pixels(&probes, &mut out);
             Ok(close(&probes, &out))
         }
         ColorSpaceSignature::GrayData => {
             let greys: [u8; 5] = [0, 64, 128, 192, 255];
-            let tr = Transform::new(
-                &src,
-                PixelFormat::GRAY_8,
-                &srgb,
-                PixelFormat::RGB_8,
-                Intent::RelativeColorimetric,
-            )
-            .map_err(unreadable)?;
+            let tr = Transform::new(&src, PixelFormat::GRAY_8, &srgb, PixelFormat::RGB_8, INTENT)
+                .map_err(unreadable)?;
             let mut out = [[0u8; 3]; 5];
             tr.transform_pixels(&greys, &mut out);
             Ok(close(&greys.map(|g| [g, g, g]), &out))
@@ -80,8 +73,11 @@ pub(super) fn to_srgb8(
         });
     };
     let srgb = Profile::new_srgb();
-    let intent = Intent::Perceptual;
+    let intent = INTENT;
     if src.color_space() == ColorSpaceSignature::GrayData {
+        if !is_grey {
+            return Err(unreadable("grey ICC profile on a colour image"));
+        }
         let grey = img.to_luma8();
         let tr = Transform::new(&src, PixelFormat::GRAY_8, &srgb, PixelFormat::RGB_8, intent)
             .map_err(unreadable)?;
@@ -137,41 +133,18 @@ pub(super) fn cmyk_pixels_to_srgb(
     } else {
         PixelFormat::CMYK_8
     };
-    let tr = Transform::new(
-        &src,
-        fmt,
-        &Profile::new_srgb(),
-        PixelFormat::RGB_8,
-        Intent::Perceptual,
-    )
-    .map_err(unreadable)?;
+    let tr = Transform::new(&src, fmt, &Profile::new_srgb(), PixelFormat::RGB_8, INTENT)
+        .map_err(unreadable)?;
     let px: Vec<[u8; 4]> = cmyk
         .chunks_exact(4)
         .map(|c| [c[0], c[1], c[2], c[3]])
         .collect();
-    if px.len() != (w * h) as usize {
+    if px.len() as u64 != u64::from(w) * u64::from(h) {
         return Err(unreadable("CMYK buffer has the wrong size"));
     }
     let mut out = vec![[0u8; 3]; px.len()];
     tr.transform_pixels(&px, &mut out);
     rgb_image(w, h, out.concat())
-}
-
-/// True when the JPEG has an Adobe APP14 segment; such CMYK JPEGs store inverted samples.
-fn jpeg_has_adobe_marker(bytes: &[u8]) -> bool {
-    let mut i = 2;
-    while i + 4 <= bytes.len() && bytes[i] == 0xFF {
-        let marker = bytes[i + 1];
-        let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
-        if marker == 0xEE && bytes.get(i + 4..i + 9) == Some(b"Adobe") {
-            return true;
-        }
-        if marker == 0xDA {
-            return false;
-        }
-        i += 2 + len;
-    }
-    false
 }
 
 /// Decode a four-component JPEG as raw CMYK and convert it to sRGB with its embedded profile.
@@ -194,6 +167,6 @@ pub(super) fn cmyk_jpeg_to_srgb(bytes: &[u8]) -> Result<DynamicImage, ConvertErr
         u32::from(info.height),
         &raw,
         icc.as_deref(),
-        jpeg_has_adobe_marker(bytes),
+        super::decode::jpeg_has_adobe_marker(bytes),
     )
 }

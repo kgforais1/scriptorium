@@ -125,9 +125,16 @@ pub struct DisplayImage {
     pub bytes: Option<Vec<u8>>,
 }
 
-/// Classify a file and decide whether it must be converted. Reads headers, and decodes
-/// only what the rules need (a JPEG's component count, a PNG's bit depth, ICC, orientation).
-pub fn inspect(path: &Path) -> Result<Inspection, ConvertError> {
+/// An input file read once, with its inspection. Ingest opens each file once and asks for
+/// every frame from the same buffer, so a multi-page TIFF is not re-read per page.
+pub struct Source {
+    pub info: Inspection,
+    bytes: Vec<u8>,
+}
+
+/// Read and classify a file, deciding whether it must be converted. Decodes only what the
+/// rules need (a JPEG's component count, bit depth, ICC profile, orientation).
+pub fn open(path: &Path) -> Result<Source, ConvertError> {
     let kind = InputKind::from_path(path).ok_or(ConvertError::UnsupportedFormat)?;
     let bytes = std::fs::read(path).map_err(unreadable)?;
     let frames = match kind {
@@ -140,12 +147,24 @@ pub fn inspect(path: &Path) -> Result<Inspection, ConvertError> {
     } else {
         kind.passthrough_ext()
     };
-    Ok(Inspection {
+    let info = Inspection {
         kind,
         frames,
         needs_conversion,
         display_ext,
-    })
+    };
+    Ok(Source { info, bytes })
+}
+
+/// Classify a file without keeping its bytes.
+pub fn inspect(path: &Path) -> Result<Inspection, ConvertError> {
+    open(path).map(|s| s.info)
+}
+
+/// The display image for frame `frame` (0-based) of `path`. Convenience for one-off use;
+/// ingest should `open` once and call [`Source::frame`] per page.
+pub fn display_frame(path: &Path, frame: u32) -> Result<DisplayImage, ConvertError> {
+    open(path)?.frame(frame)
 }
 
 /// A JPEG, PNG, or WebP is converted when it is CMYK, deeper than 8 bits, carries a
@@ -162,40 +181,47 @@ fn needs_display_conversion(kind: InputKind, bytes: &[u8]) -> Result<bool, Conve
     Ok(info.deep || !icc_ok || info.orientation != image::metadata::Orientation::NoTransforms)
 }
 
-/// Produce the display image for frame `frame` (0-based) of `path`.
-pub fn display_frame(path: &Path, frame: u32) -> Result<DisplayImage, ConvertError> {
-    let info = inspect(path)?;
-    if frame >= info.frames {
-        return Err(unreadable(format!("frame {frame} of {}", info.frames)));
-    }
-    let bytes = std::fs::read(path).map_err(unreadable)?;
-    let decoded = decode::decode_frame(info.kind, &bytes, frame)?;
-    if !info.needs_conversion {
-        return Ok(DisplayImage {
+impl Source {
+    /// Produce the display image for frame `frame` (0-based).
+    pub fn frame(&self, frame: u32) -> Result<DisplayImage, ConvertError> {
+        let info = &self.info;
+        if frame >= info.frames {
+            return Err(unreadable(format!("frame {frame} of {}", info.frames)));
+        }
+        if !info.needs_conversion {
+            // The file is its own display image; only its size is needed.
+            let (width, height) = decode::header_info(&self.bytes)?.dimensions;
+            return Ok(DisplayImage {
+                ext: info.display_ext,
+                width,
+                height,
+                bytes: None,
+            });
+        }
+        let decoded = decode::decode_frame(info.kind, &self.bytes, frame)?;
+        let mut img = color::to_srgb8(decoded.image, decoded.icc.as_deref())?;
+        img.apply_orientation(decoded.orientation);
+        let encoded = encode(&img, info.display_ext)?;
+        Ok(DisplayImage {
             ext: info.display_ext,
-            width: decoded.image.width(),
-            height: decoded.image.height(),
-            bytes: None,
-        });
+            width: img.width(),
+            height: img.height(),
+            bytes: Some(encoded),
+        })
     }
-    let mut img = color::to_srgb8(decoded.image, decoded.icc.as_deref())?;
-    img.apply_orientation(decoded.orientation);
-    let encoded = encode(&img, info.display_ext)?;
-    Ok(DisplayImage {
-        ext: info.display_ext,
-        width: img.width(),
-        height: img.height(),
-        bytes: Some(encoded),
-    })
 }
 
 fn encode(img: &DynamicImage, ext: &str) -> Result<Vec<u8>, ConvertError> {
     let mut out = Vec::new();
     if ext == "jpg" {
-        let rgb = img.to_rgb8();
-        JpegEncoder::new_with_quality(&mut out, JPEG_QUALITY)
-            .encode_image(&rgb)
-            .map_err(unreadable)?;
+        let mut enc = JpegEncoder::new_with_quality(&mut out, JPEG_QUALITY);
+        // Grey scans stay one channel, a third of the size of an RGB copy.
+        if img.color() == image::ColorType::L8 {
+            enc.encode_image(&img.to_luma8())
+        } else {
+            enc.encode_image(&img.to_rgb8())
+        }
+        .map_err(unreadable)?;
     } else {
         let (w, h) = (img.width(), img.height());
         let enc = PngEncoder::new(&mut out);

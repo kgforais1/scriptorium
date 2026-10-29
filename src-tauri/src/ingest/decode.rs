@@ -15,28 +15,66 @@ pub(super) struct Decoded {
 }
 
 pub(super) struct HeaderInfo {
+    pub dimensions: (u32, u32),
     /// More than 8 bits per sample.
     pub deep: bool,
     pub icc: Option<Vec<u8>>,
     pub orientation: Orientation,
 }
 
-/// Component count of a JPEG's first frame header, read from its SOFn marker.
-fn jpeg_components(bytes: &[u8]) -> Option<u8> {
+/// The marker segments of a JPEG header, in order, up to the start of scan. Skips `0xFF`
+/// fill bytes and the standalone markers (TEM, RSTn) that carry no length. Stops quietly on
+/// a truncated or malformed header, so callers see fewer segments, never a panic.
+pub(super) fn jpeg_segments(bytes: &[u8]) -> Vec<(u8, &[u8])> {
+    let mut out = Vec::new();
+    if bytes.get(..2) != Some(&[0xFF, 0xD8]) {
+        return out;
+    }
     let mut i = 2;
-    while i + 4 <= bytes.len() {
-        if bytes[i] != 0xFF {
-            return None;
+    loop {
+        if bytes.get(i) != Some(&0xFF) {
+            return out;
         }
-        let marker = bytes[i + 1];
-        let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
-        let is_sof = (0xC0..=0xCF).contains(&marker) && !matches!(marker, 0xC4 | 0xC8 | 0xCC);
-        if is_sof {
-            return bytes.get(i + 9).copied();
+        while bytes.get(i + 1) == Some(&0xFF) {
+            i += 1;
         }
+        let Some(&marker) = bytes.get(i + 1) else {
+            return out;
+        };
+        if marker == 0x01 || (0xD0..=0xD8).contains(&marker) {
+            i += 2;
+            continue;
+        }
+        if marker == 0xD9 || marker == 0xDA {
+            return out;
+        }
+        let Some(len) = bytes
+            .get(i + 2..i + 4)
+            .map(|b| u16::from_be_bytes([b[0], b[1]]) as usize)
+        else {
+            return out;
+        };
+        let Some(payload) = len.checked_sub(2).and_then(|n| bytes.get(i + 4..i + 4 + n)) else {
+            return out;
+        };
+        out.push((marker, payload));
         i += 2 + len;
     }
-    None
+}
+
+/// Component count of a JPEG's first frame header (any SOFn).
+fn jpeg_components(bytes: &[u8]) -> Option<u8> {
+    jpeg_segments(bytes)
+        .into_iter()
+        .find(|(m, _)| (0xC0..=0xCF).contains(m) && !matches!(m, 0xC4 | 0xC8 | 0xCC))
+        .and_then(|(_, p)| p.get(5).copied())
+}
+
+/// True when the JPEG has an Adobe APP14 segment; such CMYK JPEGs store inverted samples.
+pub(super) fn jpeg_has_adobe_marker(bytes: &[u8]) -> bool {
+    jpeg_segments(bytes)
+        .iter()
+        .any(|(m, p)| *m == 0xEE && p.starts_with(b"Adobe"))
 }
 
 /// True for a four-component (CMYK or YCCK) JPEG. `image` would silently convert these to
@@ -59,6 +97,7 @@ pub(super) fn header_info(bytes: &[u8]) -> Result<HeaderInfo, ConvertError> {
     let orientation = dec.orientation().map_err(unreadable)?;
     let deep = dec.color_type().bytes_per_pixel() / dec.color_type().channel_count() > 1;
     Ok(HeaderInfo {
+        dimensions: dec.dimensions(),
         deep,
         icc,
         orientation,
@@ -166,6 +205,7 @@ fn decode_tiff(bytes: &[u8], frame: u32) -> Result<Decoded, ConvertError> {
 }
 
 fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
+    use jpeg2k::ColorSpace;
     let img = jpeg2k::Image::from_bytes(bytes).map_err(unreadable)?;
     let comps = img.components();
     let (w, h) = (img.width(), img.height());
@@ -174,16 +214,35 @@ fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
             "JPEG 2000 with subsampled or missing components",
         ));
     }
+    if comps
+        .iter()
+        .any(|c| c.is_signed() || c.precision() == 0 || c.precision() > 16)
+    {
+        return Err(unreadable(
+            "JPEG 2000 with signed or unusual-precision samples",
+        ));
+    }
+    // Only RGB and grey are drawn; YCC and CMYK colour spaces are rejected, and a 4-component
+    // image is taken as RGBA only when the file says sRGB.
+    let space = img.color_space();
+    let rgb_like = matches!(
+        space,
+        ColorSpace::SRGB | ColorSpace::Unspecified | ColorSpace::Unknown
+    );
+    let grey_like = matches!(
+        space,
+        ColorSpace::Gray | ColorSpace::Unspecified | ColorSpace::Unknown
+    );
+    let n = usize::try_from(u64::from(w) * u64::from(h)).map_err(unreadable)?;
     // Scale every sample to 8 bits from the component's own precision.
     let to8 = |c: &jpeg2k::ImageComponent| -> Vec<u8> {
-        let max = ((1u64 << c.precision()) - 1) as f32;
+        let max = ((1u32 << c.precision()) - 1) as f32;
         c.data()
             .iter()
             .map(|&s| ((s.max(0) as f32) * 255.0 / max).round().clamp(0.0, 255.0) as u8)
             .collect()
     };
-    let planes: Vec<Vec<u8>> = comps.iter().take(4).map(to8).collect();
-    let n = (w * h) as usize;
+    let planes: Vec<Vec<u8>> = comps.iter().map(to8).collect();
     let interleave = |k: usize| -> Vec<u8> {
         let mut out = Vec::with_capacity(n * k);
         for i in 0..n {
@@ -195,11 +254,20 @@ fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
     };
     let bad = || unreadable("JPEG 2000 sample buffer has the wrong size");
     let image = match planes.len() {
-        1 | 2 => {
+        1 | 2 if grey_like => {
             DynamicImage::ImageLuma8(ImageBuffer::from_raw(w, h, interleave(1)).ok_or_else(bad)?)
         }
-        3 => DynamicImage::ImageRgb8(ImageBuffer::from_raw(w, h, interleave(3)).ok_or_else(bad)?),
-        _ => DynamicImage::ImageRgba8(ImageBuffer::from_raw(w, h, interleave(4)).ok_or_else(bad)?),
+        3 if rgb_like => {
+            DynamicImage::ImageRgb8(ImageBuffer::from_raw(w, h, interleave(3)).ok_or_else(bad)?)
+        }
+        4 if matches!(space, ColorSpace::SRGB) => {
+            DynamicImage::ImageRgba8(ImageBuffer::from_raw(w, h, interleave(4)).ok_or_else(bad)?)
+        }
+        k => {
+            return Err(unreadable(format!(
+                "JPEG 2000 with {k} components in colour space {space:?}"
+            )))
+        }
     };
     Ok(Decoded {
         image,
