@@ -22,12 +22,13 @@ pub(crate) fn lock_ingest_dir(dir: &Path) -> Result<std::fs::File, super::BookEr
     Ok(file)
 }
 
-/// True while another ingest holds `dir`'s lock. A missing lock file means the ingest died
-/// before taking it, so the directory is litter.
+/// True while another ingest holds `dir`'s lock, or when the lock cannot be checked.
 fn ingest_running(dir: &Path) -> bool {
     match std::fs::File::open(dir.join(INGEST_LOCK)) {
         Ok(file) => file.try_lock().is_err(),
-        Err(_) => false,
+        // No lock file: the ingest died before taking it. Any other error means we cannot
+        // tell, so keep the directory rather than risk deleting a live build.
+        Err(e) => e.kind() != std::io::ErrorKind::NotFound,
     }
 }
 

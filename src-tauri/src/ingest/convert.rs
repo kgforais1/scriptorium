@@ -42,6 +42,19 @@ impl InputKind {
         })
     }
 
+    /// The format's name as a user reads it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Jpeg => "JPEG",
+            Self::Png => "PNG",
+            Self::Webp => "WebP",
+            Self::Bmp => "BMP",
+            Self::Gif => "GIF",
+            Self::Tiff => "TIFF",
+            Self::Jp2 => "JPEG 2000",
+        }
+    }
+
     /// The `sources[].format` value recorded when an original is kept.
     pub fn source_format(self) -> SourceFormat {
         match self {
@@ -173,7 +186,9 @@ pub fn open(path: &Path) -> Result<Source, ConvertError> {
         Some(found) if found == kind => {}
         Some(found) => {
             return Err(unreadable(format!(
-                "the file is {found:?} but its extension says {kind:?}; rename it to match"
+                "the file is {} but its extension says {}; rename it to match",
+                found.label(),
+                kind.label()
             )))
         }
         None => {

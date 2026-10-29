@@ -696,11 +696,52 @@ fn contents_must_match_the_extension() {
     let p = d.file("scan.png", &tiff(&[picture()], None));
     match inspect(&p) {
         Err(ConvertError::UnreadableFile(r)) => {
-            assert!(r.contains("Tiff") && r.contains("Png"), "{r}")
+            assert!(r.contains("TIFF") && r.contains("PNG"), "{r}")
         }
         other => panic!("expected a format mismatch, got {other:?}"),
     }
     // `.jpeg` and `.tiff` spellings still match their contents.
     assert!(inspect(&d.file("a.jpeg", &jpeg(&picture()))).is_ok());
     assert!(inspect(&d.file("a.tiff", &tiff(&[picture()], None))).is_ok());
+}
+
+#[test]
+fn signatures_for_every_format() {
+    let d = Dir::new("sniff");
+    let mut webp = Vec::new();
+    WebPEncoder::new_lossless(&mut webp)
+        .write_image(picture().as_raw(), W, H, image::ExtendedColorType::Rgb8)
+        .unwrap();
+    let mut gif = Vec::new();
+    image::codecs::gif::GifEncoder::new(&mut gif)
+        .encode_frames(vec![image::Frame::new(
+            image::DynamicImage::ImageRgb8(picture()).to_rgba8(),
+        )])
+        .unwrap();
+    // Each real file passes under its own extension and is refused under another one.
+    for (ext, bytes, wrong) in [
+        ("webp", webp, "png"),
+        ("gif", gif, "jpg"),
+        ("tif", tiff(&[picture()], None), "bmp"),
+    ] {
+        assert!(
+            inspect(&d.file(&format!("ok.{ext}"), &bytes)).is_ok(),
+            "{ext}"
+        );
+        assert!(
+            inspect(&d.file(&format!("bad-{ext}.{wrong}"), &bytes)).is_err(),
+            "{ext} as .{wrong}"
+        );
+    }
+    // BigTIFF signatures are recognized (the decoder then decides whether it can read them).
+    let big = d.file("big.tif", b"II+\0\x08\0\0\0rest-of-file");
+    assert!(
+        !matches!(inspect(&big), Err(ConvertError::UnreadableFile(r)) if r.contains("extension"))
+    );
+    // A text file that happens to start with "BM" still fails as an unreadable BMP.
+    let fake = d.file("note.bmp", b"BM is short for bowel movement");
+    assert!(matches!(
+        inspect(&fake).and_then(|_| display_frame(&fake, 0)),
+        Err(ConvertError::UnreadableFile(_))
+    ));
 }

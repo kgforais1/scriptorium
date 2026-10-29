@@ -128,16 +128,33 @@ fn numbered(i: usize, count: usize) -> String {
 }
 
 /// Removes the temp directory unless the build succeeds.
-struct TempDir(Option<PathBuf>);
+/// Removes the temp directory unless the build succeeds. It also owns the ingest lock, so on
+/// failure the lock's handle is closed before the directory is deleted (Windows refuses to
+/// delete a file that is still open).
+struct TempDir {
+    path: Option<PathBuf>,
+    lock: Option<std::fs::File>,
+}
 impl TempDir {
+    /// Release the ingest lock and delete its file before the package is renamed: the package
+    /// must not ship it, and Windows cannot rename a directory with a file open inside it.
+    fn unlock(&mut self) -> Result<(), BookError> {
+        drop(self.lock.take());
+        if let Some(path) = &self.path {
+            let lock = path.join(sweep::INGEST_LOCK);
+            std::fs::remove_file(&lock).map_err(|e| io_error(&lock, &e))?;
+        }
+        Ok(())
+    }
     /// Keep the directory: the build succeeded and it has been renamed into place.
     fn keep(mut self) {
-        self.0 = None;
+        self.path = None;
     }
 }
 impl Drop for TempDir {
     fn drop(&mut self) {
-        if let Some(p) = self.0.take() {
+        drop(self.lock.take());
+        if let Some(p) = self.path.take() {
             let _ = std::fs::remove_dir_all(p);
         }
     }
@@ -183,9 +200,6 @@ fn inspect_all(inputs: &[PathBuf]) -> Result<(Inspected<'_>, u64), BookError> {
 /// Pages and originals written so far into the temp package.
 struct Builder {
     tmp: PathBuf,
-    /// Held for the whole build, so the orphan sweep can tell a running ingest from a crashed
-    /// one. The OS releases it if the process dies.
-    lock: Option<std::fs::File>,
     page_count: usize,
     originals_count: usize,
     pages: Vec<PageEntry>,
@@ -208,15 +222,19 @@ impl Builder {
             std::process::id()
         ));
         std::fs::create_dir(&tmp).map_err(|e| io_error(&tmp, &e))?;
-        let guard = TempDir(Some(tmp.clone()));
-        let lock = sweep::lock_ingest_dir(&tmp)?;
+        let mut guard = TempDir {
+            path: Some(tmp.clone()),
+            lock: None,
+        };
+        // Held for the whole build, so the orphan sweep can tell a running ingest from a
+        // crashed one. The OS releases it if the process dies.
+        guard.lock = Some(sweep::lock_ingest_dir(&tmp)?);
         for dir in ["pages", "ocr"] {
             let d = tmp.join(dir);
             std::fs::create_dir(&d).map_err(|e| io_error(&d, &e))?;
         }
         let builder = Self {
             tmp,
-            lock: Some(lock),
             page_count: opened.iter().map(|(_, i)| i.frames as usize).sum(),
             originals_count: opened.iter().filter(|(_, i)| i.needs_conversion).count(),
             pages: Vec::new(),
@@ -306,7 +324,7 @@ impl Builder {
     }
 
     /// Write `meta.json` and `annotations.json`, validating exactly what is written (A1).
-    fn finish(mut self, opts: &CreateOptions) -> Result<PathBuf, BookError> {
+    fn finish(self, opts: &CreateOptions) -> Result<PathBuf, BookError> {
         let now = now_rfc3339();
         let meta = BookMeta {
             format_version: CURRENT_FORMAT_VERSION,
@@ -332,11 +350,6 @@ impl Builder {
             let p = self.tmp.join(name);
             std::fs::write(&p, body).map_err(|e| io_error(&p, &e))?;
         }
-        // Release and remove the lock last: the package must not ship it, and Windows cannot
-        // rename a directory with a file open inside it.
-        drop(self.lock.take());
-        let lock_path = self.tmp.join(sweep::INGEST_LOCK);
-        std::fs::remove_file(&lock_path).map_err(|e| io_error(&lock_path, &e))?;
         Ok(self.tmp)
     }
 }
@@ -379,11 +392,12 @@ pub fn create_book_from_folder(
     let (opened, estimated) = inspect_all(&inputs)?;
     check_space(library, estimated)?;
 
-    let (mut builder, guard) = Builder::new(library, &opts.id, &opened)?;
+    let (mut builder, mut guard) = Builder::new(library, &opts.id, &opened)?;
     for (path, info) in &opened {
         builder.add_input(path, info)?;
     }
     let tmp = builder.finish(opts)?;
+    guard.unlock()?;
     let dest = commit(&tmp, library, &opts.id)?;
     guard.keep();
     Ok(dest)
