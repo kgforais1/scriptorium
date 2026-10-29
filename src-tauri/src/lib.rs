@@ -4,6 +4,7 @@
 //! Tauri commands for ingest/load land in later milestones; M0 ships types only.
 
 pub mod book_format;
+pub mod ingest;
 // `dev` is Tauri's cfg for `tauri dev`, including `tauri dev --release`, where the spike UI runs.
 #[cfg(dev)]
 mod spike;

@@ -121,6 +121,19 @@ Decoder choices, confirmed in Phase 1 with a small spike per crate:
 | ICC and CMYK to sRGB | `lcms2`, statically linked |
 | JPEG 2000 | `jpeg2k` over OpenJPEG, statically linked so no runtime library ships |
 
+Spike result (2026-10-29, macOS): all four crates confirmed, with three findings.
+
+- `image` silently turns a CMYK JPEG into RGB with no colour management. Ingest reads the SOF
+  component count itself and decodes CMYK JPEGs with `zune-jpeg`, honouring the Adobe APP14
+  inversion, then converts with `lcms2`.
+- The pure-Rust `openjp2` port tripped an undefined-behaviour check in a debug build, so
+  `jpeg2k` uses the bundled C OpenJPEG (`openjpeg-sys`). An 11 MP page decodes in about 130 ms.
+- `lcms2` links a system LittleCMS when one is installed. Its `static` feature is on, so the
+  binary links no image library dynamically.
+
+Known limits: a JPEG 2000 file's embedded colour profile is ignored and treated as sRGB, and
+TIFF palette, YCbCr, Lab, and float layouts are `UnreadableFile`.
+
 Originals need a book-level `sources[]` list and a per-page `source` reference, so M1 writes
 `formatVersion` 2. See
 [`docs/book-format.md`](../docs/book-format.md#originals-formatversion-2).
@@ -230,9 +243,10 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
       comments) and give each schema file its own `$id`. Done 2026-10-29: schemas, Rust types
       and rules, spec and migration note, fixture generator writes v2. The loader's
       schema-by-version pick lands with `load_book`
-- [ ] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
+- [x] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
       fixture per row and per conversion rule (CMYK, 16-bit, ICC, EXIF orientation,
-      multi-page TIFF)
+      multi-page TIFF). Done 2026-10-29 in `src-tauri/src/ingest/convert.rs`; fixtures are
+      generated at test time, and the CMYK-with-profile and JPEG 2000 cases need macOS `sips`
 - [x] Reserve the M2 and M6 layout in `docs/book-format.md` with no schema change: `ocr/` holds
       one JSON per page (text, word and line boxes in normalized page coordinates, `source` of
       `ocr`, `pdf`, or `curator`) plus `ocr/index.json` (per-page status and book rollup);
