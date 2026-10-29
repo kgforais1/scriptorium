@@ -36,7 +36,7 @@ Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to
   [M1 plan follow-ups](plans/2026-08-23-m1-scan-viewer.md#follow-ups-from-m0-senior-reviews-2026-08-25)
 - **Second skin (Gallery Daylight, mockup B) + skin picker** — M7 →
   [`design/DESIGN.md`](design/DESIGN.md#skins)
-- **Later product (M2–M8)** — OCR, text/hybrid modes, library, hotspots, polish, web/IIIF →
+- **Later product (M1.5–M8)** — PDF import, OCR, text/hybrid modes, library, hotspots, polish, web/IIIF →
   [roadmap](plans/2026-08-23-product-roadmap.md)
 - **cargo-audit unmaintained warnings** — 6 warnings, `cargo audit` still exits 0 in
   `src-tauri`: `proc-macro-error` 1.0.4 via glib-macros → glib → gtk → tauri

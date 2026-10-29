@@ -1,6 +1,6 @@
 # Plan: Scriptorium product roadmap
 
-Last reviewed: 2026-10-27
+Last reviewed: 2026-10-28
 Date: 2026-08-23
 Author: bootstrap session
 Status: approved
@@ -21,7 +21,7 @@ Three layers, not a single rendering choice:
 
 | Layer | Role |
 |---|---|
-| **Page images** | Canonical visual record (scanned JPEG/PNG/WebP). Always retained. |
+| **Page images** | Canonical visual record. Originals in any supported input format are retained; the reader shows webview-safe display copies. |
 | **OCR + geometry** | Per-page text with word/line bounding boxes (JSON, hOCR, or ALTO). Powers search, select, copy on scans. |
 | **Annotations** | Hotspots, lore popups, curator enrichment (W3C Web Annotation–friendly JSON). |
 
@@ -86,6 +86,14 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 
 **Out of scope for M1:** library shelf, authoring, OCR, hotspots, web deploy.
 
+### M1.5 — PDF import
+
+- [ ] Rasterize PDF pages at ingest (pdfium bundled per platform), capped at a long edge of
+      4000 px and 12 MP **per page**, close to the M1 gate corpus's ~11 MP pages. No document-wide
+      pixel limit; long PDFs rely on M1's windowed page loading
+- [ ] Keep the source PDF once in `sources[]`; each page references it with a `frame`
+- [ ] Capture any embedded PDF text layer for M2 search
+
 ### M2 — OCR-aware scans (text under the image)
 
 **Target:** app is “aware” of text while still showing scans; search, select, copy.
@@ -131,7 +139,7 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 ### M7 — Polish & extraction
 
 - [ ] Figure/image extraction from page regions (crop to assets)
-- [ ] Deep-zoom inspect on a page or region (OpenSeadragon-style panel)
+- [ ] Deep-zoom inspect on a page or region (OpenSeadragon-style panel), with pinch-to-zoom on touch
 - [ ] Book polish beyond the M1 engine: page thickness, cover open/close, richer paper detail
 - [ ] Second skin **Gallery Daylight** (mockup B) + skin picker; remember choice per user
 - [ ] Performance: lazy load pages, virtualized thumbnail scrubber (basic scrubber ships in M1), large book handling
@@ -150,7 +158,8 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 (see [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md)). Do not treat this
 roadmap as schema authority.
 
-Until those files exist, schema **v1** minimum (aligned with M0):
+Those files now exist and win over this section. M1 moves to `formatVersion` 2 (originals);
+see `docs/book-format.md`. Historical v1 minimum (aligned with M0):
 
 - `formatVersion` = 1
 - `id`, `title`, `createdAt`, `updatedAt`

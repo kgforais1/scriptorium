@@ -1,6 +1,6 @@
 # Scriptorium book package format
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-10-28
 
 Normative spec for a Scriptorium **book package** (formatVersion 1). A package is a
 self-contained directory that the app can open, verify, and re-locate on disk without
@@ -55,7 +55,45 @@ still load.
 | `pageLabel` | string | no | optional human label |
 | `storage` | string | no | `"copied"` default; `"referenced"` reserved, not implemented in M1 |
 
+## Planned: originals and display copies
+
+M1 ingest accepts formats the webview cannot show, such as TIFF and JPEG 2000, and converts
+some JPEG, PNG, and WebP inputs. `file` stays the display image. When a display image was
+converted, the untouched original is kept. Input formats and conversion rules are in the
+[M1 plan](../plans/2026-08-23-m1-scan-viewer.md#input-formats-normative-for-m1).
+
+Planned shape for `formatVersion` 2:
+
+- Package layout gains `originals/`. Original files live there, named `<stem>.<ext>`.
+- `meta.json` gains an optional book-level `sources[]`. Each entry has `id`, `file`,
+  `format`, `byteSize`, and `sha256`.
+- A page entry gains an optional `source` with `ref` (a `sources[].id`) and a 0-based
+  `frame`. `frame` is required when the source has more than one frame, such as a
+  multi-page TIFF or a PDF, and omitted for a single-frame source. Several pages may share one source.
+- `sources[].file` follows the same path rules as `pages[].file`. Case-insensitive
+  uniqueness applies within `sources[]`, not across pages that share a source.
+- `load_book` verifies each `sources[]` sha256 once. Drift is `ChecksumMismatch`.
+- Free-space preflight counts originals plus display copies in `estimated_bytes`.
+
+Validation rules for v2, added to the loader table when v2 ships:
+
+- `sources[].id` is non-empty and unique within the book.
+- Every page `source.ref` names an existing `sources[].id`.
+- `source.frame` is present exactly when the source has more than one frame. It is an
+  integer ≥ 0, below the source's frame count when the format reports one, and unique
+  among pages that share the source.
+- `sources` and `source` appear only when `formatVersion` is 2 or higher.
+
+v1 packages stay readable. A v1 package has no originals and loads unchanged.
+
 ## Evolution rule
+
+Today there is one schema file, [`book-format.schema.json`](book-format.schema.json), for
+`formatVersion` 1. Planned for v2 (M1 Phase 1): it is renamed `book-format.v1.schema.json`,
+`book-format.v2.schema.json` is added, and the loader reads `formatVersion` first, then
+validates against the matching file. Version 2 keeps the same strict policy: unknown keys are
+rejected. A v1-only reader must reject a v2 package with `SchemaVersionUnsupported`. The
+v1→v2 migration note will live in this document.
 
 While `formatVersion` is `1`, the schema and Rust loaders reject unknown keys
 (`additionalProperties: false` / `#[serde(deny_unknown_fields)]`). Therefore any
@@ -113,7 +151,7 @@ ingest pipeline returns on failure.
 | **Atomic write** | Write to a temp dir under the destination parent → validate → rename into place. If a destination book id already exists, ingest fails. | `DestinationExists` |
 | **Orphan cleanup** | On startup and before ingest, delete orphaned `*.scriptorium-tmp` / `.ingest-tmp-*` dirs under the library root older than 1 hour (or any left from a previous crashed run). | — |
 | **Checksums** | Compute `sha256` at ingest and store it in `meta.json`. `load_book` re-verifies the sha256 of each page file; drift is a hard failure. Skip re-verify only behind an explicit future flag — not in M1. | `ChecksumMismatch` |
-| **Free space** | Pre-flight check: refuse the copy if free space is less than `estimated_bytes × 1.1 + 50 MB` headroom. | — |
+| **Free space** | Pre-flight check: refuse the copy if free space is less than `estimated_bytes × 1.1 + 50 MB` headroom. `estimated_bytes` is the total ingest will write: every display image plus every retained original (v2). | — |
 
 ## Provenance and privacy
 

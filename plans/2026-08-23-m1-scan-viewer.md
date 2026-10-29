@@ -1,6 +1,6 @@
 # Plan: M1 — Scan viewer (first product milestone)
 
-Last reviewed: 2026-10-27
+Last reviewed: 2026-10-28
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
 Status: draft
@@ -25,7 +25,8 @@ last-read page. Priorities: reliability and correctness over polish.
 - Deep-zoom, figure extraction, heavy texture (M7) — except whatever the flip ADR already chose
 - Web/PWA / IIIF (M8)
 - Referenced/symlink storage mode (schema-reserved only)
-- HEIC (document unsupported)
+- PDF import (M1.5)
+- HEIC and AVIF (document unsupported; revisit later)
 
 ## Approach
 
@@ -53,7 +54,7 @@ folder pickers.
 
 | ID | Criterion | How verified |
 |---|---|---|
-| A1 | Ingest of a fixture folder produces a package that **validates** against `docs/book-format.schema.json` | `cargo test` + schema validation |
+| A1 | Ingest of a fixture folder produces a package that **validates** against `docs/book-format.v2.schema.json`; v1 fixtures still validate against `docs/book-format.v1.schema.json` | `cargo test` + schema validation |
 | A2 | Page order matches the **natural-sort table** below for the committed sort fixture | `cargo test` |
 | A3 | Each defined error variant returns its required user-visible message and does not abort the process | `cargo test` (+ manual spot-check in UI) |
 | A4 | Reader shows **page-turn** for ≥2 pages using ADR library; images are scan files (not placeholders); **no aspect stretch** (pad policy from ADR) | Manual + spike gates carried forward |
@@ -62,7 +63,7 @@ folder pickers.
 | A7 | Open… on an existing package directory loads without re-copy | Manual script |
 | A8 | Unsupported `formatVersion` → `SchemaVersionUnsupported` message | `cargo test` |
 | A9 | Perf budget (below) holds on the **named reference class** against the **pinned gate corpus** | Manual timed run; record results in PR |
-| A10 | Mutating one page byte causes `ChecksumMismatch` on load (negative checksum test) | `cargo test` |
+| A10 | Mutating one byte of a page file, or of a `sources[]` original, causes `ChecksumMismatch` on load | `cargo test` |
 | A11 | Ingest rejects `id` that case-folds equal to an existing book directory on case-insensitive FS | `cargo test` |
 | A12 | Resolved page path canonicalizes under package root (prefix assertion after `join`) | `cargo test` |
 | A13 | Webview CSP is **not** `null` before Phase 2 commands + asset protocol ship | Review `tauri.conf.json` + manual |
@@ -72,20 +73,78 @@ folder pickers.
 | Variant | When | Message must convey |
 |---|---|---|
 | `EmptyFolder` | No files | Folder has no files |
-| `NoSupportedImages` | No jpg/jpeg/png/webp | No supported images found |
+| `NoSupportedImages` | No file in a supported input format (see below) | No supported images found |
 | `UnreadableFile` | I/O error on a page | Which file failed |
 | `DestinationExists` | Target book path exists (incl. case-insensitive `id` collision on macOS/Windows) | Refuse overwrite |
 | `DuplicatePageStem` | Two sources map to same stem (incl. case-insensitive) | Duplicate page names |
 | `InsufficientDiskSpace` | Pre-flight fail | Need more free space |
 | `SchemaVersionUnsupported` | Unknown/newer formatVersion | Unsupported book version |
 | `InvalidPackage` | missing meta / schema fail | Not a valid Scriptorium book |
-| `ChecksumMismatch` | Page bytes ≠ stored sha256 | Book files corrupted or modified |
+| `ChecksumMismatch` | Page or original bytes ≠ stored sha256 | Book files corrupted or modified |
 | `PermissionDenied` | OS denied | Permission denied |
+
+### Input formats (normative for M1)
+
+Every page's `file` is a **display image** that every target webview can show: 8-bit
+sRGB JPEG, PNG, or WebP, stored upright. When the input already meets that, it is copied
+as-is and there is no separate original. Otherwise ingest writes a converted display copy
+and keeps the untouched original under `originals/`.
+
+| Input | Extensions | Display image |
+|---|---|---|
+| JPEG, PNG, WebP | `.jpg` `.jpeg` `.png` `.webp` | The input itself, unless a conversion rule below applies |
+| BMP, GIF | `.bmp` `.gif` | A PNG copy (GIF: first frame only) |
+| TIFF | `.tif` `.tiff` | A JPEG copy at quality ≥ 92; each directory (frame) of a multi-page TIFF is one page |
+| JPEG 2000 | `.jp2` `.j2k` `.jpf` | A JPEG copy at quality ≥ 92 |
+
+A JPEG, PNG, or WebP input gets a converted copy when any of these is true:
+
+- It is CMYK, 16-bit, or carries a non-sRGB ICC profile. Convert to 8-bit sRGB. An RGB or
+  grey image with no profile is treated as sRGB. A CMYK image with no profile is rejected as
+  `UnreadableFile`, because the common default CMYK profiles cannot be redistributed.
+- Its EXIF orientation is not 1. Rotate or flip the pixels and drop the tag. TIFF uses its
+  own orientation tag, with the same rule.
+
+Other rules:
+
+- `width` and `height` describe the stored display image after orientation.
+- A decode failure is `UnreadableFile` for that page, not a silent skip.
+- Platform floor: macOS 11 or later, because WKWebView decodes WebP only from Safari 14.
+  Set `bundle.macOS.minimumSystemVersion` to `11.0`.
+
+Decoder choices, confirmed in Phase 1 with a small spike per crate:
+
+| Need | Candidate |
+|---|---|
+| JPEG, PNG, WebP, BMP, GIF decode and JPEG/PNG encode | `image` |
+| TIFF directory enumeration and orientation | `tiff` |
+| ICC and CMYK to sRGB | `lcms2`, statically linked |
+| JPEG 2000 | `jpeg2k` over OpenJPEG, statically linked so no runtime library ships |
+
+Originals need a book-level `sources[]` list and a per-page `source` reference, so M1 writes
+`formatVersion` 2. See
+[`docs/book-format.md`](../docs/book-format.md#planned-originals-and-display-copies).
 
 ### Natural-sort specification (normative for M1)
 
 Sort **filename stem** with natural order (numeric chunks as integers), case-insensitive
-extension ignored for ordering. Only `.jpg` `.jpeg` `.png` `.webp` included.
+extension ignored for ordering. Only the formats in [Input formats](#input-formats-normative-for-m1) are included.
+
+**Multi-frame inputs (normative):** sort input files first, then expand each multi-page TIFF
+in its directory order, frame 0 first. Every page gets a display file named by its final
+0-based page position (`pages/0000.jpg`, `pages/0001.png`, …), never by its input stem, so a
+TIFF's frames cannot collide with an ordinary input file. Test a folder that mixes `2.tif`
+(three frames) with `1.jpg` and `3.jpg`: the result is `1.jpg`, the three frames, then `3.jpg`.
+
+**Chunk order (normative):** split each stem into alternating numeric and text chunks and
+compare them pairwise, left to right. The first chunk pair that differs decides the order:
+- Two numeric chunks compare by integer value (`2` before `10`).
+- A numeric chunk sorts before a text chunk at the same position, so pure-numeric stems come
+  before `cover`.
+- Two text chunks compare case-insensitively by UTF-8 bytes.
+- A stem that runs out of chunks first sorts first (`1` before `1a`).
+
+So `0a` sorts before `1`: the first chunks are `0` and `1`, and 0 < 1.
 
 **Tie-break (normative):** after natural compare of stems is equal, order by:
 1. Longer zero-padded numeric representation wins for that chunk only when integer values
@@ -100,6 +159,7 @@ extension ignored for ordering. Only `.jpg` `.jpeg` `.png` `.webp` included.
 | `img01.jpg`, `img001.jpg` | `img001`, `img01` (longer pad first per rule 1) |
 | `cover.jpg`, `1.jpg`, `2.jpg` | `1`, `2`, `cover` (letters after pure-numeric stems that sort as numbers first — pure numeric stems ordered by value; non-numeric follow by UTF-8) |
 | `1.jpg`, `1b.jpg`, `1a.jpg` | `1`, `1a`, `1b` |
+| `1.jpg`, `0a.jpg` | `0a`, `1` (first chunks compare as 0 < 1) |
 
 Expand to ≥12 cases in `cargo test` beside the sort function. Do not leave tie-breaks as open questions.
 
@@ -109,8 +169,13 @@ Expand to ≥12 cases in `cargo test` beside the sort function. Do not leave tie
 development build via `pnpm tauri dev` (or release build if noted). If developing primarily
 on another class, amend this plan before claiming A9.
 
-**Gate corpus (pinned):** generated script output — **200 pages**, average **~5 MB** JPEG each
-(total ~1 GB ±10%). The 2–8 MB range is for smoke only, not the gate.
+**Gate corpus (pinned):** *Edmund Dulac's Picture-Book*, archive.org
+`edmunddulacspict00dulauoft`: **202 pages**, JPEG quality 92, about 450 MB total. 196 pages
+are 2808 × 3906 (about 11 MP). The covers and a few plates differ (2924 × 4218, 3048 × 4198,
+and four at 936 × 1292), which also exercises mixed page sizes. Fetch it with the recipe in
+[`tests/fixtures/README.md`](../tests/fixtures/README.md#public-domain-test-corpora).
+Pixel count drives decode time and memory (about 44 MB per decoded RGBA page), so the gate
+is set by pixels, not file size. Do not upscale pages to inflate file size.
 
 | Metric | Target | Measurement |
 |---|---|---|
@@ -153,17 +218,28 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 
 ### Phase 1 — Book I/O (Rust)
 
+- [ ] Book format v2: rename the current schema to `book-format.v1.schema.json` and add
+      `book-format.v2.schema.json` with `sources[]` and page `source`. The loader reads
+      `formatVersion` first, then picks the schema; any other version is
+      `SchemaVersionUnsupported` (A8). Rust reads v1 and v2 and writes v2. Add the `sources[]`
+      validation rules and the v1→v2 migration note to `docs/book-format.md`. Update every
+      reference to the old schema path (`src-tauri/src/book_format.rs` `load_schema`,
+      `tests/test_generate_fixture_book.py`, README, `docs/NAVIGATION.md`, `CHANGELOG.md`,
+      comments) and give each schema file its own `$id`
+- [ ] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
+      fixture per row and per conversion rule (CMYK, 16-bit, ICC, EXIF orientation,
+      multi-page TIFF)
 - [ ] Natural sort + table tests
 - [ ] Atomic create_book_from_folder + free-space check + DestinationExists
 - [ ] Per-page width/height/sha256/byteSize written
 - [ ] load_book + schema validation
 - [ ] lastReadPage read/write keyed by book **`id`**; flush API for window close
-- [ ] load_book re-verifies per-page sha256 (negative test: A10)
+- [ ] load_book re-verifies per-page sha256 and each `sources[]` sha256 once (negative test: A10)
 - [ ] load_book canonical path prefix check (A12)
 - [ ] Ingest case-insensitive `id` collision check (A11)
 - [ ] Orphan temp-dir sweep + DuplicatePageStem tests
 - [ ] All error taxonomy variants tested with `tempfile`
-- [ ] Schema bind: Rust sample serialize ↔ `docs/book-format.schema.json`
+- [ ] Schema bind: Rust sample serialize ↔ `docs/book-format.v2.schema.json` (and v1 samples ↔ v1 schema)
 
 ### Phase 2 — Commands + UI
 
@@ -186,6 +262,9 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] No hard-coded colours, fonts, or scene values in reader components (lamplit is the only
       skin; no picker yet)
 - [ ] Every control works by keyboard, has a visible focus state, and has an accessible name
+- [ ] Touch: one-finger drag and tap zones turn pages; controls have touch targets of at least
+      44 px; hover-only affordances (tooltips, thumbnail lift) have a tap equivalent; the
+      canvas blocks browser pinch and scroll without trapping the chrome
 - [ ] With `prefers-reduced-motion`, pulses stop and page turns shorten or cross-fade
 
 ### Phase 4 — Docs & release

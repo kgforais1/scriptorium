@@ -1,6 +1,6 @@
 # Scriptorium — CI & hooks
 
-Last reviewed: 2026-10-25
+Last reviewed: 2026-10-28
 
 ## Recommendation (what runs where)
 
@@ -18,7 +18,10 @@ Last reviewed: 2026-10-25
 | **Audit (pnpm + cargo)** | — | — | ✅ required (`Dependency audit`; informational findings pass, audit and tooling failures fail closed) | ✅ weekly re-run (`Dependency audit (weekly)`) |
 | **Tests + coverage** | — | — | ✅ pytest-cov (report; gate later) | — |
 | **SAST** | — | — | — | ✅ Semgrep on PR (whole repo; templates/scratch in `.semgrepignore`) |
+| **SonarQube (local, opt-in)** | `sonar-freshness` (no-op unless `SONAR_FRESHNESS_GATE=1`) | `sonar-freshness-push` (same opt-in) | — never | — never |
 | **CodeQL** | — | — | — | ✅ already required: GitHub default setup, ruleset code scanning (not a job in `security.yml`) |
+
+SonarQube is local and manual: see [`sonarqube.md`](sonarqube.md). CI never needs `SONAR_TOKEN`.
 
 **Later (M0.5):** Vitest coverage gates, TS eslint pre-push, Dependabot. CodeQL is already the ruleset code-scanning requirement above, not an M0.5 follow-up. **Rust fmt/clippy/test belong in M0**, not M0.5 — see foundation plan.
 

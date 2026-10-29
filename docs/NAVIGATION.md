@@ -1,6 +1,6 @@
 # Documentation Navigation
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-10-28
 
 Quick navigation guide for this template's documentation. Use this to find what you need without loading everything.
 
@@ -71,6 +71,7 @@ Quick navigation guide for this template's documentation. Use this to find what 
 - [`hooks/README.md`](../hooks/README.md) - Pre-commit hooks and policy scripts
 - [`hooks/.pre-commit-config.yaml`](../hooks/.pre-commit-config.yaml) - Example configuration
 - [`scripts/validate-env.sh`](../scripts/validate-env.sh) - Environment validation
+- [`docs/sonarqube.md`](../docs/sonarqube.md) - Opt-in local SonarQube scan and freshness gate
 
 ### CI/CD
 - [`ci/README.md`](../ci/README.md) - CI selection guidance

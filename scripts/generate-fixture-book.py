@@ -170,7 +170,7 @@ def build_book_package(out_dir: Path, title: str, page_count: int, seed: int) ->
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
     parser.add_argument(
         "--pages",
         type=int,
