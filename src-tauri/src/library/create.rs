@@ -129,6 +129,12 @@ fn numbered(i: usize, count: usize) -> String {
 
 /// Removes the temp directory unless the build succeeds.
 struct TempDir(Option<PathBuf>);
+impl TempDir {
+    /// Keep the directory: the build succeeded and it has been renamed into place.
+    fn keep(mut self) {
+        self.0 = None;
+    }
+}
 impl Drop for TempDir {
     fn drop(&mut self) {
         if let Some(p) = self.0.take() {
@@ -373,6 +379,6 @@ pub fn create_book_from_folder(
     }
     let tmp = builder.finish(opts)?;
     let dest = commit(&tmp, library, &opts.id)?;
-    std::mem::forget(guard);
+    guard.keep();
     Ok(dest)
 }

@@ -206,7 +206,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    print(f"Generated book '{meta['id']}' ({args.pages} pages) → {out_dir}")
+    # ASCII only: a Windows console (cp1252) cannot print an arrow.
+    print(f"Generated book '{meta['id']}' ({args.pages} pages) -> {out_dir}")
     print(f"  formatVersion: {meta['formatVersion']}")
     print(f"  total bytes: {sum(p['byteSize'] for p in meta['pages'])}")
     return 0
