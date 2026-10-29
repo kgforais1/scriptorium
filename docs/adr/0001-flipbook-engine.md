@@ -113,7 +113,8 @@ The spike is throwaway. M1 keeps the geometry, shaders, and scene loader, and re
 - Move the code to `src/features/reader/`, and replace the spike harness with E's chrome
   (header, bottom bar with thumbnail scrubber, notes panel) driven by `tokens.json`.
 - Feed pages from the book package (`meta.json`) instead of the spike folder command
-  (`spike_pages`, debug builds only, which admits only the listed files). Scope the asset
+  (`spike_pages`, compiled only without `tauri/custom-protocol`: `tauri dev` in either profile
+  or a plain `cargo build`, never `tauri build`; it admits only the listed files). Scope the asset
   protocol to the opened book. The `protocol-asset` feature and `assetProtocol.enable` ship in
   every build today with an empty static scope.
 - Decode off the main thread (worker plus `OffscreenCanvas`) and pick the texture size from

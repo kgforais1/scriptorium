@@ -77,7 +77,8 @@ export class PageTextures {
     const canvas = composePage(page, this.boxAspect, texH, this.paper);
     page.bitmap.close();
     // Clear stale error flags, then reject an upload the GPU refused instead of caching it.
-    while (gl.getError() !== gl.NO_ERROR);
+    // Bounded, in case a driver reports an error on every call.
+    for (let i = 0; i < 8 && gl.getError() !== gl.NO_ERROR; i++);
     const tex = textureFrom(gl, canvas);
     const glErr = gl.getError();
     if (glErr !== gl.NO_ERROR) {
