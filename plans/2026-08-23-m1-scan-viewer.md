@@ -231,6 +231,10 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
       fixture per row and per conversion rule (CMYK, 16-bit, ICC, EXIF orientation,
       multi-page TIFF)
+- [ ] Reserve the M2 and M6 layout in `docs/book-format.md` with no schema change: `ocr/` holds
+      one JSON per page (text, word and line boxes in normalized page coordinates, `source` of
+      `ocr`, `pdf`, or `curator`) plus `ocr/index.json` (per-page status and book rollup);
+      `annotations.json` regions use normalized page coordinates. Shapes are provisional until M2/M6
 - [ ] Natural sort + table tests
 - [ ] Atomic create_book_from_folder + free-space check + DestinationExists
 - [ ] Per-page width/height/sha256/byteSize written

@@ -108,13 +108,17 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Store per-page OCR: plain text + word/line `bbox` JSON
 - [ ] Full-text search UI; jump to page/highlight hit
 - [ ] Hidden text layer aligned to every scan, whatever its image format (select + copy +
-      search), not only PDFs with an embedded text layer
-- [ ] Embed the page text in exported image files too: XMP metadata in JPEG, PNG, and TIFF,
-      and a hidden text layer in exported PDFs, so the text travels with the file
+      search), not only PDFs with an embedded text layer. The book is a WebGL canvas, so the layer
+      is a DOM overlay placed from the engine's projected page geometry; boxes are stored in
+      normalized page coordinates (0–1)
+- [ ] Embed the page text in exported files: XMP metadata in exported JPEG and PNG pages, and a
+      hidden text layer in exported PDFs, so the text travels with the file. M2 owns this export
+      path. TIFF export waits until a TIFF encoder is added
 - [ ] Curator correction editor: side-by-side scan and text, edit words and line breaks,
       mark a page reviewed; keep the OCR original and the correction history
 - [ ] Background OCR job with progress (re-run when pages change)
-- [ ] Book metadata: `ocrStatus`, `ocrEngine`, `ocrGeneratedAt`
+- [ ] OCR status per page plus a book-level rollup (`status`, `engine`, `generatedAt`), kept in
+      `ocr/index.json`, not `meta.json`, so M2 needs no `formatVersion` bump (decided 2026-10-29)
 - [ ] Curator-supplied page text (transcription or translation, typed or imported) stored beside
       OCR with a `source` of `ocr`, `pdf`, or `curator`; curator text wins in search and the text layer
 
@@ -150,7 +154,8 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Expandable annotations: a marker opens a short note, which expands into the full notes
       panel (long text, images, links); keyboard and screen-reader operable per `design/DESIGN.md`
 - [ ] Curator detail views: the curator marks a region as a detail; readers click or tap it to
-      open a zoomed view of that region at full scan resolution, with a caption
+      open a zoomed view of that region at full scan resolution, with a caption. Until M7's
+      deep-zoom panel lands, the detail opens as a scaled crop in the notes panel
 - [ ] Import/export annotations JSON (interchange with IIIF-style bodies later)
 
 ### M7 — Polish & extraction
