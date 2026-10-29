@@ -25,37 +25,46 @@ pub(super) struct HeaderInfo {
 /// fill bytes and the standalone markers (TEM, RSTn) that carry no length. Stops quietly on
 /// a truncated or malformed header, so callers see fewer segments, never a panic.
 pub(super) fn jpeg_segments(bytes: &[u8]) -> Vec<(u8, &[u8])> {
+    walk_jpeg(bytes).0
+}
+
+/// The header segments, plus the offset where entropy-coded scan data starts (after the
+/// first SOS segment), or `None` when the header never reaches a scan.
+fn walk_jpeg(bytes: &[u8]) -> (Vec<(u8, &[u8])>, Option<usize>) {
     let mut out = Vec::new();
     if bytes.get(..2) != Some(&[0xFF, 0xD8]) {
-        return out;
+        return (out, None);
     }
     let mut i = 2;
     loop {
         if bytes.get(i) != Some(&0xFF) {
-            return out;
+            return (out, None);
         }
         while bytes.get(i + 1) == Some(&0xFF) {
             i += 1;
         }
         let Some(&marker) = bytes.get(i + 1) else {
-            return out;
+            return (out, None);
         };
         if marker == 0x01 || (0xD0..=0xD8).contains(&marker) {
             i += 2;
             continue;
         }
-        if marker == 0xD9 || marker == 0xDA {
-            return out;
+        if marker == 0xD9 {
+            return (out, None);
         }
         let Some(len) = bytes
             .get(i + 2..i + 4)
             .map(|b| u16::from_be_bytes([b[0], b[1]]) as usize)
         else {
-            return out;
+            return (out, None);
         };
         let Some(payload) = len.checked_sub(2).and_then(|n| bytes.get(i + 4..i + 4 + n)) else {
-            return out;
+            return (out, None);
         };
+        if marker == 0xDA {
+            return (out, Some(i + 2 + len));
+        }
         out.push((marker, payload));
         i += 2 + len;
     }
@@ -112,11 +121,17 @@ pub(super) fn tiff_frame_count(bytes: &[u8]) -> Result<u32, ConvertError> {
     Ok(frames)
 }
 
-/// A complete JPEG has an end-of-image marker after its scan. The JPEG decoders fill a
+/// A complete JPEG has an end-of-image marker after its scan data. The JPEG decoders fill a
 /// truncated scan with grey instead of failing, so a missing EOI is the truncation signal.
-/// Entropy-coded data never contains `FF D9` (a data `FF` is always stuffed as `FF 00`).
+/// The search starts at the scan: header payloads (an EXIF thumbnail with its own EOI, ICC
+/// bytes) must not count. Entropy-coded data never contains `FF D9`, because a data `FF` is
+/// stuffed as `FF 00`.
 fn jpeg_is_complete(bytes: &[u8]) -> bool {
-    bytes.windows(2).any(|w| w == [0xFF, 0xD9])
+    walk_jpeg(bytes).1.is_some_and(|start| {
+        bytes[start.min(bytes.len())..]
+            .windows(2)
+            .any(|w| w == [0xFF, 0xD9])
+    })
 }
 
 pub(super) fn decode_frame(

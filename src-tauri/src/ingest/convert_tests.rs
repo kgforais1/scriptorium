@@ -591,12 +591,38 @@ fn one_open_serves_every_frame() {
 fn truncated_passthrough_file_is_unreadable() {
     let d = Dir::new("truncated");
     let full = jpeg(&picture());
-    let p = d.file("cut.jpg", &full[..full.len() / 2]);
-    let res = open(&p).and_then(|s| s.frame(0));
+    let unreadable = |name: &str, bytes: &[u8]| {
+        let p = d.file(name, bytes);
+        let res = open(&p).and_then(|s| s.frame(0));
+        assert!(
+            matches!(res, Err(ConvertError::UnreadableFile(_))),
+            "{name}: {res:?}"
+        );
+    };
+    unreadable("cut.jpg", &full[..full.len() / 2]);
+
+    // An EXIF thumbnail carries its own end-of-image marker before the main scan; it must
+    // not make a truncated main image look complete.
+    let thumb: &[u8] = &[0xFF, 0xD8, 0xFF, 0xD9];
+    let mut app1 = vec![0xFF, 0xE1];
+    app1.extend_from_slice(&((2 + 6 + thumb.len()) as u16).to_be_bytes());
+    app1.extend_from_slice(b"Exif\0\0");
+    app1.extend_from_slice(thumb);
+    let with_app1 = |body: &[u8]| -> Vec<u8> {
+        let mut out = full[..2].to_vec();
+        out.extend_from_slice(&app1);
+        out.extend_from_slice(body);
+        out
+    };
+    unreadable("cut-thumb.jpg", &with_app1(&full[2..full.len() / 2]));
+    let p = d.file("thumb.jpg", &with_app1(&full[2..]));
     assert!(
-        matches!(res, Err(ConvertError::UnreadableFile(_))),
-        "{res:?}"
+        open(&p).and_then(|s| s.frame(0)).is_ok(),
+        "a complete JPEG with a thumbnail is fine"
     );
+
+    let png = png_with_icc(&picture(), None);
+    unreadable("cut.png", &png[..png.len() / 2]);
 }
 
 #[test]
