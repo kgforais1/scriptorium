@@ -24,11 +24,14 @@ pub fn sweep_orphans(library: &Path, max_age: Duration) -> usize {
         let Ok(kind) = entry.file_type() else {
             continue;
         };
-        if name.starts_with(TMP_PREFIX) || name.ends_with(TMP_SUFFIX) {
-            // A finished book is never swept, even if its id happens to end in the suffix:
-            // only a build that never reached the rename lacks its final meta.json.
-            let is_finished_book = kind.is_dir() && entry.path().join("meta.json").is_file();
-            if is_finished_book || !is_old(&entry, max_age) {
+        // A finished book whose id happens to end in the suffix is a book, not litter. Book ids
+        // start with [a-z0-9], so an ingest temp dir (".ingest-tmp-…") is never mistaken for
+        // one, even after a crash left a meta.json inside it.
+        let is_book = kind.is_dir()
+            && !name.starts_with(TMP_PREFIX)
+            && entry.path().join("meta.json").is_file();
+        if !is_book && (name.starts_with(TMP_PREFIX) || name.ends_with(TMP_SUFFIX)) {
+            if !is_old(&entry, max_age) {
                 continue;
             }
             let path = entry.path();

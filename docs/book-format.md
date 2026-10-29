@@ -193,10 +193,15 @@ bundle format is specified here before M5 builds it. Planned shape, provisional:
 
 - A `.scriptorium` file is a zip of the package folder with the package's own layout at the
   zip root (`meta.json`, `pages/`, and the rest). Entries are stored, not compressed.
-- A small manifest records the bundle version, `formatVersion`, and the exporting app version.
-- Import unpacks into a temp directory under the library root, rejects entries with absolute
-  paths, `..`, or symlinks, caps the unpacked size, and runs `load_book` before the book joins
-  the library. A taken `id` is never overwritten.
+- A manifest at `bundle.json` in the zip root records the bundle version, `formatVersion`, and
+  the exporting app version.
+- Import unpacks into an `.ingest-tmp-*` directory under the library root, so the orphan sweep
+  covers a crashed import. It rejects entries with absolute paths, `..`, or symlinks, caps the
+  unpacked size, and extracts only `meta.json`, `annotations.json`, `bundle.json`, the files
+  `meta.json` names, and files under `ocr/`. Anything else is rejected. Then `load_book` runs
+  before the book joins the library.
+- A taken `id` is never overwritten. Importing under a new id rewrites both the directory name
+  and `meta.json`'s `id`, and the new id follows the usual id rules.
 
 Because a package already holds only relative paths, a plain folder copy is also a valid
 export; the bundle just makes it one file.

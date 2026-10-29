@@ -465,6 +465,9 @@ fn sweep_removes_only_old_temp_entries() {
     let t = Tmp::new("sweep");
     let lib = t.dir("library");
     std::fs::create_dir(lib.join(format!("{TMP_PREFIX}crashed"))).unwrap();
+    // A crash after meta.json was written but before the rename still leaves litter.
+    std::fs::create_dir(lib.join(format!("{TMP_PREFIX}late-crash"))).unwrap();
+    std::fs::write(lib.join(format!("{TMP_PREFIX}late-crash/meta.json")), "{}").unwrap();
     std::fs::write(lib.join("meta.json.scriptorium-tmp"), "x").unwrap();
     std::fs::create_dir(lib.join("a-real-book")).unwrap();
     std::fs::write(lib.join("a-real-book/meta.json"), "{}").unwrap();
@@ -472,6 +475,11 @@ fn sweep_removes_only_old_temp_entries() {
     // A valid book id may end in the temp suffix; a finished book is still never swept.
     std::fs::create_dir(lib.join("odd.scriptorium-tmp")).unwrap();
     std::fs::write(lib.join("odd.scriptorium-tmp/meta.json"), "{}").unwrap();
+    std::fs::write(
+        lib.join("odd.scriptorium-tmp/meta.json.1-1.scriptorium-tmp"),
+        "x",
+    )
+    .unwrap();
     assert_eq!(
         sweep_orphans(&lib, ORPHAN_AGE),
         0,
@@ -479,8 +487,8 @@ fn sweep_removes_only_old_temp_entries() {
     );
     assert_eq!(
         sweep_orphans(&lib, Duration::ZERO),
-        3,
-        "two at the top, one inside the book"
+        5,
+        "three at the top, one inside each book"
     );
     assert!(
         lib.join("a-real-book/meta.json").exists(),
