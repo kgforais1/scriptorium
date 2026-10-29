@@ -49,7 +49,7 @@ pub fn spike_pages(app: AppHandle) -> Result<Vec<String>, String> {
     }
     pages.sort();
     // Admit only the listed images, not every file in the folder. Grants are process-wide and
-    // never revoked, so a page renamed after listing stays admitted until the app restarts.
+    // never revoked: a path stays admitted after its file is replaced or removed, until restart.
     let scope = app.asset_protocol_scope();
     for page in &pages {
         scope.allow_file(page).map_err(|e| e.to_string())?;
