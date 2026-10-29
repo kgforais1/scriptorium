@@ -186,6 +186,21 @@ ingest pipeline returns on failure.
 | **Checksums** | Compute `sha256` at ingest and store it in `meta.json`. `load_book` re-verifies the sha256 of each page file; drift is a hard failure. Skip re-verify only behind an explicit future flag — not in M1. | `ChecksumMismatch` |
 | **Free space** | Pre-flight check: refuse the copy if free space is less than `estimated_bytes × 1.1 + 50 MB` headroom. `estimated_bytes` is the total ingest will write: every display image plus every retained original (v2). | — |
 
+## Planned: export and import (M5)
+
+A built book is exported as one `.scriptorium` file and imported on another machine. The
+bundle format is specified here before M5 builds it. Planned shape, provisional:
+
+- A `.scriptorium` file is a zip of the package folder with the package's own layout at the
+  zip root (`meta.json`, `pages/`, and the rest). Entries are stored, not compressed.
+- A small manifest records the bundle version, `formatVersion`, and the exporting app version.
+- Import unpacks into a temp directory under the library root, rejects entries with absolute
+  paths, `..`, or symlinks, caps the unpacked size, and runs `load_book` before the book joins
+  the library. A taken `id` is never overwritten.
+
+Because a package already holds only relative paths, a plain folder copy is also a valid
+export; the bundle just makes it one file.
+
 ## Provenance and privacy
 
 `meta.json` MUST NOT store an absolute `sourcePath`. The package is self-contained and

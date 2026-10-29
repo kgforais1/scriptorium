@@ -140,9 +140,22 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 
 ### M5 — Library & multi-book
 
-- [ ] Library home: grid/list of books (cover thumbnail, title, progress)
-- [ ] Create / import / remove books
-- [ ] Standalone book bundles (portable folder or `.scriptorium` archive)
+- [ ] Bookshelf (library home): an inventory of every book built on this machine, as a grid or
+      list with cover thumbnail, title, page count, and reading progress. It scans the library
+      root (`<app-data>/books/`) and reads each `meta.json`; a cached index speeds startup but the
+      folders stay the source of truth, so a book copied in by hand still appears. A package
+      that fails to load is listed as damaged with its `BookError` message, never hidden
+- [ ] Create / import / remove books; remove asks first and moves the package to the OS trash
+- [ ] Export a built book as a single `.scriptorium` file: a zip of the package folder, stored
+      uncompressed because pages are already compressed. Spec the bundle in
+      `docs/book-format.md` (layout, a manifest with `formatVersion` and the app version, no
+      absolute paths) before building it
+- [ ] Import a `.scriptorium` file or a package folder: verify it with `load_book` (checksums,
+      paths inside the package, schema by version) before it joins the library; an `id` that is
+      already taken asks to keep both (new id) or cancel, never overwrite. Reject zip entries
+      with absolute paths, `..`, or symlinks, and cap the unpacked size
+- [ ] Document export and import for curators in the user docs (how to back up a book, move it
+      to another machine, and share it)
 - [ ] Optional shelves/collections tags in `meta.json` (a new field, so it needs a `formatVersion` bump)
 
 ### M6 — Authoring & hotspots
