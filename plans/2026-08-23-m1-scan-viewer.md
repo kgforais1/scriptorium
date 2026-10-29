@@ -7,7 +7,7 @@ Status: draft
 Linked issue/PR: n/a
 Depends on:
 - [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md) **complete**
-- [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md) **complete** (ADR gates G1–G6)
+- [`archive/completed/2026-08-23-pre-m1-flipbook-spike.md`](archive/completed/2026-08-23-pre-m1-flipbook-spike.md) **complete** (ADR gates G1–G6 pass): [ADR-0001](../docs/adr/0001-flipbook-engine.md)
 Follows: product roadmap M1
 
 ## Goal
@@ -30,7 +30,7 @@ last-read page. Priorities: reliability and correctness over polish.
 
 ## Approach
 
-**Image-first reader** using the **library chosen in the pre-M1 ADR** (not assumed StPageFlip).
+**Image-first reader** using the engine chosen in [ADR-0001](../docs/adr/0001-flipbook-engine.md): our own WebGL2 port of mockup E, pad-to-uniform aspect. Start from the spike in `src/spike/flipbook/` and follow the ADR's rewrite scope.
 Ingest per M0 decisions: natural-sort → **atomic copy** into app-data `books/<id>/` with
 **relative paths only** in `meta.json`. Resolve to absolute paths only in Rust at load time for
 `convertFileSrc`.
@@ -215,6 +215,8 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] Confirm ADR library still loads in current shell
 - [ ] Complete asset-protocol checklist above (macOS required; Windows if available)
 - [ ] Stop if G1–G6 from spike no longer hold
+- [ ] Close ADR-0001's open items: WebGL2 on WebView2 (Windows) and WebKitGTK (Linux), touch on
+      real hardware, frame rate in WKWebView, and a process RSS sample
 
 ### Phase 1 — Book I/O (Rust)
 
@@ -338,5 +340,5 @@ Sources: `tmp/2026-08-25-m0-tauri-foundation-senior-review.md`,
 ## Related
 
 - [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md)
-- [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md)
+- [`2026-08-23-pre-m1-flipbook-spike.md`](archive/completed/2026-08-23-pre-m1-flipbook-spike.md)
 - [`2026-08-23-product-roadmap.md`](2026-08-23-product-roadmap.md)

@@ -18,12 +18,14 @@ background popups, and optional embeddings. **Menu, not mandate** — pick the m
 | Hotspots on media | ThingLink and similar commercial tools | Vendor lock-in; not scan-folder → book pipeline |
 | OCR + search on scans | Tesseract, PaddleOCR, cloud OCR; elk-flipbook OCR fallback | Authoring + library + long-press lore popups still custom |
 
-**Practical takeaway:** reuse **page-flip** + **OCR** + **annotation/region** libraries; own the
+**Practical takeaway:** reuse **OCR** + **annotation/region** libraries; own the page turn (Scriptorium
+chose its own WebGL2 engine over page-flip, see [ADR-0001](../docs/adr/0001-flipbook-engine.md)), the
 **authoring model** (books, regions, lore), **library**, and **ingest** (folder → ordered pages).
 
 Two product architectures both fit; choose deliberately later:
 
-1. **Flipbook-first** — StPageFlip (or wrapper) over pre-rendered page images; overlays for hotspots.
+1. **Flipbook-first** — a page-turn renderer over pre-rendered page images; overlays for hotspots.
+   Scriptorium took this path with its own WebGL2 engine ([ADR-0001](../docs/adr/0001-flipbook-engine.md)).
 2. **IIIF-first** — Presentation manifests + OpenSeadragon/Mirador-class viewers; book-mode paging;
    W3C Web Annotations for regions. Better for GLAM interoperability; weaker “paper book” feel
    unless you layer a flip UI on top.
@@ -32,14 +34,14 @@ Two product architectures both fit; choose deliberately later:
 
 | Item | Role | Notes |
 |---|---|---|
-| [StPageFlip](https://github.com/Nodlik/StPageFlip) (`page-flip`) | Page-turn candidate | Last npm publish ~2022; **fixed width/height**; evaluate in pre-M1 spike before adopting. React wrapper may need StrictMode care. |
+| [StPageFlip](https://github.com/Nodlik/StPageFlip) (`page-flip`) | Page-turn candidate | Last npm publish ~2022; **fixed width/height**. Rejected for Scriptorium by [ADR-0001](../docs/adr/0001-flipbook-engine.md). |
 | [elk-flipbook](https://github.com/kokiddp/elk-flipbook) | PDF → flipbook + search + optional Tesseract OCR | Built on pdf.js + StPageFlip |
 | [read-as-book](https://github.com/Ethical-Tech-CoLab/read-as-book) | Pre-render PDF→images CLI + viewer | Fast static hosting; no pdf.js in browser |
 | [PDFlipbook](https://github.com/SympleNZ/PDFlipbook) / [PageFlipOpen](https://github.com/philhoyt/PageFlipOpen) | PDF flip viewers | Smaller / newer; evaluate before depending |
-| turn.js | Legacy jQuery flip | Prefer StPageFlip for new work |
+| turn.js | Legacy jQuery flip | Unmaintained; not a candidate |
 
-**Texture / material look:** mostly custom CSS/canvas (paper grain, lighting, hard cover via
-StPageFlip `showCover` / hard pages). Not usually a single library.
+**Texture / material look:** mostly custom CSS/canvas or WebGL (paper grain, lighting, hard
+covers). Scriptorium draws these in its own WebGL2 engine. Not usually a single library.
 
 ## Deep zoom, annotations, GLAM standards
 
@@ -93,7 +95,7 @@ FlipHTML5, Heyzine, Issuu-style flipbooks; ThingLink for hotspots; museum virtua
 
 | Now (research / spike) | Later | Skip for now |
 |---|---|---|
-| StPageFlip + folder-of-images ingest | IIIF export / OpenSeadragon detail mode | Full Mirador fork |
+| Own WebGL2 page turn ([ADR-0001](../docs/adr/0001-flipbook-engine.md)) + folder-of-images ingest | IIIF export / OpenSeadragon detail mode | Full Mirador fork |
 | Annotorious or simple SVG/`xywh` hotspots | W3C Annotation export | Commercial flipbook SaaS |
 | Tesseract batch OCR → searchable text + region hints | PaddleOCR if quality insufficient | Cloud OCR unless policy allows |
 | Static book package format (JSON + assets) | Vector search if product needs it | Symphony / heavy agent frameworks |

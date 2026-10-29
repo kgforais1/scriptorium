@@ -1,12 +1,12 @@
 # Plan: Pre-M1 — Flipbook library spike + ADR
 
-Last reviewed: 2026-10-27
+Last reviewed: 2026-10-28
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
-Status: draft
+Status: complete (2026-10-28) — ADR: [`docs/adr/0001-flipbook-engine.md`](../../../docs/adr/0001-flipbook-engine.md)
 Linked issue/PR: n/a
-Depends on: [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md) Phase 1 window exists (minimal shell OK)
-Blocks: [`2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md)
+Depends on: [`archive/completed/2026-08-23-m0-tauri-foundation.md`](2026-08-23-m0-tauri-foundation.md) Phase 1 window exists (minimal shell OK)
+Blocks: [`2026-08-23-m1-scan-viewer.md`](../../2026-08-23-m1-scan-viewer.md)
 
 ## Goal
 
@@ -60,26 +60,26 @@ except optional trivial edge trim documented later.
 
 ### Phase 1 — Prototype corpus
 
-- [ ] Build a tiny fixture set in `tmp/`: ≥3 pages with **deliberately different** aspect
+- [x] Build a tiny fixture set in `tmp/` (`scripts/make-spike-fixtures.sh`): ≥3 pages with **deliberately different** aspect
       ratios, taken from the public-domain corpora (mix books, or add a fold-out plate)
-- [ ] Use the M1 gate corpus (Dulac, 202 pages) for load smoke
-- [x] Document how to fetch fixtures: [`tests/fixtures/README.md`](../tests/fixtures/README.md#public-domain-test-corpora)
+- [x] Use the M1 gate corpus (Dulac, 202 pages) for load smoke
+- [x] Document how to fetch fixtures: [`tests/fixtures/README.md`](../../../tests/fixtures/README.md#public-domain-test-corpora)
       and `scripts/fetch-iiif-corpus.py`
 
 ### Phase 2 — Integrate candidate in Tauri + React
 
-- [ ] Mount candidate under React 18/19 **StrictMode**
-- [ ] Load local files via Tauri asset protocol / `convertFileSrc` (absolute paths)
-- [ ] Exercise canvas vs HTML mode if using StPageFlip; note hard-page implications for M7
-- [ ] If porting E: replace its procedurally painted pages with scan textures; note texture
+- [x] Mount candidate under React 18/19 **StrictMode**
+- [x] Load local files via Tauri asset protocol / `convertFileSrc` (absolute paths)
+- [x] Exercise canvas vs HTML mode if using StPageFlip; note hard-page implications for M7 (N/A: WebGL port, see ADR)
+- [x] If porting E: replace its procedurally painted pages with scan textures; note texture
       memory and upload cost at 200 pages, and WebGL2 availability in each target webview
-- [ ] Drive scene and material from [`design/skins/lamplit/scene.json`](../design/skins/lamplit/scene.json);
+- [x] Drive scene and material from [`design/skins/lamplit/scene.json`](../../../design/skins/lamplit/scene.json);
       prove a second, throwaway scene file restyles the book with no code change
-- [ ] Confirm turn animation works with keyboard next/prev
+- [x] Confirm turn animation works with keyboard next/prev
 
 ### Phase 3 — ADR
 
-- [ ] Write `docs/adr/0001-flipbook-library.md` (or next free number) covering:
+- [x] Write [`docs/adr/0001-flipbook-engine.md`](../../../docs/adr/0001-flipbook-engine.md) covering:
   - Chosen library (and version / fork URL if vendored)
   - Canvas vs HTML (or N/A)
   - React version pin + StrictMode result
@@ -103,32 +103,32 @@ except optional trivial edge trim documented later.
 
 ## Verification
 
-- [ ] ADR merged (or on branch ready for M1)
-- [ ] Prototype demo path documented in ADR (commands)
-- [ ] Spike code may stay under `tmp/` or a clearly marked throwaway path until M1 adopts it
+- [x] ADR merged (or on branch ready for M1)
+- [x] Prototype demo path documented in ADR (commands)
+- [x] Spike code may stay under `tmp/` or a clearly marked throwaway path until M1 adopts it
 
 ## Reader design input (added 2026-10-27)
 
 **Decision (2026-10-27):** direction **E, Lamplit gallery**, with multiple skins planned from
 the start. The skin model, principles, and skin list live in
-[`design/DESIGN.md`](../design/DESIGN.md). Lamplit is the first skin
-([`design/skins/lamplit/`](../design/skins/lamplit/)); Gallery Daylight (mockup B) is the planned
-second. Mockups A–G in [`design/mockups/`](../design/mockups/) remain reference only.
+[`design/DESIGN.md`](../../../design/DESIGN.md). Lamplit is the first skin
+([`design/skins/lamplit/`](../../../design/skins/lamplit/)); Gallery Daylight (mockup B) is the planned
+second. Mockups A–G in [`design/mockups/`](../../../design/mockups/) remain reference only.
 
 Interaction requirements surfaced by the Greptile and CodeRabbit reviews of the mockups
 (PR #54). The spike confirms the engine exposes the picking, focus, and animation hooks these
 need. Hotspot items are verified in M6, when hotspots exist:
 
-- [ ] A cancelled pointer drag (`pointercancel`, lost capture) settles the page and frees
+- [x] A cancelled pointer drag (`pointercancel`, lost capture) settles the page and frees
       navigation; the book never stays stuck mid-turn.
-- [ ] Navigation requested while a turn animation is in flight (including a corner preview
+- [x] Navigation requested while a turn animation is in flight (including a corner preview
       settling back) is queued and applied when it ends, so the open note and the visible
       spread never disagree. Requests during an active drag may be dropped.
-- [ ] Hotspots are keyboard-operable: focusable, named for assistive technology, and
+- [ ] (M6) Hotspots are keyboard-operable: focusable, named for assistive technology, and
       opened with Enter or Space.
-- [ ] Note panels and popups are reachable by screen readers: `aria-hidden` toggles on open
+- [ ] (M6) Note panels and popups are reachable by screen readers: `aria-hidden` toggles on open
       and close, focus moves into the panel, and focus returns to the hotspot on close.
-- [ ] Hotspot popups stay usable in narrow and short windows: flip above or below the
+- [ ] (M6) Hotspot popups stay usable in narrow and short windows: flip above or below the
       hotspot, then clamp to the viewport.
 
 ## Risks
@@ -143,11 +143,11 @@ need. Hotspot items are verified in M6, when hotspots exist:
 
 ## Completion steps
 
-1. Status → `complete`; move to `plans/archive/completed/`
-2. Link ADR from M1 plan Approach section
-3. Unblock M1
+1. [x] Status → `complete`; move to `plans/archive/completed/`
+2. [x] Link ADR from M1 plan Approach section
+3. [x] Unblock M1
 
 ## Related
 
-- Blocks: [`2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md)
+- Blocks: [`2026-08-23-m1-scan-viewer.md`](../../2026-08-23-m1-scan-viewer.md)
 - After: M0 foundation may run in parallel for scaffold/schema, but M1 I/O waits on this ADR

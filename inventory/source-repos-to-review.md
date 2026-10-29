@@ -34,7 +34,7 @@ template is still actionable without them.
 Scriptorium bootstrap (2026-08-23) — see also `inventory/virtual-books-flipbook.md`:
 
 ```text
-- https://github.com/Nodlik/StPageFlip — page-turn core (page-flip npm)
+- https://github.com/Nodlik/StPageFlip — page-turn core (page-flip npm); rejected for Scriptorium in docs/adr/0001-flipbook-engine.md
 - https://github.com/kokiddp/elk-flipbook — PDF flipbook + OCR search (pdf.js + StPageFlip + Tesseract)
 - https://github.com/Ethical-Tech-CoLab/read-as-book — PDF→images CLI + static flip viewer
 - https://github.com/micahchoo/Archie — curator studio → static annotated exhibit (OSD + Annotorious)

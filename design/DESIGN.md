@@ -27,7 +27,7 @@ against scan textures, not copying the mockup file.
 ## Principles
 
 - The scan is the subject. The scene frames the page and never alters scan pixels beyond
-  lighting. No stretch, no crop (see the aspect policy in the spike ADR).
+  lighting. No stretch, no crop (pad-to-uniform, [ADR-0001](../docs/adr/0001-flipbook-engine.md)).
 - The book feels physical. Pages curl, cast shadows, and catch the lamp.
 - Chrome recedes. Bars and panels are translucent glass, fade during turns, and never cover
   the gutter.
@@ -45,7 +45,7 @@ not need engine or component code changes.
 
 | Layer | Shared or per skin | Where it lives |
 |---|---|---|
-| Page-turn engine (geometry, curl, picking, input) | Shared | App code, chosen by the spike ADR |
+| Page-turn engine (geometry, curl, picking, input) | Shared | App code: our WebGL2 port of E ([ADR-0001](../docs/adr/0001-flipbook-engine.md)) |
 | Layout (header, bottom bar, notes panel) | Shared | React components |
 | UI theme (colour, type, radius, blur, motion) | Per skin | `skins/<id>/tokens.json` |
 | Scene (light, ambient, camera, background) | Per skin | `skins/<id>/scene.json` |
@@ -55,8 +55,8 @@ Rules:
 
 - `tokens.json` uses the W3C Design Tokens (DTCG) format. A build step turns it into CSS
   custom properties. Components read only those properties and never hard-code colours.
-- `scene.json` is engine input with its own small schema. Its keys are provisional until the
-  spike ADR fixes the engine. The ADR may rename them.
+- `scene.json` is engine input with its own small schema. [ADR-0001](../docs/adr/0001-flipbook-engine.md)
+  lists its keys. Every key is required.
 - Book size and aspect come from the scans, never from the skin.
 - A skin may not change layout. Swappable layouts, such as the B-style scrubber and panel
   versus the A-style toolbar, are out of scope until a real need appears.
@@ -74,6 +74,6 @@ Rules:
 
 ## Related
 
-- Spike and engine choice: [`../plans/2026-08-23-pre-m1-flipbook-spike.md`](../plans/2026-08-23-pre-m1-flipbook-spike.md)
+- Spike and engine choice: [`../plans/2026-08-23-pre-m1-flipbook-spike.md`](../plans/archive/completed/2026-08-23-pre-m1-flipbook-spike.md) · [ADR-0001](../docs/adr/0001-flipbook-engine.md)
 - First use in the app: [`../plans/2026-08-23-m1-scan-viewer.md`](../plans/2026-08-23-m1-scan-viewer.md)
 - Roadmap: [`../plans/2026-08-23-product-roadmap.md`](../plans/2026-08-23-product-roadmap.md)

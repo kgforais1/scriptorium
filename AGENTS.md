@@ -92,7 +92,8 @@ Rule lives in [`policies/agent-tooling-contract.md`](policies/agent-tooling-cont
 - `hooks/` — pre-commit config + policy-check scripts (file size, TODO limits, secrets, lint).
 - `ci/` — CI selection guidance and example workflows.
 - `inventory/` — curated indexes of tools, skills, MCP servers, references (install-on-demand).
-- `docs/` — navigation helpers and quick-reference guides (`book-format.md` / schema).
+- `docs/` — navigation helpers and quick-reference guides (`book-format.md` / schema);
+  `docs/adr/` holds accepted decisions (ADR-0001: page-turn engine).
 - `src-tauri/` — Tauri 2 Rust host (`book_format` types + schema-bind tests).
 - `src/` — Vite + React + TypeScript frontend shell.
 - `scripts/` — automation scripts (setup, health check, environment validation,
