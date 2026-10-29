@@ -105,7 +105,8 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Transcription pipeline: ingest → OCR every page (any format: JPEG, PNG, TIFF, JPEG 2000,
       PDF) → word/line boxes → curator correction → published page text. Re-running OCR never
       overwrites curator corrections
-- [ ] Store per-page OCR: plain text + word/line `bbox` JSON
+- [ ] Store per-page OCR: plain text + word/line `bbox` JSON (one JSON per page under `ocr/`,
+      per the layout M1 reserves in `docs/book-format.md`)
 - [ ] Full-text search UI; jump to page/highlight hit
 - [ ] Hidden text layer aligned to every scan, whatever its image format (select + copy +
       search), not only PDFs with an embedded text layer. The book is a WebGL canvas, so the layer
@@ -142,13 +143,13 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Library home: grid/list of books (cover thumbnail, title, progress)
 - [ ] Create / import / remove books
 - [ ] Standalone book bundles (portable folder or `.scriptorium` archive)
-- [ ] Optional shelves/collections tags in `meta.json`
+- [ ] Optional shelves/collections tags in `meta.json` (a new field, so it needs a `formatVersion` bump)
 
 ### M6 — Authoring & hotspots
 
 **Audience:** librarians and gallery directors.
 
-- [ ] Author mode: draw region on page (`xywh` or polygon)
+- [ ] Author mode: draw region on page (`xywh` or polygon, in normalized page coordinates)
 - [ ] Attach lore popup content (markdown/HTML, images, links)
 - [ ] Long-press on touch / click on desktop → popup
 - [ ] Expandable annotations: a marker opens a short note, which expands into the full notes

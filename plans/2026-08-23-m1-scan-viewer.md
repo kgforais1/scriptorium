@@ -258,6 +258,8 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 ### Phase 3 — Reader
 
 - [ ] ADR flip library bound to page list
+- [ ] Engine publishes each visible page's projected corners per frame, for M2's text overlay
+      and M6's hotspots (fold into the Phase 3 refresh from ADR-0001)
 - [ ] ←/→ + on-screen controls; edge no-ops
 - [ ] Debounced progress + **flush on close**
 - [ ] Loading / empty states
