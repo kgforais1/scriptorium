@@ -176,8 +176,8 @@ def main(argv: list[str] | None = None) -> int:
     host = os.environ.get("SONAR_HOST_URL", "http://localhost:9000")
     if not host_allowed(host):
         print(
-            "sonar_issues: SONAR_HOST_URL must be loopback with no query or fragment,"
-            " or https with SONAR_ALLOW_REMOTE=1 exported.",
+            "sonar_issues: SONAR_HOST_URL must have no query or fragment, and must be"
+            " loopback (http or https) or https with SONAR_ALLOW_REMOTE=1 exported.",
             file=sys.stderr,
         )
         return 1

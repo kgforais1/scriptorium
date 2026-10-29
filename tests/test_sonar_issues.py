@@ -56,6 +56,8 @@ class HostAllowedTests(unittest.TestCase):
                 "http://localhost:notaport",
                 "http://localhost:9000?x=1",
                 "http://localhost:9000/#frag",
+                "http://localhost:9000?",
+                "http://localhost:9000/#",
             ):
                 with self.subTest(host=host):
                     self.assertFalse(mod.host_allowed(host))
@@ -143,14 +145,20 @@ class FetchIssuesTests(unittest.TestCase):
         api.assert_called_once()
 
     def test_cap_bounds_the_request_loop(self) -> None:
-        batch = [{"key": "x"}] * 3  # 3 does not divide the patched cap of 10
-        reply = {"issues": batch, "paging": {"total": 10_000}}
+        def page_of_three(_host, _token, _path, params):  # 3 does not divide the cap of 10
+            first = (int(params["p"]) - 1) * 3
+            return {
+                "issues": [{"key": f"k{n}"} for n in range(first, first + 3)],
+                "paging": {"total": 10_000},
+            }
+
         with (
             mock.patch.object(mod, "ISSUE_CAP", 10),
-            mock.patch.object(mod, "api_get", return_value=reply) as api,
+            mock.patch.object(mod, "api_get", side_effect=page_of_three) as api,
         ):
             issues, total = mod.fetch_issues("http://localhost:9000", "tok", "proj")
         self.assertEqual(len(issues), 10)
+        self.assertEqual([i["key"] for i in issues], [f"k{n}" for n in range(10)])
         self.assertEqual(total, 10_000)
         # 3, 6, 9, 12 fetched; the loop stops at the cap after pages 1 to 4, in order.
         self.assertEqual([c.args[3]["p"] for c in api.call_args_list], ["1", "2", "3", "4"])
