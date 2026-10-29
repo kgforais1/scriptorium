@@ -1,14 +1,13 @@
 # Scriptorium backlog
 
-Last reviewed: 2026-10-27
+Last reviewed: 2026-10-28
 
 Agents: start at **Next Up** (3–5 pointer lines). Detail lives in linked plans, not here.
 Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
-- [Pre-M1 flipbook spike](plans/2026-08-23-pre-m1-flipbook-spike.md) — ADR gates G1–G6 (direction E; port its WebGL engine first) after M0 window exists
-- [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) — blocked on spike ADR; acceptance A1–A13
+- [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) — engine per [ADR-0001](docs/adr/0001-flipbook-engine.md); acceptance A1–A13
 - [M0.5 harness follow-ups](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri-scaffold--when-app-code-exists) — TS lint, coverage gates, S9–S11
 
 ## Active plans
@@ -16,8 +15,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 | Plan | Status | Note |
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
-| [Pre-M1 flipbook spike](plans/2026-08-23-pre-m1-flipbook-spike.md) | draft | Blocks M1 |
-| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | draft | First product slice after M0 + spike |
+| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | draft | First product slice; unblocked |
 
 ## Unplanned / small
 

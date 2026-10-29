@@ -1,5 +1,5 @@
 {
-  "$comment": "Lamplit scene and book material, copied from mockup E. Material colours are sRGB inputs the engine linearizes (pow 2.2). light.color and ambient are linear HDR. background is the output-referred clear colour. light.type is point (lamp with a pool) or directional (window light, which uses direction instead of position and poolCenter). Keys are provisional until the spike ADR fixes the engine.",
+  "$comment": "Lamplit scene and book material, from mockup E. Keys are fixed by docs/adr/0001-flipbook-engine.md. Material colours are sRGB inputs the engine linearizes (pow 2.2). light.color and ambient are linear HDR. background is the output-referred clear colour. light.type is point (lamp with a pool) or directional (window light, which uses direction instead of position and poolCenter). vignette is the corner darkening, 0 to 1. material.paper fills the letterbox band around a scan; material.desk is the procedural wood the book rests on.",
   "skin": "lamplit",
   "camera": {
     "fovDegrees": 18
@@ -61,6 +61,29 @@
       0.76,
       0.66,
       0.49
-    ]
-  }
+    ],
+    "paper": [
+      0.86,
+      0.8,
+      0.66
+    ],
+    "desk": {
+      "light": [
+        0.4,
+        0.285,
+        0.2
+      ],
+      "mid": [
+        0.245,
+        0.165,
+        0.112
+      ],
+      "dark": [
+        0.094,
+        0.062,
+        0.045
+      ]
+    }
+  },
+  "vignette": 0.7
 }

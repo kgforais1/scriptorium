@@ -10,7 +10,7 @@ Linked issue/PR: n/a
 
 Single source of truth for **all** planned product phases and features. Immediate work lives in
 [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md) (M0 complete) →
-[`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md) →
+[`2026-08-23-pre-m1-flipbook-spike.md`](archive/completed/2026-08-23-pre-m1-flipbook-spike.md) (complete) →
 [`2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md). Later milestones stay here and in
 [`to_do.md`](../to_do.md) until promoted. Combined draft:
 [`archive/superseded/2026-08-23-mvp-scaffold.md`](archive/superseded/2026-08-23-mvp-scaffold.md).
@@ -54,10 +54,10 @@ Lamplit ships in M1; Gallery Daylight (mockup B) follows in M7. Detail:
 
 ### M0.25 — Flipbook spike (blocks M1)
 
-**Active plan:** [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md)
+**Completed plan:** [`2026-08-23-pre-m1-flipbook-spike.md`](archive/completed/2026-08-23-pre-m1-flipbook-spike.md)
 
-- [ ] ADR: flip library, aspect policy, StrictMode, asset load, skin-ready engine (gates G1–G6)
-- [ ] No silent non-flip fallback
+- [x] ADR: flip library, aspect policy, StrictMode, asset load, skin-ready engine (gates G1–G6) → [ADR-0001](../docs/adr/0001-flipbook-engine.md)
+- [x] No silent non-flip fallback
 
 ### M0.5 — Harness follow-ups (after Tauri / remaining quality)
 

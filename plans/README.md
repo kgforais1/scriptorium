@@ -1,6 +1,6 @@
 # Plans
 
-Last reviewed: 2026-08-23
+Last reviewed: 2026-10-28
 
 Implementation plans for plan-driven / multi-agent work. Policy:
 [`policies/plans-and-todos.md`](../policies/plans-and-todos.md). Template:
@@ -23,10 +23,10 @@ Do **not** delete archived plans. Move them; do not rewrite history in place.
 | Plan | Role |
 |---|---|
 | [`2026-08-23-product-roadmap.md`](2026-08-23-product-roadmap.md) | Product roadmap M0–M8 (stays active) |
-| [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md) | Flip library ADR — blocks M1 |
-| [`2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md) | First product milestone (after M0 + spike) |
+| [`2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md) | First product milestone (unblocked by ADR-0001) |
 
-Completed: [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md).
+Completed: [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md),
+[`archive/completed/2026-08-23-pre-m1-flipbook-spike.md`](archive/completed/2026-08-23-pre-m1-flipbook-spike.md) ([ADR-0001](../docs/adr/0001-flipbook-engine.md)).
 Superseded: [`archive/superseded/2026-08-23-mvp-scaffold.md`](archive/superseded/2026-08-23-mvp-scaffold.md).
 Backlog index: [`to_do.md`](../to_do.md) — **Next Up** (3–5 pointers) → **Active plans** → **Icebox**.
 
