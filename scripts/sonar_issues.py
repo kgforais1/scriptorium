@@ -158,6 +158,8 @@ def host_allowed(host: str) -> bool:
         return False
     if parts.scheme not in {"http", "https"} or not parts.hostname:
         return False
+    if parts.query or parts.fragment or "?" in host or "#" in host:
+        return False  # API paths are appended to the host URL; these would swallow them
     if parts.hostname in LOOPBACK_HOSTS:
         return True
     return parts.scheme == "https" and os.environ.get("SONAR_ALLOW_REMOTE", "0") == "1"

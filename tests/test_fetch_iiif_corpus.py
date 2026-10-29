@@ -236,6 +236,17 @@ class ServiceSelectionTests(unittest.TestCase):
             fetch.canvas_url(v3_canvas(body)), "https://iiif.archive.org/s/full/full/0/default.jpg"
         )
 
+    def test_service_with_query_or_fragment_falls_back_to_jpeg_body(self) -> None:
+        for base in ("https://iiif.archive.org/s?token=1", "https://iiif.archive.org/s#frag"):
+            with self.subTest(base=base):
+                body = {
+                    "id": "https://iiif.archive.org/p.jpg",
+                    "service": {"id": base, "type": "ImageService2"},
+                }
+                self.assertEqual(
+                    fetch.canvas_url(v3_canvas(body)), "https://iiif.archive.org/p.jpg"
+                )
+
     def test_refused_service_falls_back_to_jpeg_body(self) -> None:
         body = {
             "id": "https://iiif.archive.org/p.jpg",

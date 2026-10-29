@@ -250,6 +250,17 @@ def _image_service_version(service: dict) -> int | None:
     return None
 
 
+def _plain_base(base: str) -> bool:
+    """True when base has no query, fragment, or params, so a path can be appended."""
+    try:
+        parts = urllib.parse.urlparse(base)
+    except ValueError:
+        return False
+    return (
+        not (parts.query or parts.fragment or parts.params) and "?" not in base and "#" not in base
+    )
+
+
 def _service_url(services: object) -> str | None:
     """Allowlisted full-size JPEG request for the first usable Image API service.
 
@@ -261,8 +272,8 @@ def _service_url(services: object) -> str | None:
             continue
         base = service.get("@id") or service.get("id")
         version = _image_service_version(service)
-        if not isinstance(base, str) or not version:
-            continue
+        if not isinstance(base, str) or not version or not _plain_base(base):
+            continue  # a query or fragment would swallow the image path appended below
         size = "max" if version == 3 else "full"
         quality = "native" if version == 1 else "default"  # Image API 1.x quality name
         url = _allowed(f"{base.rstrip('/')}/full/{size}/0/{quality}.jpg")

@@ -54,6 +54,8 @@ class HostAllowedTests(unittest.TestCase):
                 "ftp://localhost:9000",
                 "http://[::1",
                 "http://localhost:notaport",
+                "http://localhost:9000?x=1",
+                "http://localhost:9000/#frag",
             ):
                 with self.subTest(host=host):
                     self.assertFalse(mod.host_allowed(host))
@@ -150,7 +152,8 @@ class FetchIssuesTests(unittest.TestCase):
             issues, total = mod.fetch_issues("http://localhost:9000", "tok", "proj")
         self.assertEqual(len(issues), 10)
         self.assertEqual(total, 10_000)
-        self.assertEqual(api.call_count, 4)  # 3, 6, 9, 12 fetched; the loop stops at the cap
+        # 3, 6, 9, 12 fetched; the loop stops at the cap after pages 1 to 4, in order.
+        self.assertEqual([c.args[3]["p"] for c in api.call_args_list], ["1", "2", "3", "4"])
 
 
 class SummaryTests(unittest.TestCase):
