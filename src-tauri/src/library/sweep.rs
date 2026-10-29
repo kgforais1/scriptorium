@@ -25,7 +25,10 @@ pub fn sweep_orphans(library: &Path, max_age: Duration) -> usize {
             continue;
         };
         if name.starts_with(TMP_PREFIX) || name.ends_with(TMP_SUFFIX) {
-            if !is_old(&entry, max_age) {
+            // A finished book is never swept, even if its id happens to end in the suffix:
+            // only a build that never reached the rename lacks its final meta.json.
+            let is_finished_book = kind.is_dir() && entry.path().join("meta.json").is_file();
+            if is_finished_book || !is_old(&entry, max_age) {
                 continue;
             }
             let path = entry.path();

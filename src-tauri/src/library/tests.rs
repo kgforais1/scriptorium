@@ -469,6 +469,9 @@ fn sweep_removes_only_old_temp_entries() {
     std::fs::create_dir(lib.join("a-real-book")).unwrap();
     std::fs::write(lib.join("a-real-book/meta.json"), "{}").unwrap();
     std::fs::write(lib.join("a-real-book/meta.json.1-0.scriptorium-tmp"), "x").unwrap();
+    // A valid book id may end in the temp suffix; a finished book is still never swept.
+    std::fs::create_dir(lib.join("odd.scriptorium-tmp")).unwrap();
+    std::fs::write(lib.join("odd.scriptorium-tmp/meta.json"), "{}").unwrap();
     assert_eq!(
         sweep_orphans(&lib, ORPHAN_AGE),
         0,
@@ -483,12 +486,13 @@ fn sweep_removes_only_old_temp_entries() {
         lib.join("a-real-book/meta.json").exists(),
         "the book itself is untouched"
     );
-    let left: Vec<_> = lib
+    let mut left: Vec<_> = lib
         .read_dir()
         .unwrap()
         .map(|e| e.unwrap().file_name())
         .collect();
-    assert_eq!(left, ["a-real-book"]);
+    left.sort();
+    assert_eq!(left, ["a-real-book", "odd.scriptorium-tmp"]);
 }
 
 #[test]

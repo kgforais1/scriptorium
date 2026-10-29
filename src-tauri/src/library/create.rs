@@ -293,7 +293,9 @@ pub fn create_book_from_folder(
     // directory, so the name must still be free.
     check_destination(library, &opts.id)?;
     std::fs::rename(&tmp_path, &dest).map_err(|e| {
-        // Another book took the name between the check and the rename.
+        // Another book took the name between the check and the rename. A rename that fails
+        // for another reason while the name is taken is reported the same way; the re-check
+        // just above makes the race the likely cause.
         if dest.exists() {
             BookError::DestinationExists {
                 id: opts.id.clone(),
