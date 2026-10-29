@@ -40,7 +40,8 @@ pub fn spike_pages(app: AppHandle) -> Result<Vec<String>, String> {
         let Ok(real) = path.canonicalize() else {
             continue;
         };
-        if !real.starts_with(&dir) || !real.is_file() {
+        // Check the resolved target too, so an image-named symlink cannot admit another file.
+        if !is_page(&real) || !real.starts_with(&dir) || !real.is_file() {
             continue;
         }
         if let Some(s) = real.to_str() {

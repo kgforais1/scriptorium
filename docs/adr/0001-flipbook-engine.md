@@ -119,7 +119,8 @@ The spike is throwaway. M1 keeps the geometry, shaders, and scene loader, and re
   every build today with an empty static scope.
 - Decode off the main thread (worker plus `OffscreenCanvas`) and pick the texture size from
   the display, not a fixed 2048.
-- Handle `webglcontextlost` and `webglcontextrestored`. The spike ignores them.
+- Handle `webglcontextlost` and `webglcontextrestored`. The spike ignores them. Check every
+  texture upload for GL errors, including the blank-paper texture, which the spike does not check.
 - Add thumbnail-scrubber `goTo`, a visible focus ring on the canvas, and an accessible name
   that announces the current pages.
 - Add unit tests for `parseScene`, `fitRect`, and the slot mapping.
