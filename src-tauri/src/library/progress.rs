@@ -1,7 +1,7 @@
 //! Recording reading progress in `meta.json`.
 
 use super::load::parse_meta;
-use super::{io_error, now_rfc3339, write_atomic, BookError};
+use super::{now_rfc3339, write_atomic, BookError};
 use crate::book_format::{BookMeta, CURRENT_FORMAT_VERSION};
 use std::path::Path;
 
@@ -11,7 +11,7 @@ use std::path::Path;
 /// on window close.
 pub fn save_last_read_page(dir: &Path, page: u32) -> Result<BookMeta, BookError> {
     let meta_path = dir.join("meta.json");
-    let text = std::fs::read_to_string(&meta_path).map_err(|e| io_error(&meta_path, &e))?;
+    let text = super::load::read_meta_text(&meta_path)?;
     let mut meta = parse_meta(&text)?;
     if page as usize >= meta.pages.len() {
         return Err(BookError::InvalidPackage {

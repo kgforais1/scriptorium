@@ -6,6 +6,7 @@ Internal / developer-facing changes that do not belong in the public
 ## [Unreleased]
 
 ### Added
+- Hardening from the CodeRabbit review: JPEG 2000 codestreams are checked for component and tile counts before decoding, and transparent JPEG 2000 is refused; an out-of-range TIFF orientation no longer wraps into a rotation; `meta.json` is capped at 64 MB; `write_atomic` removes a failed temp file and reports a failed directory sync; on macOS the `sips` fixtures fail instead of skipping when their tools are missing.
 - Ingest hardening from the Greptile review: a file's contents must match its extension; originals and copied pages are written from the same bytes that were inspected; the orphan sweep deletes only `.ingest-tmp-*` directories, and skips one whose `.ingest.lock` a running ingest holds.
 - CI `rust-cross` job: `cargo clippy --all-targets` and `cargo test` on `windows-latest` and `macos-latest` (matrix, `fail-fast: false`). macOS runs the `sips`-based ingest fixtures that skip on Linux.
 - JPEG 2000 safety: the image size is read from the file header and capped at 150 MP before OpenJPEG decodes anything, zero sizes are rejected, and a component with fewer samples than the image size is `UnreadableFile` instead of a panic. The free-space estimate now counts one display copy per converted frame.

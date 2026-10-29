@@ -32,6 +32,34 @@ impl LoadedBook {
     }
 }
 
+/// Largest `meta.json` the loader reads. A 100,000-page book is about 30 MB, so this leaves
+/// room while refusing a file that would exhaust memory.
+pub(crate) const META_MAX_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Read a book's `meta.json`, refusing a missing or oversized file before loading it.
+pub(crate) fn read_meta_text(meta_path: &Path) -> Result<String, BookError> {
+    use std::io::Read;
+    let file = std::fs::File::open(meta_path).map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => invalid("meta.json is missing"),
+        _ => io_error(meta_path, &e),
+    })?;
+    let mut text = String::new();
+    // Read one byte past the cap, so a file that grows after a size check is still caught.
+    file.take(META_MAX_BYTES + 1)
+        .read_to_string(&mut text)
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::InvalidData => invalid("meta.json is not UTF-8 text"),
+            _ => io_error(meta_path, &e),
+        })?;
+    if text.len() as u64 > META_MAX_BYTES {
+        return Err(invalid(format!(
+            "meta.json is larger than {} MB",
+            META_MAX_BYTES >> 20
+        )));
+    }
+    Ok(text)
+}
+
 fn invalid(reason: impl Into<String>) -> BookError {
     BookError::InvalidPackage {
         reason: reason.into(),
@@ -117,10 +145,7 @@ fn verify_file(root: &Path, rel: &str, size: u64, sha256: &str) -> Result<PathBu
 pub fn load_book(dir: &Path) -> Result<LoadedBook, BookError> {
     let root = dir.canonicalize().map_err(|e| io_error(dir, &e))?;
     let meta_path = root.join("meta.json");
-    let text = std::fs::read_to_string(&meta_path).map_err(|e| match e.kind() {
-        std::io::ErrorKind::NotFound => invalid("meta.json is missing"),
-        _ => io_error(&meta_path, &e),
-    })?;
+    let text = read_meta_text(&meta_path)?;
     let meta = parse_meta(&text)?;
     let mut page_paths = Vec::with_capacity(meta.pages.len());
     for page in &meta.pages {

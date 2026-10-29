@@ -20,10 +20,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Unplanned / small
 
-- **Windows and macOS CI for Rust** — the `rust-cross` job in `ci.yml` runs `cargo test` and
-  clippy on `windows-latest` and `macos-latest`. Remaining: get both green, then mark them
-  required in the branch ruleset. Tracked in the
-  [M1 plan](plans/2026-08-23-m1-scan-viewer.md#phase-0--integration-gate-adr-already-done)
+_None._
 
 ## Icebox
 

@@ -136,7 +136,13 @@ Known limits, each `UnreadableFile` unless noted:
 - JPEG 2000: an embedded colour profile is ignored and the image treated as sRGB (not an
   error). Images over 150 megapixels, zero-sized images, and images whose header size disagrees
   with the decoded size or whose samples run short are rejected; the size is read from the
-  `jp2h`/`ihdr` box before decoding. Subsampled, signed, YCC, and CMYK images are rejected; four components are read as
+  `jp2h`/`ihdr` box before decoding. The codestream's SIZ marker is also checked first: more
+  than 4 components or 65,536 tiles is refused. Images with transparency (2 or 4 components)
+  are refused, because the display copy is a JPEG.
+- `meta.json` over 64 MB is refused before it is read.
+- Known gap (Phase 2): inputs are checked for symbolic links when the folder is listed, not
+  when each file is opened, so a file swapped for a link mid-ingest would be followed. Close it
+  with no-follow opens when Phase 2 adds the Open… flow. Subsampled, signed, YCC, and CMYK images are rejected; four components are read as
   RGBA only when the file says sRGB.
 - TIFF: only 8- and 16-bit grey, RGB, and RGBA, plus 8-bit CMYK with a profile. Palette,
   YCbCr, Lab, grey with alpha, 16-bit CMYK, and 32/64-bit or float layouts are rejected.
@@ -244,8 +250,8 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] Close ADR-0001's open items: WebGL2 on WebView2 (Windows) and WebKitGTK (Linux), touch on
       real hardware, frame rate in WKWebView, and a process RSS sample
 - [ ] CI on Windows and macOS for the Rust crate (`cargo test`, clippy): the `rust-cross` job in
-      `ci.yml` (added 2026-10-29). Tick once both are green and marked required in the branch
-      ruleset. Until then Windows path handling is untested, and the two `sips` fixtures (CMYK
+      `ci.yml` (added 2026-10-29, green on both). Tick once both are marked required in the
+      branch ruleset. Until then Windows path handling is untested, and the two `sips` fixtures (CMYK
       with a profile, JPEG 2000) run only on macOS
 
 ### Phase 1 — Book I/O (Rust)

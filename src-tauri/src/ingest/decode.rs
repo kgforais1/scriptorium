@@ -182,7 +182,9 @@ fn decode_tiff(bytes: &[u8], frame: u32) -> Result<Decoded, ConvertError> {
         .find_tag(Tag::Orientation)
         .map_err(unreadable)?
         .and_then(|v| v.into_u16().ok())
-        .and_then(|v| Orientation::from_exif(v as u8))
+        // A value that does not fit a byte is invalid; it must not wrap into a real rotation.
+        .and_then(|v| u8::try_from(v).ok())
+        .and_then(Orientation::from_exif)
         .unwrap_or(Orientation::NoTransforms);
     let icc = dec
         .find_tag(Tag::Unknown(TIFF_ICC_TAG))
@@ -282,6 +284,86 @@ pub(super) fn jp2_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     Some((be32(ihdr, 4)?, be32(ihdr, 0)?))
 }
 
+/// Most components a JPEG 2000 page may have (grey, RGB, or RGBA).
+const JP2_MAX_COMPONENTS: u32 = 4;
+/// Most tiles a JPEG 2000 codestream may declare; the decoder allocates per tile.
+const JP2_MAX_TILES: u64 = 65_536;
+
+/// What a codestream's SIZ marker declares: image size, component count, and tile count.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Siz {
+    pub width: u32,
+    pub height: u32,
+    pub components: u32,
+    pub tiles: u64,
+}
+
+/// Parse the SIZ marker at the start of a raw codestream (it must follow SOC directly).
+pub(super) fn parse_siz(cs: &[u8]) -> Option<Siz> {
+    if !cs.starts_with(&[0xFF, 0x4F, 0xFF, 0x51]) {
+        return None;
+    }
+    let be32 = |at: usize| {
+        cs.get(at..at + 4)
+            .map(|v| u32::from_be_bytes([v[0], v[1], v[2], v[3]]))
+    };
+    let be16 = |at: usize| cs.get(at..at + 2).map(|v| u16::from_be_bytes([v[0], v[1]]));
+    // SOC(2) SIZ(2) Lsiz(2) Rsiz(2) Xsiz Ysiz XOsiz YOsiz XTsiz YTsiz XTOsiz YTOsiz Csiz(2)
+    let (x, y, xo, yo) = (be32(8)?, be32(12)?, be32(16)?, be32(20)?);
+    let (xt, yt, xto, yto) = (be32(24)?, be32(28)?, be32(32)?, be32(36)?);
+    let components = u32::from(be16(40)?);
+    if xt == 0 || yt == 0 || xto > xo || yto > yo {
+        return None;
+    }
+    let across = u64::from(x.checked_sub(xto)?).div_ceil(u64::from(xt));
+    let down = u64::from(y.checked_sub(yto)?).div_ceil(u64::from(yt));
+    Some(Siz {
+        width: x.checked_sub(xo)?,
+        height: y.checked_sub(yo)?,
+        components,
+        tiles: across.saturating_mul(down),
+    })
+}
+
+/// The codestream of a JPEG 2000 file: the file itself when it is a raw codestream, or the
+/// payload of its top-level `jp2c` box.
+fn jp2_codestream(bytes: &[u8]) -> Option<&[u8]> {
+    if bytes.starts_with(&[0xFF, 0x4F]) {
+        return Some(bytes);
+    }
+    jp2_boxes(bytes)
+        .into_iter()
+        .find(|(k, _)| k == b"jp2c")
+        .map(|(_, p)| p)
+}
+
+/// Refuse a codestream whose declared components, tiles, or samples exceed the limits,
+/// before OpenJPEG allocates for it.
+fn check_siz(bytes: &[u8]) -> Result<(), ConvertError> {
+    let siz = jp2_codestream(bytes)
+        .and_then(parse_siz)
+        .ok_or_else(|| unreadable("JPEG 2000 codestream has no valid SIZ header"))?;
+    if siz.components == 0 || siz.components > JP2_MAX_COMPONENTS {
+        return Err(unreadable(format!(
+            "JPEG 2000 with {} components is not supported",
+            siz.components
+        )));
+    }
+    if siz.tiles > JP2_MAX_TILES {
+        return Err(unreadable(format!(
+            "JPEG 2000 declares {} tiles, over the {JP2_MAX_TILES} limit",
+            siz.tiles
+        )));
+    }
+    if over_limit(siz.width, siz.height) {
+        return Err(unreadable(format!(
+            "JPEG 2000 codestream is {}×{}, over the {JP2_MAX_PIXELS}-pixel limit",
+            siz.width, siz.height
+        )));
+    }
+    Ok(())
+}
+
 fn over_limit(w: u32, h: u32) -> bool {
     u64::from(w) * u64::from(h) > JP2_MAX_PIXELS
 }
@@ -298,6 +380,7 @@ fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
             "JPEG 2000 image is {hw}×{hh}, over the {JP2_MAX_PIXELS}-pixel limit"
         )));
     }
+    check_siz(bytes)?;
     let img = jpeg2k::Image::from_bytes(bytes).map_err(unreadable)?;
     let comps = img.components();
     let (w, h) = (img.width(), img.height());
@@ -358,14 +441,18 @@ fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
     };
     let bad = || unreadable("JPEG 2000 sample buffer has the wrong size");
     let image = match planes.len() {
-        1 | 2 if grey_like => {
+        1 if grey_like => {
             DynamicImage::ImageLuma8(ImageBuffer::from_raw(w, h, interleave(1)).ok_or_else(bad)?)
         }
         3 if rgb_like => {
             DynamicImage::ImageRgb8(ImageBuffer::from_raw(w, h, interleave(3)).ok_or_else(bad)?)
         }
-        4 if matches!(space, ColorSpace::SRGB) => {
-            DynamicImage::ImageRgba8(ImageBuffer::from_raw(w, h, interleave(4)).ok_or_else(bad)?)
+        // Grey or RGB plus transparency. A JPEG 2000 page becomes a JPEG, which has no
+        // alpha, so refuse rather than silently drop it.
+        2 | 4 => {
+            return Err(unreadable(
+                "JPEG 2000 with transparency (an alpha channel) is not supported yet",
+            ))
         }
         k => {
             return Err(unreadable(format!(

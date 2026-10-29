@@ -612,3 +612,21 @@ fn space_estimate_counts_every_converted_frame() {
         300 * mb + 300 * mb
     );
 }
+
+#[test]
+fn oversized_meta_json_is_refused_before_loading() {
+    let t = Tmp::new("big-meta");
+    let book = t.dir("bk");
+    let f = std::fs::File::create(book.join("meta.json")).unwrap();
+    f.set_len(super::load::META_MAX_BYTES + 1).unwrap();
+    match load_book(&book) {
+        Err(BookError::InvalidPackage { reason }) => {
+            assert!(reason.contains("larger than"), "{reason}")
+        }
+        other => panic!("expected the size cap, got {other:?}"),
+    }
+    assert!(matches!(
+        save_last_read_page(&book, 0),
+        Err(BookError::InvalidPackage { .. })
+    ));
+}

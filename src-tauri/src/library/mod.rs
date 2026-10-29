@@ -157,10 +157,15 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
         COUNTER.fetch_add(1, Ordering::Relaxed),
         sweep::TMP_SUFFIX
     ));
-    let mut f = std::fs::File::create(&tmp).map_err(|e| io_error(&tmp, &e))?;
-    f.write_all(bytes).map_err(|e| io_error(&tmp, &e))?;
-    f.sync_all().map_err(|e| io_error(&tmp, &e))?;
-    drop(f);
+    let written = std::fs::File::create(&tmp).and_then(|mut f| {
+        f.write_all(bytes)?;
+        f.sync_all()
+    });
+    if let Err(e) = written {
+        // Never leave a half-written temp file behind.
+        let _ = std::fs::remove_file(&tmp);
+        return Err(io_error(&tmp, &e));
+    }
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         io_error(path, &e)
@@ -168,7 +173,9 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
     // Sync the directory too, so the rename itself survives a crash.
     #[cfg(unix)]
     if let Some(dir) = path.parent() {
-        let _ = std::fs::File::open(dir).and_then(|d| d.sync_all());
+        std::fs::File::open(dir)
+            .and_then(|d| d.sync_all())
+            .map_err(|e| io_error(dir, &e))?;
     }
     Ok(())
 }

@@ -2,7 +2,9 @@
 //! CMYK-with-profile and JPEG 2000 inputs need macOS `sips` and skip elsewhere.
 
 use super::convert::{display_frame, inspect, open, ConvertError, InputKind, Inspection};
-use super::decode::{jp2_dimensions, jpeg_has_adobe_marker, jpeg_is_cmyk, JP2_MAX_PIXELS};
+use super::decode::{
+    jp2_dimensions, jpeg_has_adobe_marker, jpeg_is_cmyk, parse_siz, Siz, JP2_MAX_PIXELS,
+};
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::codecs::webp::WebPEncoder;
@@ -387,6 +389,10 @@ fn strip_icc(jpeg: &[u8]) -> Vec<u8> {
 #[test]
 fn cmyk_jpeg_converts_with_profile_and_is_rejected_without() {
     if !Path::new(GENERIC_CMYK).exists() {
+        // On macOS the fixture must exist: a silent skip there would hide a broken test.
+        if cfg!(target_os = "macos") {
+            panic!("macOS is missing {GENERIC_CMYK}");
+        }
         eprintln!("skipping: needs macOS {GENERIC_CMYK}");
         return;
     }
@@ -432,6 +438,9 @@ fn jpeg_2000_becomes_jpeg() {
         "--out",
         jp2.to_str().unwrap(),
     ]) {
+        if cfg!(target_os = "macos") {
+            panic!("macOS sips could not write JPEG 2000");
+        }
         eprintln!("skipping: needs macOS sips to write JPEG 2000");
         return;
     }
@@ -439,6 +448,36 @@ fn jpeg_2000_becomes_jpeg() {
     let out = decoded(&jp2, 0);
     assert_eq!((out.width(), out.height()), (W, H));
     assert!(corner(&out, false, false) > 200, "marker survives decoding");
+    // Grey with transparency is refused rather than losing its alpha in a JPEG.
+    let la: ImageBuffer<image::LumaA<u8>, Vec<u8>> = ImageBuffer::from_fn(W, H, |x, _| {
+        image::LumaA([(x * 5) as u8, if x < 20 { 255 } else { 40 }])
+    });
+    let mut la_png = Vec::new();
+    PngEncoder::new(&mut la_png)
+        .write_image(la.as_raw(), W, H, image::ExtendedColorType::La8)
+        .unwrap();
+    let la_src = d.file("la.png", &la_png);
+    let la_jp2 = d.0.join("la.jp2");
+    if sips(&[
+        "-s",
+        "format",
+        "jp2",
+        la_src.to_str().unwrap(),
+        "--out",
+        la_jp2.to_str().unwrap(),
+    ]) {
+        let comps = jpeg2k::Image::from_bytes(&std::fs::read(&la_jp2).unwrap())
+            .map(|i| i.num_components())
+            .ok();
+        if comps == Some(2) {
+            match display_frame(&la_jp2, 0) {
+                Err(ConvertError::UnreadableFile(r)) => assert!(r.contains("transparency"), "{r}"),
+                other => panic!("expected the transparency refusal, got {other:?}"),
+            }
+        } else {
+            eprintln!("note: sips wrote {comps:?} components for grey+alpha; 2-component case not exercised");
+        }
+    }
     // A mid-tone pixel catches a channel-order or scaling bug the corner check would miss.
     let (want, got) = (
         picture().get_pixel(30, 40).0,
@@ -744,4 +783,49 @@ fn signatures_for_every_format() {
         inspect(&fake).and_then(|_| display_frame(&fake, 0)),
         Err(ConvertError::UnreadableFile(_))
     ));
+}
+
+#[test]
+fn tiff_orientation_out_of_byte_range_is_ignored() {
+    // 262 wraps to 6 (rotate 90°) if narrowed to a byte; it must count as no orientation.
+    let d = Dir::new("tiff-orient-big");
+    let p = d.file("o.tif", &tiff(&[picture()], Some(262)));
+    let out = decoded(&p, 0);
+    assert_eq!((out.width(), out.height()), (W, H), "not rotated");
+    assert!(corner(&out, false, false) > 200, "marker stays top-left");
+}
+
+fn siz(x: u32, y: u32, tile: u32, comps: u16) -> Vec<u8> {
+    let mut cs = vec![0xFF, 0x4F, 0xFF, 0x51, 0, 47, 0, 0];
+    for v in [x, y, 0, 0, tile, tile, 0, 0] {
+        cs.extend_from_slice(&v.to_be_bytes());
+    }
+    cs.extend_from_slice(&comps.to_be_bytes());
+    cs
+}
+
+#[test]
+fn jp2_siz_bounds_components_and_tiles() {
+    assert_eq!(
+        parse_siz(&siz(1000, 2000, 256, 3)),
+        Some(Siz {
+            width: 1000,
+            height: 2000,
+            components: 3,
+            tiles: 4 * 8
+        })
+    );
+    assert_eq!(parse_siz(&siz(10, 10, 0, 3)), None, "zero tile size");
+    assert_eq!(parse_siz(&siz(10, 10, 4, 3)[..30]), None, "truncated");
+    let d = Dir::new("jp2-siz");
+    let refused = |name: &str, cs: Vec<u8>, want: &str| {
+        let p = d.file(name, &cs);
+        match open(&p).and_then(|s| s.frame(0)) {
+            Err(ConvertError::UnreadableFile(r)) => assert!(r.contains(want), "{name}: {r}"),
+            other => panic!("{name}: expected refusal, got {other:?}"),
+        }
+    };
+    // A small image split into a million 1-pixel tiles, and one with 300 components.
+    refused("tiles.j2k", siz(1000, 1000, 1, 3), "tiles");
+    refused("comps.j2k", siz(100, 100, 100, 300), "components");
 }
