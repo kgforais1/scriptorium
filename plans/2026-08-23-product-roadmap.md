@@ -98,10 +98,21 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 
 **Target:** app is “aware” of text while still showing scans; search, select, copy.
 
-- [ ] OCR pipeline (evaluate: Tesseract via Rust sidecar vs batch CLI vs tesseract.js)
+- [ ] Bundled OCR: ship an OCR engine with the app (lead candidate: Tesseract as a Tauri
+      sidecar, with language data for the corpora's languages), so OCR works offline with no
+      separate install. Evaluate quality on the test corpora before choosing; keep the engine
+      behind one interface so PaddleOCR or a cloud engine can be swapped in later
+- [ ] Transcription pipeline: ingest → OCR every page (any format: JPEG, PNG, TIFF, JPEG 2000,
+      PDF) → word/line boxes → curator correction → published page text. Re-running OCR never
+      overwrites curator corrections
 - [ ] Store per-page OCR: plain text + word/line `bbox` JSON
 - [ ] Full-text search UI; jump to page/highlight hit
-- [ ] Transparent text layer aligned to scan (select + copy)
+- [ ] Hidden text layer aligned to every scan, whatever its image format (select + copy +
+      search), not only PDFs with an embedded text layer
+- [ ] Embed the page text in exported image files too: XMP metadata in JPEG, PNG, and TIFF,
+      and a hidden text layer in exported PDFs, so the text travels with the file
+- [ ] Curator correction editor: side-by-side scan and text, edit words and line breaks,
+      mark a page reviewed; keep the OCR original and the correction history
 - [ ] Background OCR job with progress (re-run when pages change)
 - [ ] Book metadata: `ocrStatus`, `ocrEngine`, `ocrGeneratedAt`
 - [ ] Curator-supplied page text (transcription or translation, typed or imported) stored beside
@@ -208,7 +219,7 @@ Illustrative shape (field names match M0 — not the superseded `image` / `defau
 ## Open questions (roadmap)
 
 - [x] React vs Svelte for Vite UI — React (scaffolded in M0)
-- [ ] OCR runtime: in-app Rust/Tesseract vs external batch vs WASM
+- [ ] OCR runtime: bundled in-app engine is the direction (2026-10-29); pick the engine and its packaging in M2
 - [ ] Fixed-layout text vs reflow for M3 (likely fixed-layout first for scanned books)
 
 ## Related docs
