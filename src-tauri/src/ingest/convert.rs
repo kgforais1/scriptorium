@@ -189,8 +189,10 @@ impl Source {
             return Err(unreadable(format!("frame {frame} of {}", info.frames)));
         }
         if !info.needs_conversion {
-            // The file is its own display image; only its size is needed.
-            let (width, height) = decode::header_info(&self.bytes)?.dimensions;
+            // The file is its own display image. Decode it anyway, so a damaged file is
+            // `UnreadableFile` at ingest rather than a blank page in the reader.
+            let img = decode::decode_frame(info.kind, &self.bytes, frame)?.image;
+            let (width, height) = (img.width(), img.height());
             return Ok(DisplayImage {
                 ext: info.display_ext,
                 width,

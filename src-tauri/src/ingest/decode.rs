@@ -15,7 +15,6 @@ pub(super) struct Decoded {
 }
 
 pub(super) struct HeaderInfo {
-    pub dimensions: (u32, u32),
     /// More than 8 bits per sample.
     pub deep: bool,
     pub icc: Option<Vec<u8>>,
@@ -97,7 +96,6 @@ pub(super) fn header_info(bytes: &[u8]) -> Result<HeaderInfo, ConvertError> {
     let orientation = dec.orientation().map_err(unreadable)?;
     let deep = dec.color_type().bytes_per_pixel() / dec.color_type().channel_count() > 1;
     Ok(HeaderInfo {
-        dimensions: dec.dimensions(),
         deep,
         icc,
         orientation,
@@ -114,11 +112,21 @@ pub(super) fn tiff_frame_count(bytes: &[u8]) -> Result<u32, ConvertError> {
     Ok(frames)
 }
 
+/// A complete JPEG has an end-of-image marker after its scan. The JPEG decoders fill a
+/// truncated scan with grey instead of failing, so a missing EOI is the truncation signal.
+/// Entropy-coded data never contains `FF D9` (a data `FF` is always stuffed as `FF 00`).
+fn jpeg_is_complete(bytes: &[u8]) -> bool {
+    bytes.windows(2).any(|w| w == [0xFF, 0xD9])
+}
+
 pub(super) fn decode_frame(
     kind: InputKind,
     bytes: &[u8],
     frame: u32,
 ) -> Result<Decoded, ConvertError> {
+    if kind == InputKind::Jpeg && !jpeg_is_complete(bytes) {
+        return Err(unreadable("JPEG is truncated (no end-of-image marker)"));
+    }
     match kind {
         InputKind::Tiff => decode_tiff(bytes, frame),
         InputKind::Jp2 => decode_jp2(bytes),

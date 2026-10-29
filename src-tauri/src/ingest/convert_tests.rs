@@ -511,6 +511,11 @@ fn jpeg_walker_handles_fill_bytes_standalone_markers_and_truncation() {
         !jpeg_is_cmyk(&[0xFF, 0xD8, 0xFF, 0xE0, 0, 1]),
         "length below 2"
     );
+    assert!(
+        !jpeg_is_cmyk(&[0xFF, 0xD8, 0xFF, 0xFF, 0xFF]),
+        "fill run to the end"
+    );
+    assert!(!jpeg_is_cmyk(&[0xFF, 0xD8, 0xFF]), "lone 0xFF after SOI");
 }
 
 #[test]
@@ -580,4 +585,36 @@ fn one_open_serves_every_frame() {
             "frame {f} decodes from the kept buffer"
         );
     }
+}
+
+#[test]
+fn truncated_passthrough_file_is_unreadable() {
+    let d = Dir::new("truncated");
+    let full = jpeg(&picture());
+    let p = d.file("cut.jpg", &full[..full.len() / 2]);
+    let res = open(&p).and_then(|s| s.frame(0));
+    assert!(
+        matches!(res, Err(ConvertError::UnreadableFile(_))),
+        "{res:?}"
+    );
+}
+
+#[test]
+fn grey_alpha_png_with_a_grey_profile_keeps_its_alpha() {
+    let d = Dir::new("grey-alpha");
+    let la: ImageBuffer<image::LumaA<u8>, Vec<u8>> = ImageBuffer::from_fn(W, H, |x, _| {
+        image::LumaA([(x * 5) as u8, if x < 20 { 255 } else { 40 }])
+    });
+    let mut bytes = Vec::new();
+    let mut enc = PngEncoder::new(&mut bytes);
+    enc.set_icc_profile(grey_gamma_icc(1.8)).unwrap();
+    enc.write_image(la.as_raw(), W, H, image::ExtendedColorType::La8)
+        .unwrap();
+    let p = d.file("la.png", &bytes);
+    let out = decoded(&p, 0).to_rgba8();
+    assert_eq!(
+        (out.get_pixel(5, 5).0[3], out.get_pixel(30, 5).0[3]),
+        (255, 40),
+        "alpha survives"
+    );
 }

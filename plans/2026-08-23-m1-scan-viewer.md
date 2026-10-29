@@ -139,7 +139,9 @@ Known limits, each `UnreadableFile` unless noted:
 - TIFF: only 8- and 16-bit grey, RGB, and RGBA, plus 8-bit CMYK with a profile. Palette,
   YCbCr, Lab, grey with alpha, 16-bit CMYK, and 32/64-bit or float layouts are rejected.
 - A corrupt embedded ICC profile rejects the page rather than assuming sRGB, and a grey
-  profile on a colour image is rejected rather than turning the page grey.
+  profile on a colour image is rejected rather than turning the page grey (grey and
+  grey-with-alpha images convert normally). Files copied as-is are still fully decoded at
+  ingest, so a damaged file is rejected.
 - A JPEG that only needs a rotation or a colour fix is re-encoded at q92. A lossless JPEG
   rotation is a possible later improvement.
 

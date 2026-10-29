@@ -59,7 +59,8 @@ pub(super) fn to_srgb8(
     img: DynamicImage,
     icc: Option<&[u8]>,
 ) -> Result<DynamicImage, ConvertError> {
-    let is_grey = matches!(img.color(), image::ColorType::L8 | image::ColorType::L16);
+    use image::ColorType::{La16, La8, L16, L8};
+    let is_grey = matches!(img.color(), L8 | L16 | La8 | La16);
     let has_alpha = img.color().has_alpha();
     let profile = match icc {
         Some(p) if !is_srgb_equivalent(p)? => Some(Profile::new_icc(p).map_err(unreadable)?),
@@ -68,7 +69,8 @@ pub(super) fn to_srgb8(
     let Some(src) = profile else {
         return Ok(match (is_grey, has_alpha) {
             (true, false) => DynamicImage::ImageLuma8(img.to_luma8()),
-            (_, true) => DynamicImage::ImageRgba8(img.to_rgba8()),
+            (true, true) => DynamicImage::ImageLumaA8(img.to_luma_alpha8()),
+            (false, true) => DynamicImage::ImageRgba8(img.to_rgba8()),
             _ => DynamicImage::ImageRgb8(img.to_rgb8()),
         });
     };
@@ -83,7 +85,16 @@ pub(super) fn to_srgb8(
             .map_err(unreadable)?;
         let mut out = vec![[0u8; 3]; grey.as_raw().len()];
         tr.transform_pixels(grey.as_raw(), &mut out);
-        return rgb_image(img.width(), img.height(), out.concat());
+        let rgb = rgb_image(img.width(), img.height(), out.concat())?;
+        if !has_alpha {
+            return Ok(rgb);
+        }
+        // Reattach the grey image's alpha to the converted colour.
+        let mut rgba = rgb.to_rgba8();
+        for (px, a) in rgba.pixels_mut().zip(img.to_luma_alpha8().pixels()) {
+            px.0[3] = a.0[1];
+        }
+        return Ok(DynamicImage::ImageRgba8(rgba));
     }
     if has_alpha {
         let rgba = img.to_rgba8();
