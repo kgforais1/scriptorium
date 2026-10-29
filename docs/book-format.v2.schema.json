@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://scriptorium.local/book-format.schema.json",
+  "$id": "https://scriptorium.local/book-format.v2.schema.json",
   "title": "Scriptorium book package meta.json",
-  "description": "Schema v1 for a Scriptorium book package meta.json. See docs/book-format.md for rules and intent.",
+  "description": "Schema for formatVersion 2 of a Scriptorium book package meta.json. Adds optional originals: book-level sources[] and a per-page source reference. See docs/book-format.md for rules the schema cannot express.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -19,8 +19,8 @@
   ],
   "properties": {
     "formatVersion": {
-      "description": "Schema version; must be 1 for this spec.",
-      "const": 1
+      "description": "Schema version; must be 2 for this spec.",
+      "const": 2
     },
     "id": {
       "description": "Stable book identifier and package directory name under the library root. Lowercase slug (1–64 chars); no trailing period; not a Windows-reserved device name (con/prn/aux/nul/com1-9/lpt1-9, with or without extension).",
@@ -45,7 +45,11 @@
     "renderMode": {
       "description": "How the book renders. \"scan\" default; \"text\"/\"hybrid\" reserved.",
       "type": "string",
-      "enum": ["scan", "text", "hybrid"],
+      "enum": [
+        "scan",
+        "text",
+        "hybrid"
+      ],
       "default": "scan"
     },
     "lastReadPage": {
@@ -71,6 +75,15 @@
       "maxItems": 100000,
       "items": {
         "$ref": "#/$defs/pageEntry"
+      }
+    },
+    "sources": {
+      "description": "Untouched originals kept under originals/ when a page's display image was converted. Omitted when every page is its own original.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100000,
+      "items": {
+        "$ref": "#/$defs/sourceEntry"
       }
     }
   },
@@ -129,8 +142,98 @@
         "storage": {
           "description": "How the page is stored. \"copied\" default; \"referenced\" reserved, not implemented in M1.",
           "type": "string",
-          "enum": ["copied", "referenced"],
+          "enum": [
+            "copied",
+            "referenced"
+          ],
           "default": "copied"
+        },
+        "source": {
+          "description": "The original this page was converted from.",
+          "$ref": "#/$defs/pageSource"
+        }
+      }
+    },
+    "pageSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref"
+      ],
+      "properties": {
+        "ref": {
+          "description": "A sources[].id in this book.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
+        "frame": {
+          "description": "0-based frame within a multi-frame source (multi-page TIFF, PDF). Present exactly when the source has more than one frame.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "sourceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "file",
+        "format",
+        "frames",
+        "byteSize",
+        "sha256"
+      ],
+      "properties": {
+        "id": {
+          "description": "Identifier unique within the book; pages refer to it.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
+        "file": {
+          "description": "Package-relative path under originals/. Same path rules as pages[].file.",
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*(?:^|/)[^/]*\\.(?:/|$))[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$"
+            },
+            {
+              "pattern": "^originals/"
+            }
+          ]
+        },
+        "format": {
+          "description": "Original container format.",
+          "type": "string",
+          "enum": [
+            "jpeg",
+            "png",
+            "webp",
+            "bmp",
+            "gif",
+            "tiff",
+            "jp2",
+            "pdf"
+          ]
+        },
+        "frames": {
+          "description": "Number of frames (pages) in the source; 1 for a single image.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "byteSize": {
+          "description": "Bytes on disk.",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "sha256": {
+          "description": "Hex digest of the source file.",
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
         }
       }
     }

@@ -220,18 +220,20 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 
 ### Phase 1 — Book I/O (Rust)
 
-- [ ] Book format v2: rename the current schema to `book-format.v1.schema.json` and add
+- [x] Book format v2: rename the current schema to `book-format.v1.schema.json` and add
       `book-format.v2.schema.json` with `sources[]` and page `source`. The loader reads
       `formatVersion` first, then picks the schema; any other version is
       `SchemaVersionUnsupported` (A8). Rust reads v1 and v2 and writes v2. Add the `sources[]`
       validation rules and the v1→v2 migration note to `docs/book-format.md`. Update every
       reference to the old schema path (`src-tauri/src/book_format.rs` `load_schema`,
       `tests/test_generate_fixture_book.py`, README, `docs/NAVIGATION.md`, `CHANGELOG.md`,
-      comments) and give each schema file its own `$id`
+      comments) and give each schema file its own `$id`. Done 2026-10-29: schemas, Rust types
+      and rules, spec and migration note, fixture generator writes v2. The loader's
+      schema-by-version pick lands with `load_book`
 - [ ] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
       fixture per row and per conversion rule (CMYK, 16-bit, ICC, EXIF orientation,
       multi-page TIFF)
-- [ ] Reserve the M2 and M6 layout in `docs/book-format.md` with no schema change: `ocr/` holds
+- [x] Reserve the M2 and M6 layout in `docs/book-format.md` with no schema change: `ocr/` holds
       one JSON per page (text, word and line boxes in normalized page coordinates, `source` of
       `ocr`, `pdf`, or `curator`) plus `ocr/index.json` (per-page status and book rollup);
       `annotations.json` regions use normalized page coordinates. Shapes are provisional until M2/M6
@@ -245,7 +247,7 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] Ingest case-insensitive `id` collision check (A11)
 - [ ] Orphan temp-dir sweep + DuplicatePageStem tests
 - [ ] All error taxonomy variants tested with `tempfile`
-- [ ] Schema bind: Rust sample serialize ↔ `docs/book-format.v2.schema.json` (and v1 samples ↔ v1 schema)
+- [x] Schema bind: Rust sample serialize ↔ `docs/book-format.v2.schema.json` (and v1 samples ↔ v1 schema)
 
 ### Phase 2 — Commands + UI
 

@@ -25,20 +25,20 @@ import sys
 import zlib
 from pathlib import Path
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 DEFAULT_PAGES = 12
 DEFAULT_SEED = 20260824
 FIXTURES_ROOT = Path("tmp/fixtures")
 PAGE_WIDTH = 800
 PAGE_HEIGHT = 1100
-# Keep in lockstep with docs/book-format.schema.json (and Rust book_format constants).
+# Keep in lockstep with docs/book-format.v2.schema.json (and Rust book_format constants).
 TITLE_MAX_LEN = 4096
 TEXT_FIELD_MAX_LEN = 8192  # rights + attribution (Rust TEXT_FIELD_MAX_LEN)
 PAGES_MAX_ITEMS = 100_000
 BOOK_ID_RE = re.compile(
     r"^(?!(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.[a-z0-9._-]*)?$)(?!.*\.$)[a-z0-9][a-z0-9._-]{0,63}$"
 )
-# Must match docs/book-format.schema.json properties.id.pattern (see tests).
+# Must match docs/book-format.v2.schema.json properties.id.pattern (see tests).
 
 
 def validate_generator_inputs(

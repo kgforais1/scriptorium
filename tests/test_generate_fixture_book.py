@@ -96,7 +96,7 @@ class FixtureBookTests(unittest.TestCase):
                 f"(import failed: {exc})"
             )
 
-        schema = json.loads((ROOT / "docs" / "book-format.schema.json").read_text())
+        schema = json.loads((ROOT / "docs" / "book-format.v2.schema.json").read_text())
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "schema-book"
             meta = gen.build_book_package(out, "Schema Book", page_count=2, seed=3)
@@ -229,12 +229,12 @@ class FixtureBookTests(unittest.TestCase):
             )
 
     def test_book_id_pattern_matches_schema(self) -> None:
-        schema = json.loads((ROOT / "docs" / "book-format.schema.json").read_text())
+        schema = json.loads((ROOT / "docs" / "book-format.v2.schema.json").read_text())
         pattern = schema["properties"]["id"]["pattern"]
         self.assertEqual(
             gen.BOOK_ID_RE.pattern,
             pattern,
-            "Python BOOK_ID_RE must match docs/book-format.schema.json",
+            "Python BOOK_ID_RE must match docs/book-format.v2.schema.json",
         )
         self.assertEqual(gen.TITLE_MAX_LEN, schema["properties"]["title"]["maxLength"])
         self.assertEqual(gen.TEXT_FIELD_MAX_LEN, schema["properties"]["rights"]["maxLength"])

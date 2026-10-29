@@ -15,7 +15,7 @@ Local agent profile (gitignored): `.context/project-profile.md`.
 **Roadmap:** [`plans/2026-08-23-product-roadmap.md`](plans/2026-08-23-product-roadmap.md) · **Backlog:** [`to_do.md`](to_do.md).
 **CI & hooks:** [`docs/ci-and-hooks.md`](docs/ci-and-hooks.md).
 **Domain menu:** [`inventory/virtual-books-flipbook.md`](inventory/virtual-books-flipbook.md).
-**Book format:** [`docs/book-format.md`](docs/book-format.md) · schema [`docs/book-format.schema.json`](docs/book-format.schema.json).
+**Book format:** [`docs/book-format.md`](docs/book-format.md) · schema [`docs/book-format.v2.schema.json`](docs/book-format.v2.schema.json).
 
 ---
 

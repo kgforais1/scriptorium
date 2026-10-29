@@ -180,7 +180,7 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 
 ## Book package schema (evolving)
 
-**Source of truth:** authored in M0 as `docs/book-format.md` + `docs/book-format.schema.json`
+**Source of truth:** authored in M0 as `docs/book-format.md` + `docs/book-format.schema.json` (split into `v1` and `v2` schemas in M1)
 (see [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md)). Do not treat this
 roadmap as schema authority.
 
