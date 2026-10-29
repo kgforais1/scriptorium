@@ -22,7 +22,8 @@ async function listPages(): Promise<string[]> {
     return paths.map((p) => convertFileSrc(p));
   }
   // Browser-only dev mode: Vite serves the repo root, so the gitignored fixture folder is reachable.
-  const base = "/tmp/fixtures/spike-pages/";
+  // Resolved against this module's URL, so it is a dev-server path, not a filesystem path.
+  const base = `${new URL("../../../tmp/fixtures/spike-pages", import.meta.url).pathname}/`;
   const res = await fetch(base + "manifest.json");
   if (!res.ok) throw new Error("run scripts/make-spike-fixtures.sh first");
   return ((await res.json()) as string[]).map((f) => base + f);
