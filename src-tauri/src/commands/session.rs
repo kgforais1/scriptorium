@@ -4,6 +4,7 @@
 //! Books are keyed by canonical package root, never by the self-declared id, so two
 //! packages with the same id never cross. Callers canonicalize with [`canonical_key`].
 
+use crate::library::command_error::CommandError;
 use crate::library::{io_error, BookError};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -55,10 +56,16 @@ impl std::fmt::Display for RecordError {
     }
 }
 
-impl From<RecordError> for BookError {
+impl From<RecordError> for CommandError {
+    /// A page past the end is a real bound on the book. A book that was never opened is a
+    /// slip by our own webview, so it is `Internal`, not a fault in the book.
     fn from(err: RecordError) -> Self {
-        BookError::InvalidPackage {
-            reason: err.to_string(),
+        match err {
+            RecordError::NotOpen => CommandError::internal(err.to_string()),
+            RecordError::PageOutOfRange { .. } => BookError::InvalidPackage {
+                reason: err.to_string(),
+            }
+            .into(),
         }
     }
 }

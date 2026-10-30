@@ -76,6 +76,10 @@ fn lock(session: &Mutex<Session>) -> MutexGuard<'_, Session> {
 
 /// Flush dirty books (all, or only `only`) through `save_last_read_page`. Returns the first
 /// failure, if any; every failure is logged.
+///
+/// The session lock is held across the write on purpose. It is what keeps two writers from
+/// interleaving their read-modify-write of one `meta.json`. Narrow it only after adding a
+/// per-book write guard.
 fn flush_session(app: &AppHandle, only: Option<&Path>) -> Option<CommandError> {
     let session = app.try_state::<Mutex<Session>>()?;
     let failures = lock(&session).flush(only, Instant::now(), |root, page| {
@@ -182,9 +186,13 @@ pub async fn open_book(app: AppHandle, path: String) -> Result<BookView, Command
 pub async fn save_progress(app: AppHandle, root: String, page: u32) -> Result<(), CommandError> {
     blocking(move || {
         let root = canonical_key(Path::new(&root))?;
-        let due = lock(&app.state::<Mutex<Session>>())
-            .record(&root, page, Instant::now())
-            .map_err(crate::library::BookError::from)?;
+        // The guard must drop before `flush_session` locks the same mutex again.
+        let due = {
+            let state = app.state::<Mutex<Session>>();
+            let mut session = lock(&state);
+            session.record(&root, page, Instant::now())
+        }
+        .map_err(CommandError::from)?;
         match due.then(|| flush_session(&app, Some(&root))).flatten() {
             Some(err) => Err(err),
             None => Ok(()),
@@ -201,7 +209,10 @@ pub async fn last_book(app: AppHandle) -> Result<Option<BookView>, CommandError>
         let Some(root) = read_last_book(&app.state::<Paths>().state_file) else {
             return Ok(None);
         };
-        Ok(open_and_register(&app, &root).ok())
+        // The home screen is the fallback, but say why the book did not reopen.
+        Ok(open_and_register(&app, &root)
+            .inspect_err(|e| eprintln!("could not reopen {}: {}", root.display(), e.message))
+            .ok())
     })
     .await
 }
