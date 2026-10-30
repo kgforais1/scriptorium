@@ -3,6 +3,8 @@
 //! Hosts the desktop app runtime and shared Rust modules (book format types).
 //! Tauri commands for ingest/load land in later milestones; M0 ships types only.
 
+#![warn(missing_docs)]
+
 pub mod book_format;
 pub mod ingest;
 pub mod library;
@@ -10,6 +12,7 @@ pub mod library;
 #[cfg(dev)]
 mod spike;
 
+/// Starts the Tauri app and returns when the app exits.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();

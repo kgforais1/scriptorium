@@ -184,10 +184,15 @@ fn creates_a_v2_package_in_natural_order_with_originals() {
         !book.join(".ingest.lock").exists(),
         "the build lock is not shipped"
     );
-    // A1: the written meta.json passes the v2 schema and the loader verifies every file.
+    assert_package_loads(&lib, &book, &meta);
+}
+
+/// A1: the written `meta.json` passes the v2 schema, the loader verifies every file, and no
+/// temp directory is left in the library.
+fn assert_package_loads(lib: &Path, book: &Path, meta: &BookMeta) {
     parse_meta(&std::fs::read_to_string(book.join("meta.json")).unwrap()).unwrap();
-    let loaded = load_book(&book).unwrap();
-    assert_eq!(loaded.meta, meta);
+    let loaded = load_book(book).unwrap();
+    assert_eq!(&loaded.meta, meta);
     let page = loaded.page_path(5).unwrap();
     assert!(
         page.is_file() && page.starts_with(&loaded.root),

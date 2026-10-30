@@ -13,13 +13,21 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SourceFormat {
+    /// A JPEG image.
     Jpeg,
+    /// A PNG image.
     Png,
+    /// A WebP image.
     Webp,
+    /// A BMP image.
     Bmp,
+    /// A GIF image.
     Gif,
+    /// A TIFF image.
     Tiff,
+    /// A JPEG 2000 image.
     Jp2,
+    /// A PDF document.
     Pdf,
 }
 
@@ -27,12 +35,17 @@ pub enum SourceFormat {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SourceEntry {
+    /// Id that pages use to refer to this original.
     pub id: String,
+    /// Path under `originals/`, relative to the package root.
     pub file: String,
+    /// Container format of the file.
     pub format: SourceFormat,
     /// Number of frames (pages) in the file; 1 for a single image.
     pub frames: u32,
+    /// Size of the file in bytes.
     pub byte_size: u64,
+    /// Lowercase hex SHA-256 of the file.
     pub sha256: String,
 }
 

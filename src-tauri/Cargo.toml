@@ -34,3 +34,7 @@ fs4 = "1.1.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# `missing_docs` is set in src/lib.rs so it covers the lib crate only (not build.rs or main.rs).
+[lints.clippy]
+cognitive_complexity = "warn"

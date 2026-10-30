@@ -20,8 +20,11 @@ const SPACE_HEADROOM: u64 = 50 * 1024 * 1024;
 pub struct CreateOptions {
     /// Book id and package directory name: a lowercase slug (see `docs/book-format.md`).
     pub id: String,
+    /// Book title.
     pub title: String,
+    /// Rights statement.
     pub rights: String,
+    /// Attribution line.
     pub attribution: String,
 }
 
