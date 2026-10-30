@@ -10,12 +10,16 @@ import type {
 import { toCommandError } from "./errors";
 
 /** Runs a command and turns any rejection into a `CommandError`. */
-async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+async function guarded<T>(work: () => Promise<T>): Promise<T> {
   try {
-    return await invoke<T>(cmd, args);
+    return await work();
   } catch (err) {
     throw toCommandError(err);
   }
+}
+
+function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  return guarded(() => invoke<T>(cmd, args));
 }
 
 /**
@@ -75,16 +79,14 @@ export function lastBook(): Promise<BookView | null> {
  * @param cb - Called with each progress tick.
  * @returns A function that stops listening.
  */
-export async function onIngestProgress(
+export function onIngestProgress(
   cb: (progress: IngestProgress) => void,
 ): Promise<() => void> {
-  try {
-    return await listen<IngestProgress>("ingest-progress", (event) => {
+  return guarded(() =>
+    listen<IngestProgress>("ingest-progress", (event) => {
       cb(event.payload);
-    });
-  } catch (err) {
-    throw toCommandError(err);
-  }
+    }),
+  );
 }
 
 /**
@@ -92,12 +94,8 @@ export async function onIngestProgress(
  *
  * @returns The chosen folder, or null when the user cancels.
  */
-export async function pickFolder(): Promise<string | null> {
-  try {
-    return await open({ directory: true, multiple: false });
-  } catch (err) {
-    throw toCommandError(err);
-  }
+export function pickFolder(): Promise<string | null> {
+  return guarded(() => open({ directory: true, multiple: false }));
 }
 
 /**

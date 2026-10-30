@@ -11,7 +11,7 @@ const HEADINGS: Record<string, string> = {
   InvalidPackage: "Not a valid book",
   ChecksumMismatch: "Book is damaged",
   PermissionDenied: "Access denied",
-  Internal: "Something went wrong",
+  Internal: "Scriptorium hit a problem",
 };
 
 const FALLBACK_HEADING = "Something went wrong";

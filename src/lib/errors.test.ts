@@ -1,27 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { errorHeading, isCommandError, toCommandError } from "./errors";
 
-const KINDS = [
-  "EmptyFolder",
-  "NoSupportedImages",
-  "UnreadableFile",
-  "DestinationExists",
-  "DuplicatePageStem",
-  "InsufficientDiskSpace",
-  "UnsupportedFormatVersion",
-  "InvalidPackage",
-  "ChecksumMismatch",
-  "PermissionDenied",
-  "Internal",
+// Every BookError variant plus Internal, pinned by value so a wrong or duplicated heading fails.
+const HEADINGS: [string, string][] = [
+  ["EmptyFolder", "Folder is empty"],
+  ["NoSupportedImages", "No supported images"],
+  ["UnreadableFile", "Can't read a file"],
+  ["DestinationExists", "Book already exists"],
+  ["DuplicatePageStem", "Two files share a name"],
+  ["InsufficientDiskSpace", "Not enough disk space"],
+  ["UnsupportedFormatVersion", "Book is from a newer version"],
+  ["InvalidPackage", "Not a valid book"],
+  ["ChecksumMismatch", "Book is damaged"],
+  ["PermissionDenied", "Access denied"],
+  ["Internal", "Scriptorium hit a problem"],
 ];
 
 describe("errorHeading", () => {
-  it.each(KINDS)("has a heading for %s", (kind) => {
-    expect(errorHeading(kind).length).toBeGreaterThan(0);
+  it.each(HEADINGS)("names %s as %s", (kind, heading) => {
+    expect(errorHeading(kind)).toBe(heading);
   });
 
-  it("names a damaged book", () => {
-    expect(errorHeading("ChecksumMismatch")).toBe("Book is damaged");
+  it("gives every kind its own heading, distinct from the fallback", () => {
+    const headings = HEADINGS.map(([, h]) => h);
+    expect(new Set(headings).size).toBe(headings.length);
+    expect(headings).not.toContain(errorHeading("Nope"));
   });
 
   it("falls back for unknown kinds, including object prototype names", () => {
