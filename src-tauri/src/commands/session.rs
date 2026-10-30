@@ -124,16 +124,25 @@ impl Session {
         page
     }
 
-    /// Claim the delayed flush for `root`: true when the caller should schedule one, false
-    /// when one is already scheduled or the book is clean. The flush clears the claim.
-    pub fn claim_delayed_flush(&mut self, root: &Path) -> bool {
-        match self.books.get_mut(root) {
-            Some(e) if e.dirty && !e.flush_scheduled => {
-                e.flush_scheduled = true;
-                true
-            }
-            _ => false,
+    /// Claim the delayed flush for `root` and return how long to wait before it: the normal
+    /// interval, or the longer retry backoff after a failed write. `None` when one is already
+    /// scheduled or the book is clean. The flush clears the claim.
+    pub fn claim_delayed_flush(&mut self, root: &Path) -> Option<Duration> {
+        let e = self.books.get_mut(root)?;
+        if !e.dirty || e.flush_scheduled {
+            return None;
         }
+        e.flush_scheduled = true;
+        Some(if e.write_failed {
+            self.interval * RETRY_FACTOR
+        } else {
+            self.interval
+        })
+    }
+
+    /// True when the last write of `root` failed and has not succeeded since.
+    pub fn write_failed(&self, root: &Path) -> bool {
+        self.books.get(root).is_some_and(|e| e.write_failed)
     }
 
     /// The highest save number recorded for `root`, or 0 when it is not open.
@@ -315,15 +324,24 @@ mod tests {
         let t0 = Instant::now();
         let mut s = session_with(&["/a"], t0);
         let a = Path::new("/a");
-        assert!(!s.claim_delayed_flush(a), "clean: nothing to flush");
+        assert_eq!(s.claim_delayed_flush(a), None, "clean: nothing to flush");
         s.record(a, 1, t0).unwrap();
-        assert!(s.claim_delayed_flush(a));
-        assert!(!s.claim_delayed_flush(a), "already scheduled");
+        assert_eq!(s.claim_delayed_flush(a), Some(SEC));
+        assert_eq!(s.claim_delayed_flush(a), None, "already scheduled");
         let mut log = Vec::new();
         s.flush(Some(a), t0 + SEC, ok_writer(&mut log));
         assert_eq!(log, [(PathBuf::from("/a"), 1)]);
         s.record(a, 2, t0 + SEC).unwrap();
-        assert!(s.claim_delayed_flush(a), "the flush released the claim");
+        assert_eq!(
+            s.claim_delayed_flush(a),
+            Some(SEC),
+            "the flush released the claim"
+        );
+        // After a failed write the delayed flush waits the retry backoff, not the interval.
+        s.flush(Some(a), t0 + SEC * 2, |_, _| Err("read-only"));
+        s.record(a, 3, t0 + SEC * 2).unwrap();
+        assert!(s.write_failed(a));
+        assert_eq!(s.claim_delayed_flush(a), Some(SEC * RETRY_FACTOR));
     }
 
     #[test]

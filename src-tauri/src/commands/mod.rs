@@ -220,18 +220,19 @@ pub async fn save_progress(
 ) -> Result<SaveOutcome, CommandError> {
     blocking(move || {
         let state = app.state::<Mutex<Session>>();
-        let outcome = save_in(
+        let result = save_in(
             &state,
             Path::new(&root),
             page,
             seq,
             Instant::now(),
             |r, p| save_last_read_page(r, p).map(|_| ()),
-        )?;
-        if outcome == SaveOutcome::Pending {
+        );
+        // Anything not yet on disk gets a delayed flush (no-op if the book is clean).
+        if result != Ok(SaveOutcome::Saved) {
             schedule_flush(&app, &root);
         }
-        Ok(outcome)
+        result
     })
     .await
 }
@@ -242,12 +243,12 @@ fn schedule_flush(app: &AppHandle, root: &str) {
     let Ok(root) = canonical_key(Path::new(root)) else {
         return;
     };
-    if !lock(&app.state::<Mutex<Session>>()).claim_delayed_flush(&root) {
+    let Some(wait) = lock(&app.state::<Mutex<Session>>()).claim_delayed_flush(&root) else {
         return;
-    }
+    };
     let app = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(SAVE_INTERVAL);
+        std::thread::sleep(wait);
         flush_session(&app, Some(&root));
     });
 }
@@ -275,6 +276,13 @@ fn save_in(
     let root = canonical_key(root)?;
     let mut session = lock(session);
     if !session.record_seq(&root, page, seq, now)? {
+        // A held page after a failed write is not safe yet: say so, so the warning stays up.
+        if session.write_failed(&root) {
+            return Err(CommandError {
+                kind: "SaveHeld".into(),
+                message: "The last save failed. It will be retried.".into(),
+            });
+        }
         return Ok(SaveOutcome::Pending);
     }
     // The lock is held across the write, as in `flush_session`, so writers never interleave.

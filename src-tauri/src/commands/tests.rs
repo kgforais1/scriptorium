@@ -168,3 +168,35 @@ fn save_progress_path_records_writes_and_drops_stale_pages() {
     // A page past the end is refused.
     assert!(save_in(&session, &root, 3, 4, late, write).is_err());
 }
+
+#[test]
+fn a_held_page_after_a_failed_write_is_reported() {
+    use super::{save_in, SaveOutcome};
+    use std::sync::Mutex;
+    let (_fx, root) = Fixture::new("save-held");
+    let t0 = Instant::now();
+    let session = Mutex::new(Session::new(SAVE_INTERVAL));
+    session
+        .lock()
+        .unwrap()
+        .register(canonical_key(&root).unwrap(), 0, 3, t0);
+    let fail = |_: &Path, _: u32| {
+        Err(crate::library::BookError::PermissionDenied {
+            path: PathBuf::from("/ro"),
+        })
+    };
+    let later = t0 + SAVE_INTERVAL;
+    assert!(
+        save_in(&session, &root, 1, 1, later, fail).is_err(),
+        "the write fails"
+    );
+    // The next turn is held by the backoff, and still says the place is not saved.
+    let held = save_in(&session, &root, 2, 2, later, fail).unwrap_err();
+    assert_eq!(held.kind, "SaveHeld");
+    let ok = |r: &Path, p: u32| save_last_read_page(r, p).map(|_| ());
+    let retry = later + SAVE_INTERVAL * super::session::RETRY_FACTOR;
+    assert_eq!(
+        save_in(&session, &root, 2, 3, retry, ok),
+        Ok(SaveOutcome::Saved)
+    );
+}
