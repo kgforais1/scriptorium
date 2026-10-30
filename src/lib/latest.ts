@@ -15,7 +15,10 @@ export function latestOnly<T>(send: (value: T) => Promise<void>): (value: T) => 
     while (waiting !== null) {
       const { value } = waiting;
       waiting = null;
-      await send(value).catch(() => undefined);
+      // Wrapped, so even a send that throws synchronously cannot leave `running` stuck.
+      await Promise.resolve()
+        .then(() => send(value))
+        .catch(() => undefined);
     }
     running = false;
   }

@@ -115,14 +115,20 @@ fn open_and_register(app: &AppHandle, root: &Path) -> Result<BookView, CommandEr
     flush_session(app, Some(&root));
     let book = load_book(&root)?;
     let mut view = book_view(&book)?;
-    // Admit each verified display file, in the same simplified form the view hands to the
-    // webview, so URL and scope agree. A valid package may keep pages outside `pages/`, and
-    // nothing else in the package (such as `originals/`) is exposed.
+    // Admit `pages/` as a directory, plus any verified page file a valid package keeps
+    // elsewhere. Paths use the same simplified form the view hands to the webview, so URL and
+    // scope agree. Nothing else in the package (such as `originals/`) is exposed.
     let scope = app.asset_protocol_scope();
-    for page in &view.pages {
-        scope
-            .allow_file(&page.path)
-            .map_err(|e| CommandError::internal(format!("could not admit a page: {e}")))?;
+    let pages_dir = dunce::simplified(&book.root).join("pages");
+    scope
+        .allow_directory(&pages_dir, true)
+        .map_err(|e| CommandError::internal(format!("could not admit the book's pages: {e}")))?;
+    for page in view.pages.iter().map(|p| Path::new(&p.path)) {
+        if page.parent() != Some(pages_dir.as_path()) {
+            scope
+                .allow_file(page)
+                .map_err(|e| CommandError::internal(format!("could not admit a page: {e}")))?;
+        }
     }
     let page_count = u32::try_from(book.meta.pages.len()).unwrap_or(u32::MAX);
     view.last_read_page = lock(&app.state::<Mutex<Session>>()).register(

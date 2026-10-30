@@ -387,12 +387,15 @@ CSS. No skin tokens are needed until Phase 3.
   at the ends, A5), and the current page as a padded `<img>` (`object-fit: contain`). A
   **Close book** button returns home.
 - On start, the app calls `last_book` and reopens that book at its saved page (A6).
-- Page changes call `save_progress` immediately. Rust owns the debounce and the close flush.
+- Page changes go to `save_progress` through `latestOnly` (`src/lib/latest.ts`): one save in
+  flight per book, newest page last. Rust owns the debounce and the close flush. A turn still
+  queued when the app quits is lost, so the book can reopen one page back.
 
 **Tests.** Rust unit tests cover the slug helper, `inspect_folder` both ways, the
 `CommandError` JSON shape, and the progress callback count. Add Vitest with tests for the
 pure TS helpers: the error-heading map, the slug check, and the page clamp and keyboard
-step. Rust tests cover the debounced write and the flush of dirty pages.
+step, the length limits (`limits.ts`), and the one-in-flight save queue (`latest.ts`). Rust
+tests cover the debounced write and the flush of dirty pages.
 
 **Chunks.** Each chunk gets its own commit and a qoder review.
 

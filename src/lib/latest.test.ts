@@ -22,6 +22,7 @@ describe("latestOnly", () => {
     push(1);
     push(2);
     push(3);
+    await tick();
     expect(sent).toEqual([1]);
     gates[0].resolve();
     await tick();
@@ -29,7 +30,24 @@ describe("latestOnly", () => {
     gates[1].resolve();
     await tick();
     push(4);
+    await tick();
     expect(sent).toEqual([1, 3, 4]);
+  });
+
+  it("survives a send that throws synchronously", async () => {
+    const sent: number[] = [];
+    const push = latestOnly<number>((v) => {
+      sent.push(v);
+      if (v === 1) {
+        throw new Error("sync");
+      }
+      return Promise.resolve();
+    });
+    push(1);
+    await tick();
+    push(2);
+    await tick();
+    expect(sent).toEqual([1, 2]);
   });
 
   it("keeps going after a failed send", async () => {
