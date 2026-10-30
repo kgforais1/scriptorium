@@ -1,0 +1,111 @@
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
+import type {
+  BookView,
+  CreateBookArgs,
+  FolderInfo,
+  IngestProgress,
+} from "./bookTypes";
+import { toCommandError } from "./errors";
+
+/** Runs a command and turns any rejection into a `CommandError`. */
+async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(cmd, args);
+  } catch (err) {
+    throw toCommandError(err);
+  }
+}
+
+/**
+ * Says what a folder holds: a Scriptorium book, or scans that could become one.
+ *
+ * @param path - Absolute path of the folder.
+ * @returns The folder info. Rejects with a `CommandError`.
+ */
+export function inspectFolder(path: string): Promise<FolderInfo> {
+  return call<FolderInfo>("inspect_folder", { path });
+}
+
+/**
+ * Builds a book from a folder of scans and opens it.
+ *
+ * @param args - The source folder and the book's id, title, rights, and attribution.
+ * @returns The open book. Rejects with a `CommandError`.
+ */
+export function createBook(args: CreateBookArgs): Promise<BookView> {
+  const { folder, title, id, rights, attribution } = args;
+  return call<BookView>("create_book", { folder, title, id, rights, attribution });
+}
+
+/**
+ * Opens a book package in place.
+ *
+ * @param path - Absolute path of the package folder.
+ * @returns The open book. Rejects with a `CommandError`.
+ */
+export function openBook(path: string): Promise<BookView> {
+  return call<BookView>("open_book", { path });
+}
+
+/**
+ * Records the page the reader is on.
+ *
+ * @param root - The `root` of the open `BookView`.
+ * @param page - The zero-based page.
+ * @returns Nothing. Rejects with a `CommandError`.
+ */
+export function saveProgress(root: string, page: number): Promise<void> {
+  return call<void>("save_progress", { root, page });
+}
+
+/**
+ * Reopens the book that was open last time.
+ *
+ * @returns The book, or null when there is none or it no longer loads.
+ */
+export function lastBook(): Promise<BookView | null> {
+  return call<BookView | null>("last_book");
+}
+
+/**
+ * Listens for ingest progress while `createBook` runs.
+ *
+ * @param cb - Called with each progress tick.
+ * @returns A function that stops listening.
+ */
+export async function onIngestProgress(
+  cb: (progress: IngestProgress) => void,
+): Promise<() => void> {
+  try {
+    return await listen<IngestProgress>("ingest-progress", (event) => {
+      cb(event.payload);
+    });
+  } catch (err) {
+    throw toCommandError(err);
+  }
+}
+
+/**
+ * Shows the system folder picker.
+ *
+ * @returns The chosen folder, or null when the user cancels.
+ */
+export async function pickFolder(): Promise<string | null> {
+  try {
+    return await open({ directory: true, multiple: false });
+  } catch (err) {
+    throw toCommandError(err);
+  }
+}
+
+/**
+ * Turns a page path from a `BookView` into a URL an `<img>` can load.
+ *
+ * @param path - `PageView.path`.
+ * @returns The asset-protocol URL.
+ */
+export function pageUrl(path: string): string {
+  return convertFileSrc(path);
+}
