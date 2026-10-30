@@ -242,11 +242,11 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def issue_key(issue: dict) -> tuple[str, ...]:
+def issue_key(issue: dict) -> tuple[str, str, str]:
     """The server's issue key, which survives line shifts and message changes. Falls back
     to rule, file, and message for a dump without keys."""
     if issue.get("key"):
-        return (str(issue["key"]),)
+        return ("key", str(issue["key"]), "")
     return (
         str(issue.get("rule", "")),
         str(issue.get("component", "")).split(":", 1)[-1],
