@@ -79,7 +79,7 @@ with Metal ANGLE. "WKWebView" is the Tauri dev window.
 | G3 | StrictMode | **Pass.** The dev double mount, plus a manual dispose-and-recreate button, leave a working book in both webviews. |
 | G4 | Asset load | **Pass on macOS.** Pages load from disk via `convertFileSrc` and the asset protocol. `fetch` of `asset://` URLs works from the dev origin. Windows and Linux are not tested. |
 | G5 | ADR | **Pass.** This document. |
-| G6 | Skin-ready | **Pass.** Swapping to [`daylight-placeholder.json`](../../src/spike/flipbook/scenes/daylight-placeholder.json) at runtime changes the light (to directional), background, cover, ribbon, paper, and desk with no code change. |
+| G6 | Skin-ready | **Pass.** Swapping to [`design/skins/daylight/scene.json`](../../design/skins/daylight/scene.json) at runtime changes the light (to directional), background, cover, ribbon, paper, and desk with no code change. |
 
 Interaction requirements from the plan:
 

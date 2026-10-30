@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import lamplitRaw from "../../../design/skins/lamplit/scene.json";
 import { FlipbookEngine, type EngineState } from "./engine";
 import { parseScene, type Scene } from "./scene";
-import daylightRaw from "./scenes/daylight-placeholder.json";
+import daylightRaw from "../../../design/skins/daylight/scene.json";
 
 const RAW_SCENES: Record<string, unknown> = { lamplit: lamplitRaw, daylight: daylightRaw };
 const parsed: Record<string, Scene> = {};

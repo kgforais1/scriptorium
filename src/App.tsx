@@ -7,18 +7,18 @@ import { lastBook } from "./lib/api";
 import type { BookView as Book, CommandError } from "./lib/bookTypes";
 import { toCommandError } from "./lib/errors";
 
-// The flipbook spike exists in dev builds only. The constant condition lets the bundler drop
-// the dynamic import, so release builds never include the spike or depend on its page command.
-const Spike = import.meta.env.DEV ? lazy(() => import("./spike/flipbook/FlipbookSpike")) : null;
+// The engine harness exists in dev builds only. The constant condition lets the bundler drop
+// the dynamic import, so release builds never include the harness or the engine.
+const Harness = import.meta.env.DEV ? lazy(() => import("./features/reader/DevHarness")) : null;
 
 function subscribeToHash(notify: () => void): () => void {
   window.addEventListener("hashchange", notify);
   return () => window.removeEventListener("hashchange", notify);
 }
 
-function useIsSpikeRoute(): boolean {
+function useIsHarnessRoute(): boolean {
   const hash = useSyncExternalStore(subscribeToHash, () => window.location.hash);
-  return Spike !== null && hash === "#spike";
+  return Harness !== null && hash === "#spike";
 }
 
 /** What the reader shows: the start-up check, the home screen, or an open book. */
@@ -69,13 +69,13 @@ function Reader() {
   );
 }
 
-/** Root component: the reader, or in dev builds the flipbook spike at `#spike`. */
+/** Root component: the reader, or in dev builds the engine harness at `#spike`. */
 function App() {
-  const showSpike = useIsSpikeRoute();
-  if (showSpike && Spike) {
+  const showHarness = useIsHarnessRoute();
+  if (showHarness && Harness) {
     return (
       <Suspense fallback={null}>
-        <Spike />
+        <Harness />
       </Suspense>
     );
   }

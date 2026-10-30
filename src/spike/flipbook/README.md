@@ -16,4 +16,4 @@ deletes this folder. Decisions, measurements, and the rewrite scope are in
 | `scene.ts` | `scene.json` parser; a missing key is an error |
 | `gl.ts`, `math.ts` | WebGL and matrix helpers |
 | `FlipbookSpike.tsx` | React harness (StrictMode-safe mount, scene swap, remount) |
-| `scenes/daylight-placeholder.json` | Throwaway directional-light scene for gate G6 |
+| `design/skins/daylight/scene.json` | Directional-light scene for gate G6 (moved out of the spike) |

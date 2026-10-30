@@ -196,8 +196,10 @@ The flipbook spike is throwaway code that proves the page-turn engine. It stays 
 builds until Phase 3 replaces it.
 
 - [ ] Run `pnpm tauri dev`.
-- [ ] Open the devtools console and run `location.hash = "spike"`. Expected: the spike
-  replaces the reader. Run `location.hash = ""` to return.
+- [ ] Open the devtools console and run `location.hash = "spike"`. Expected: the engine
+  harness replaces the reader. Since Phase 3 chunk 1 it shows the last opened book on the new
+  engine (`src/features/reader/engine/`), with Prev, Next, Scene, Remount, and Reduced motion
+  buttons; the old spike files stay on disk until chunk 5. Run `location.hash = ""` to return.
 - [ ] For a realistic page set, build the spike pages with `scripts/make-spike-fixtures.sh`.
   It needs macOS and the Dulac and Princess corpora from
   [`tests/fixtures/README.md`](../tests/fixtures/README.md).
