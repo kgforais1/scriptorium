@@ -141,6 +141,10 @@ Known limits, each `UnreadableFile` unless noted:
   rejected, and so are images with transparency (2 components, or 4 in sRGB), because the
   display copy is a JPEG.
 - `meta.json` over 64 MB is refused before it is read.
+- Loading refuses a `meta.json`, page, or original that is itself a symlink
+  (`InvalidPackage`). Only the last path component is checked, so a linked `pages/`
+  directory, a hard link, or a Windows junction that stays inside the package is still
+  accepted (Phase 2).
 - Known gap (Phase 2): inputs are checked for symbolic links when the folder is listed, not
   when each file is opened, so a file swapped for a link mid-ingest would be followed. Close it
   with no-follow opens when Phase 2 adds the Open… flow.

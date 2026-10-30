@@ -412,6 +412,58 @@ fn page_paths_stay_inside_the_package() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn symlinks_inside_the_package_are_refused() {
+    // An original linked to another in-package file would pass the checksum of that file.
+    let t = Tmp::new("inner-link");
+    let lib = t.dir("library");
+    let book = create_book_from_folder(&mixed_folder(&t), &lib, &opts("bk")).unwrap();
+    let orig = book.join("originals/0001.bmp");
+    let copy = book.join("originals/copy.bmp");
+    std::fs::rename(&orig, &copy).unwrap();
+    std::os::unix::fs::symlink(&copy, &orig).unwrap();
+    match load_book(&book) {
+        Err(BookError::InvalidPackage { reason }) => {
+            assert!(reason.contains("symlink"), "{reason}")
+        }
+        other => panic!("expected a symlink error, got {other:?}"),
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn meta_json_must_be_a_regular_file() {
+    let t = Tmp::new("meta-dir");
+    let book = t.dir("bk");
+    std::fs::create_dir(book.join("meta.json")).unwrap();
+    match load_book(&book) {
+        Err(BookError::InvalidPackage { reason }) => {
+            assert!(reason.contains("not a file"), "{reason}")
+        }
+        other => panic!("expected a not-a-file error, got {other:?}"),
+    }
+    std::fs::remove_dir(book.join("meta.json")).unwrap();
+    std::fs::write(t.0.join("elsewhere.json"), "{}").unwrap();
+    std::os::unix::fs::symlink(t.0.join("elsewhere.json"), book.join("meta.json")).unwrap();
+    match load_book(&book) {
+        Err(BookError::InvalidPackage { reason }) => {
+            assert!(reason.contains("symlink"), "{reason}")
+        }
+        other => panic!("expected a symlink error, got {other:?}"),
+    }
+    std::fs::remove_file(book.join("meta.json")).unwrap();
+    assert!(std::process::Command::new("mkfifo")
+        .arg(book.join("meta.json"))
+        .status()
+        .unwrap()
+        .success());
+    assert!(matches!(
+        load_book(&book),
+        Err(BookError::InvalidPackage { .. })
+    ));
+}
+
 #[test]
 fn progress_saves_atomically_and_upgrades_v1() {
     let t = Tmp::new("progress");
@@ -522,7 +574,17 @@ fn sweep_removes_only_old_temp_entries() {
 
     // Once the ingest is gone (lock released), its leftover dir is swept.
     drop(held);
-    assert_eq!(sweep_orphans(&lib, Duration::ZERO), 1);
+    // The sweep skips an entry it cannot remove yet and retries on the next ingest; so does
+    // the test, so a transient error right after the unlock does not fail it.
+    let mut removed = 0;
+    for _ in 0..20 {
+        removed += sweep_orphans(&lib, Duration::ZERO);
+        if removed > 0 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert_eq!(removed, 1);
     assert!(!running.exists());
 }
 

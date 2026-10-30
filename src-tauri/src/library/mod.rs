@@ -200,3 +200,20 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
     }
     Ok(())
 }
+
+#[cfg(all(test, unix))]
+mod dir_sync_tests {
+    use super::dir_sync_unsupported;
+    use std::io::{Error, ErrorKind};
+
+    #[test]
+    fn only_unsupported_dir_sync_errors_are_tolerated() {
+        assert!(dir_sync_unsupported(&Error::from_raw_os_error(22)));
+        assert!(dir_sync_unsupported(&Error::from(ErrorKind::Unsupported)));
+        assert!(!dir_sync_unsupported(&Error::from_raw_os_error(5)), "EIO");
+        assert!(
+            !dir_sync_unsupported(&Error::from_raw_os_error(28)),
+            "ENOSPC"
+        );
+    }
+}

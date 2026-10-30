@@ -458,14 +458,19 @@ fn jpeg_2000_becomes_jpeg() {
         .unwrap();
     let la_src = d.file("la.png", &la_png);
     let la_jp2 = d.0.join("la.jp2");
-    if sips(&[
+    let la_written = sips(&[
         "-s",
         "format",
         "jp2",
         la_src.to_str().unwrap(),
         "--out",
         la_jp2.to_str().unwrap(),
-    ]) {
+    ]);
+    assert!(
+        la_written || !cfg!(target_os = "macos"),
+        "macOS sips could not write grey+alpha JPEG 2000"
+    );
+    if la_written {
         let comps = jpeg2k::Image::from_bytes(&std::fs::read(&la_jp2).unwrap())
             .map(|i| i.num_components())
             .ok();

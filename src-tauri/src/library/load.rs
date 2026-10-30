@@ -39,10 +39,37 @@ pub(crate) const META_MAX_BYTES: u64 = 64 * 1024 * 1024;
 /// Read a book's `meta.json`, refusing a missing or oversized file before loading it.
 pub(crate) fn read_meta_text(meta_path: &Path) -> Result<String, BookError> {
     use std::io::Read;
-    let file = std::fs::File::open(meta_path).map_err(|e| match e.kind() {
+    // A linked meta.json would be read through, then replaced by the next atomic save.
+    if meta_path
+        .symlink_metadata()
+        .is_ok_and(|m| m.file_type().is_symlink())
+    {
+        return Err(invalid("meta.json is a symlink"));
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    // Open nonblocking, so a FIFO named meta.json cannot hang the open.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        #[cfg(target_os = "macos")]
+        const O_NONBLOCK: i32 = 0x4;
+        #[cfg(target_os = "linux")]
+        const O_NONBLOCK: i32 = 0o4000;
+        options.custom_flags(O_NONBLOCK);
+    }
+    let file = options.open(meta_path).map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => invalid("meta.json is missing"),
         _ => io_error(meta_path, &e),
     })?;
+    // Check the opened handle, not the path, so the file cannot be swapped in between.
+    if !file
+        .metadata()
+        .map_err(|e| io_error(meta_path, &e))?
+        .is_file()
+    {
+        return Err(invalid("meta.json is not a file"));
+    }
     let mut bytes = Vec::new();
     // Read one byte past the cap, so a file that grows after a size check is still caught.
     file.take(META_MAX_BYTES + 1)
@@ -130,6 +157,14 @@ pub(crate) fn resolve_inside(root: &Path, rel: &str) -> Result<PathBuf, BookErro
 
 fn verify_file(root: &Path, rel: &str, size: u64, sha256: &str) -> Result<PathBuf, BookError> {
     let path = resolve_inside(root, rel)?;
+    // A symlink inside the package could point one entry at another's bytes, so refuse it.
+    let link = root
+        .join(rel)
+        .symlink_metadata()
+        .map_err(|e| io_error(&root.join(rel), &e))?;
+    if link.file_type().is_symlink() {
+        return Err(invalid(format!("{rel} is a symlink")));
+    }
     let (digest, bytes) = sha256_file(&path)?;
     if bytes != size || digest != sha256 {
         return Err(BookError::ChecksumMismatch {

@@ -28,6 +28,16 @@ pub fn save_last_read_page(dir: &Path, page: u32) -> Result<BookMeta, BookError>
         reason: e.to_string(),
     })?;
     parse_meta(&out)?;
-    write_atomic(&meta_path, (out + "\n").as_bytes())?;
+    let out = out + "\n";
+    // Never write a file the loader would refuse.
+    if out.len() as u64 > super::load::META_MAX_BYTES {
+        return Err(BookError::InvalidPackage {
+            reason: format!(
+                "meta.json would be larger than {} MB",
+                super::load::META_MAX_BYTES >> 20
+            ),
+        });
+    }
+    write_atomic(&meta_path, out.as_bytes())?;
     Ok(meta)
 }
