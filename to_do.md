@@ -16,7 +16,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 | Plan | Status | Note |
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
-| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | in-progress | Phase 0 gate open; Phases 1–2 code done, manual verification pending; refresh Phase 3 from ADR-0001 before the reader |
+| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | in-progress | Phase 0 gate open; Phases 1–2 done (manual checks pending); Phase 3 reader in progress on `m1/phase3-reader` |
 
 ## Unplanned / small
 
