@@ -50,23 +50,34 @@ pub(crate) fn read_meta_text(meta_path: &Path) -> Result<String, BookError> {
     }
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
-    // Open nonblocking, so a FIFO named meta.json cannot hang the open, and without
-    // following a link swapped in after the check above.
+    // Never follow a link swapped in after the check above. On Unix, also open nonblocking,
+    // so a FIFO named meta.json cannot hang the open.
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW);
+    }
+    // On Windows, open a symlink or junction itself instead of its target. Backup semantics
+    // let a directory open too, so it is refused as "not a file" below, as on Unix.
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS);
     }
     let file = options.open(meta_path).map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => invalid("meta.json is missing"),
         _ => io_error(meta_path, &e),
     })?;
     // Check the opened handle, not the path, so the file cannot be swapped in between.
-    if !file
-        .metadata()
-        .map_err(|e| io_error(meta_path, &e))?
-        .is_file()
-    {
+    let handle_meta = file.metadata().map_err(|e| io_error(meta_path, &e))?;
+    // Only link-like reparse points count, so a cloud placeholder or a deduplicated file
+    // still loads. On Unix the handle never reports a link.
+    if handle_meta.file_type().is_symlink() {
+        return Err(invalid("meta.json is a symlink"));
+    }
+    if !handle_meta.is_file() {
         return Err(invalid("meta.json is not a file"));
     }
     let mut bytes = Vec::new();
