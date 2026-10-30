@@ -1,6 +1,6 @@
 # Plan: M1 — Scan viewer (first product milestone)
 
-Last reviewed: 2026-10-28
+Last reviewed: 2026-10-30
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
 Status: in-progress (approved 2026-10-29)
@@ -300,11 +300,90 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 
 ### Phase 2 — Commands + UI
 
-- [ ] Replace `security.csp: null` with production CSP (**A13** — do this **first** in Phase 2 before commands/asset URLs; open tracking issue when starting Phase 2)
-- [ ] Commands + capabilities for dialog + app-data fs + asset scope
-- [ ] Open… inspect-and-branch + confirm before ingest copy
-- [ ] Map errors to dialogs/toasts
-- [ ] Vitest (or equivalent) for pure TS helpers (URL resolve / UI state) — required, not optional
+Spec fleshed out 2026-10-30 on branch `m1/phase2-commands-ui`. Phase 2 ends with a plain
+`<img>` page view that proves the asset protocol end to end. The flipbook lands in Phase 3.
+
+**Library root.** Books live in `app_data_dir()/books/` (macOS:
+`~/Library/Application Support/dev.scriptorium.app/books/`). The app creates it on start and
+runs `sweep_orphans` there once, off the main thread.
+
+**Commands** (`src-tauri/src/commands.rs`). Each runs its file work in
+`tauri::async_runtime::spawn_blocking`, so the UI never freezes. Each returns
+`Result<T, CommandError>`, where `CommandError` serializes as
+`{ kind: "<BookError variant>", message: "<Display text>" }`. `message` is the A3 user text.
+
+| Command | Input | Output |
+|---|---|---|
+| `inspect_folder` | `path` | `{ kind: "book", id, title, pages }` when `meta.json` exists; otherwise `{ kind: "scans", files, frames, estimatedBytes, suggestedId, suggestedTitle }`. Folder errors (empty, no images, duplicate stems, unreadable file) come back as `CommandError` |
+| `create_book` | `folder`, `title`, `id`, `rights`, `attribution` | `BookView` (below). Emits `ingest-progress` `{ done, total }` once per frame |
+| `open_book` | `path` | `BookView` |
+| `save_progress` | `id`, `page` | `()`. Called debounced on page change and once on window close |
+| `last_book` | — | `BookView` or `null`: the last opened book, from `app_data_dir()/state.json` |
+
+`BookView` is `{ id, title, root, lastReadPage, pages: [{ path, width, height }] }`. `path`
+is the canonical absolute path from `LoadedBook::page_path`. TypeScript passes it to
+`convertFileSrc` and never builds paths itself.
+
+- `suggestedId` slugs the folder name (lowercase ASCII, `-` for runs of other characters,
+  trimmed to 64). On a collision it appends `-2`, `-3`, and so on. `suggestedTitle` is the
+  folder name.
+- `create_book` needs a progress hook in the library. Add an `on_frame(done, total)` callback
+  to `create_book_from_folder`; existing callers pass a no-op.
+- The app keeps a `Mutex<HashMap<id, PathBuf>>` of opened books. `save_progress` accepts
+  only an id that is open in this session.
+- `open_book` on a package outside the library adds its root to the asset scope at runtime
+  (`asset_protocol_scope().allow_directory(root, true)`). It never copies the package (A7).
+- `state.json` is `{ "lastBook": "<absolute package path>" }`, written with `write_atomic`.
+  If that book fails to load on start, the app shows the home screen and no error.
+
+**Security and config (A13).** Replace `csp: null` with:
+
+```
+default-src 'self'; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:;
+style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost
+```
+
+`devCsp` adds `ws://localhost:1420` and `http://localhost:1420` for Vite HMR. The static
+`assetProtocol.scope` allows `$APPDATA/books/**`. Add `tauri-plugin-dialog` with only
+`dialog:allow-open` in the default capability. The webview gets no `fs` plugin, because all
+file access goes through the commands above.
+
+**UI** (`src/features/home/`, `src/features/book/`, `src/lib/`). The UI is plain React and
+CSS. No skin tokens are needed until Phase 3.
+
+- Home has one **Open…** button. It opens a folder picker, then calls `inspect_folder`.
+- For a book, it calls `open_book`. For scans, it shows a confirm dialog with the page and
+  frame count, the estimated size, and editable title and id fields. The id is checked
+  against the slug rule as the user types. **Create** calls `create_book` and shows a
+  progress bar fed by `ingest-progress`.
+- Every `CommandError` shows as a dialog with its `message`. A `kind`-to-heading table lives
+  in `src/lib/errors.ts`.
+- The book view shows the title, the page `n / total`, prev/next buttons and ←/→ keys (no-ops
+  at the ends, A5), and the current page as a padded `<img>` (`object-fit: contain`). A
+  **Close book** button returns home.
+- On start, the app calls `last_book` and reopens that book at its saved page (A6).
+
+**Tests.** Rust unit tests cover the slug helper, `inspect_folder` both ways, the
+`CommandError` JSON shape, and the progress callback count. Add Vitest with tests for the
+pure TS helpers: the error-heading map, the slug check, the page clamp and keyboard step,
+and the progress debounce.
+
+**Chunks.** Each chunk gets its own commit and a qoder review.
+
+1. CSP, `devCsp`, asset scope, dialog plugin, and capability (A13).
+2. Library progress callback, slug helper, `inspect_folder` core, and `CommandError`, with
+   Rust tests.
+3. Tauri commands, app state, `state.json`, and startup sweep.
+4. TS API layer and types, Vitest setup, and helper tests.
+5. Home, confirm, progress, error dialogs, book view, and close-flush.
+6. Docs: `docs/manual-test-m1.md` (Phase 2 steps), changelog, plan ticks.
+
+- [ ] Chunk 1: CSP and capabilities (A13)
+- [ ] Chunk 2: library hooks and `inspect_folder` core
+- [ ] Chunk 3: commands and app state
+- [ ] Chunk 4: TS API and Vitest
+- [ ] Chunk 5: UI
+- [ ] Chunk 6: docs
 
 ### Phase 3 — Reader
 
