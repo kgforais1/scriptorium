@@ -335,8 +335,9 @@ is the canonical absolute path from `LoadedBook::page_path`. TypeScript passes i
   existing three-argument function delegates to it with a no-op, so callers and tests stay
   unchanged.
 - Every successful open goes through one `open_and_register(root)` helper. It canonicalizes
-  the root, calls `load_book`, adds `root/pages` to the asset scope
-  (`asset_protocol_scope().allow_directory(root.join("pages"), true)`), and records the book
+  the root, calls `load_book`, adds each verified page file to the asset scope
+  (`asset_protocol_scope().allow_file(path)`, so a valid package that keeps pages outside
+  `pages/` still renders), and records the book
   in the session. `open_book`, `last_book`, and `create_book` all use it, so an outside package
   reopened at startup still shows its pages. `originals/` is never exposed to the webview.
 - The session is a `Mutex<HashMap<canonical root, { page, dirty }>>`, keyed by root, not by

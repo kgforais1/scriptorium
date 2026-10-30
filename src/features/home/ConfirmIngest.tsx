@@ -4,6 +4,7 @@ import { bookIdHint } from "../../lib/bookId";
 import type { BookView, CommandError, ScansFolderInfo } from "../../lib/bookTypes";
 import { toCommandError } from "../../lib/errors";
 import { formatMegabytes, progressLabel } from "../../lib/format";
+import { lengthHint, TEXT_FIELD_MAX_LEN, TITLE_MAX_LEN } from "../../lib/limits";
 import { Modal } from "../common/Modal";
 import "./home.css";
 
@@ -21,24 +22,33 @@ interface TextFieldProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  invalid?: boolean;
-  describedBy?: string;
+  /** A problem with the value, shown under the field. Null when the value is fine. */
+  hint: string | null;
+  /** Element id for the hint, so the input can point at it. */
+  hintId: string;
 }
 
-function TextField({ label, value, onChange, invalid, describedBy }: Readonly<TextFieldProps>) {
+function TextField({ label, value, onChange, hint, hintId }: Readonly<TextFieldProps>) {
   return (
-    <label className="field">
-      <span>{label}</span>
-      <input
-        type="text"
-        value={value}
-        aria-invalid={invalid ? "true" : undefined}
-        aria-describedby={describedBy}
-        autoComplete="off"
-        spellCheck={false}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
+    <>
+      <label className="field">
+        <span>{label}</span>
+        <input
+          type="text"
+          value={value}
+          aria-invalid={hint === null ? undefined : "true"}
+          aria-describedby={hint === null ? undefined : hintId}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </label>
+      {hint !== null && (
+        <p id={hintId} className="field-hint">
+          {hint}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -53,9 +63,14 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Re
   const [attribution, setAttribution] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
 
-  const hint = bookIdHint(id);
-  const titleMissing = title.trim() === "";
-  const canCreate = progress === null && hint === null && !titleMissing;
+  // Every limit `meta.json` enforces is checked here, before any scan is copied.
+  const idHint = bookIdHint(id);
+  const titleHint =
+    title.trim() === "" ? "Enter a title." : lengthHint(title.trim(), TITLE_MAX_LEN);
+  const rightsHint = lengthHint(rights, TEXT_FIELD_MAX_LEN);
+  const attributionHint = lengthHint(attribution, TEXT_FIELD_MAX_LEN);
+  const canCreate =
+    progress === null && [idHint, titleHint, rightsHint, attributionHint].every((h) => h === null);
   const ingesting = progress !== null;
   // Every control is disabled while the book is built, so focus moves to the progress text.
   // If the build fails, focus returns to Create, so it is not lost on the page body.
@@ -104,28 +119,30 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Re
             label="Title"
             value={title}
             onChange={setTitle}
-            invalid={titleMissing}
-            describedBy={titleMissing ? "title-hint" : undefined}
+            hint={titleHint}
+            hintId="title-hint"
           />
-          {titleMissing && (
-            <p id="title-hint" className="field-hint">
-              Enter a title.
-            </p>
-          )}
           <TextField
             label="Book id"
             value={id}
             onChange={setId}
-            invalid={hint !== null}
-            describedBy={hint === null ? undefined : "book-id-hint"}
+            hint={idHint}
+            hintId="book-id-hint"
           />
-          {hint !== null && (
-            <p id="book-id-hint" className="field-hint">
-              {hint}
-            </p>
-          )}
-          <TextField label="Rights (optional)" value={rights} onChange={setRights} />
-          <TextField label="Attribution (optional)" value={attribution} onChange={setAttribution} />
+          <TextField
+            label="Rights (optional)"
+            value={rights}
+            onChange={setRights}
+            hint={rightsHint}
+            hintId="rights-hint"
+          />
+          <TextField
+            label="Attribution (optional)"
+            value={attribution}
+            onChange={setAttribution}
+            hint={attributionHint}
+            hintId="attribution-hint"
+          />
         </fieldset>
         {progress !== null && (
           <div className="ingest-progress" ref={progressRef} tabIndex={-1}>

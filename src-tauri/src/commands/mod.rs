@@ -106,7 +106,7 @@ where
         .map_err(|e| CommandError::internal(format!("a background task failed: {e}")))?
 }
 
-/// The one way a book becomes open: canonicalize, load and verify, admit its `pages/` to the
+/// The one way a book becomes open: canonicalize, load and verify, admit its page files to the
 /// asset protocol (never `originals/`), track it in the session, and remember it as the last
 /// book. A book already open is flushed first, so its saved page is not stale. If that flush
 /// fails, the session keeps the unsaved page and the view opens on it.
@@ -115,10 +115,15 @@ fn open_and_register(app: &AppHandle, root: &Path) -> Result<BookView, CommandEr
     flush_session(app, Some(&root));
     let book = load_book(&root)?;
     let mut view = book_view(&book)?;
-    // The same simplified form the view hands to the webview, so URL and scope agree.
-    app.asset_protocol_scope()
-        .allow_directory(dunce::simplified(&book.root).join("pages"), true)
-        .map_err(|e| CommandError::internal(format!("could not admit the book's pages: {e}")))?;
+    // Admit each verified display file, in the same simplified form the view hands to the
+    // webview, so URL and scope agree. A valid package may keep pages outside `pages/`, and
+    // nothing else in the package (such as `originals/`) is exposed.
+    let scope = app.asset_protocol_scope();
+    for page in &view.pages {
+        scope
+            .allow_file(&page.path)
+            .map_err(|e| CommandError::internal(format!("could not admit a page: {e}")))?;
+    }
     let page_count = u32::try_from(book.meta.pages.len()).unwrap_or(u32::MAX);
     view.last_read_page = lock(&app.state::<Mutex<Session>>()).register(
         book.root.clone(),
