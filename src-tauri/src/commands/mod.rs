@@ -164,32 +164,37 @@ pub async fn create_book(
     rights: String,
     attribution: String,
 ) -> Result<BookView, CommandError> {
-    blocking(move || {
-        let opts = CreateOptions {
-            id,
-            title,
-            rights,
-            attribution,
-        };
-        let mut throttle = EmitThrottle::new(EMIT_INTERVAL);
-        let emitter = app.clone();
-        let library = app.state::<Paths>().library.clone();
-        let dest =
-            create_book_from_folder_with(Path::new(&folder), &library, &opts, |done, total| {
-                if throttle.should_emit(done, total, Instant::now()) {
-                    // A webview that went away is not an ingest failure.
-                    let _ = emitter.emit("ingest-progress", IngestProgress { done, total });
-                }
-            })?;
-        // A book that was built but cannot be opened would block a retry with the same id,
-        // so remove it before reporting the error.
-        open_and_register(&app, &dest).inspect_err(|_| {
-            if let Err(e) = std::fs::remove_dir_all(&dest) {
-                eprintln!("could not remove {}: {e}", dest.display());
-            }
-        })
+    let opts = CreateOptions {
+        id,
+        title,
+        rights,
+        attribution,
+    };
+    blocking(move || create_and_open(&app, Path::new(&folder), &opts)).await
+}
+
+/// The blocking body of `create_book`: build the package, then open it. Runs on the blocking
+/// pool, never on the async runtime.
+fn create_and_open(
+    app: &AppHandle,
+    folder: &Path,
+    opts: &CreateOptions,
+) -> Result<BookView, CommandError> {
+    let mut throttle = EmitThrottle::new(EMIT_INTERVAL);
+    let library = app.state::<Paths>().library.clone();
+    let dest = create_book_from_folder_with(folder, &library, opts, |done, total| {
+        if throttle.should_emit(done, total, Instant::now()) {
+            // A webview that went away is not an ingest failure.
+            let _ = app.emit("ingest-progress", IngestProgress { done, total });
+        }
+    })?;
+    // A book that was built but cannot be opened would block a retry with the same id, so
+    // remove it before reporting the error.
+    open_and_register(app, &dest).inspect_err(|_| {
+        if let Err(e) = std::fs::remove_dir_all(&dest) {
+            eprintln!("could not remove {}: {e}", dest.display());
+        }
     })
-    .await
 }
 
 /// Open the book package at `path` in place. It is never copied.
