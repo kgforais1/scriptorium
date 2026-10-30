@@ -125,12 +125,17 @@ fn open_and_register(app: &AppHandle, root: &Path) -> Result<BookView, CommandEr
             .map_err(|e| CommandError::internal(format!("could not admit a page: {e}")))?;
     }
     let page_count = u32::try_from(book.meta.pages.len()).unwrap_or(u32::MAX);
-    view.last_read_page = lock(&app.state::<Mutex<Session>>()).register(
-        book.root.clone(),
-        book.meta.last_read_page,
-        page_count,
-        Instant::now(),
-    );
+    {
+        let state = app.state::<Mutex<Session>>();
+        let mut session = lock(&state);
+        view.last_read_page = session.register(
+            book.root.clone(),
+            book.meta.last_read_page,
+            page_count,
+            Instant::now(),
+        );
+        view.save_seq = session.last_seq(&book.root);
+    }
     // Failing to remember the book must not fail the open.
     if let Err(e) = write_last_book(&app.state::<Paths>().state_file, &book.root) {
         eprintln!("could not write state.json: {e}");

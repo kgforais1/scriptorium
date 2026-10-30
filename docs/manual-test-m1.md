@@ -160,7 +160,9 @@ Escape to dismiss it.
 ## 8. Production CSP gate (A13)
 
 Tauri applies the content security policy only to bundled assets. `pnpm tauri dev` never
-enforces it. This section is the only check that the policy in
+enforces it. No automated test covers the asset scope either, because it needs a Tauri
+runtime: each page file is admitted when its book opens. This section is the only check that
+the policy in
 [`src-tauri/tauri.conf.json`](../src-tauri/tauri.conf.json) lets a book render.
 
 - [ ] Run `pnpm tauri build`. Use `pnpm tauri build --debug` if you want devtools in the built

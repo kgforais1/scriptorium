@@ -84,7 +84,10 @@ fn book_view_serializes_camel_case() {
         .map(String::as_str)
         .collect();
     keys.sort_unstable();
-    assert_eq!(keys, ["id", "lastReadPage", "pages", "root", "title"]);
+    assert_eq!(
+        keys,
+        ["id", "lastReadPage", "pages", "root", "saveSeq", "title"]
+    );
     let mut page_keys: Vec<&str> = json["pages"][0]
         .as_object()
         .unwrap()

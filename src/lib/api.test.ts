@@ -20,7 +20,7 @@ import {
   saveProgress,
 } from "./api";
 
-const BOOK = { id: "b", title: "B", root: "/r", lastReadPage: 0, pages: [] };
+const BOOK = { id: "b", title: "B", root: "/r", lastReadPage: 0, saveSeq: 0, pages: [] };
 const CMD_ERR = { kind: "ChecksumMismatch", message: "damaged" };
 
 beforeEach(() => {
@@ -56,6 +56,15 @@ describe("commands", () => {
     await saveProgress("/r", 5);
     const second = invoke.mock.calls[invoke.mock.calls.length - 1][1] as { seq: number };
     expect(second.seq).toBeGreaterThan(first.seq);
+  });
+
+  it("numbers saves above a reopened book's own save number", async () => {
+    invoke.mockResolvedValue({ ...BOOK, saveSeq: 500 });
+    await lastBook();
+    invoke.mockResolvedValue("saved");
+    await saveProgress("/r", 1);
+    const sent = invoke.mock.calls[invoke.mock.calls.length - 1][1] as { seq: number };
+    expect(sent.seq).toBe(501);
   });
 
   it("lastBook sends no arguments and may return null", async () => {

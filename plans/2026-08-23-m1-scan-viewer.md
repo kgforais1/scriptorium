@@ -227,7 +227,7 @@ If targets fail without lazy/windowed loading, **implement windowed page load in
 
 - [ ] `app.security.assetProtocol.enable: true`
 - [ ] **Replace `security.csp: null`** with an explicit CSP before Phase 2 (see A13)
-- [ ] `assetProtocol.scope.allow` covers app-data `books/**` (app-wide scope ≠ fs capability)
+- [ ] The static `assetProtocol.scope` is empty; `open_and_register` admits exactly the verified page files at runtime (app-wide scope ≠ fs capability)
 - [ ] CSP allows `img-src` (and media if needed) for `asset:` and `https://asset.localhost`
 - [ ] `convertFileSrc` only given **absolute** paths (Rust resolves relative → absolute)
 - [ ] After `package_root.join(file)`, canonicalize and assert result is under `package_root` (A12)
@@ -436,6 +436,8 @@ because only a real webview shows whether page paths load there.
 
 Known limits after Phase 2:
 
+- Each page is admitted to the asset scope one file at a time. That costs well under a second
+  even at the 100,000-page format cap, and each image request scans the admitted list.
 - Opened books stay in the session and the asset scope until the app quits. **Close book**
   revokes nothing. Revisit when the bookshelf (M5) opens many books in one run.
 - A book whose progress cannot be saved (for example, on a read-only volume) shows a note in

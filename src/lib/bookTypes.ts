@@ -43,6 +43,8 @@ export interface BookView {
   root: string;
   /** Zero-based page to open on. */
   lastReadPage: number;
+  /** The highest save number Rust has for this book. New saves are numbered above it. */
+  saveSeq: number;
   pages: PageView[];
 }
 

@@ -117,6 +117,11 @@ impl Session {
         page
     }
 
+    /// The highest save number recorded for `root`, or 0 when it is not open.
+    pub fn last_seq(&self, root: &Path) -> u64 {
+        self.books.get(root).map_or(0, |e| e.last_seq)
+    }
+
     /// Remember that the reader is on `page` and mark the book dirty. Returns true when at
     /// least one interval has passed since the last write, so the caller should flush now.
     #[cfg(test)]

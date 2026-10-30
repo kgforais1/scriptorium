@@ -32,6 +32,8 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
   // A failed progress save is shown in the page bar, not a dialog, so a read-only book
   // stays readable.
   const [saveError, setSaveError] = useState<string | null>(null);
+  const saveCalls = useRef(0);
+  const shownCall = useRef(0);
 
   function goTo(next: number) {
     if (next === page) {
@@ -39,14 +41,27 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
     }
     setPage(next);
     // Each save is numbered, so Rust drops one that arrives after a newer page.
+    // Saves can overlap, so only a result newer than the last one shown may change the note.
+    const call = ++saveCalls.current;
+    const isLatest = () => {
+      if (call < shownCall.current) {
+        return false;
+      }
+      shownCall.current = call;
+      return true;
+    };
     saveProgress(book.root, next).then(
       (outcome) => {
         // Only a real write clears the warning; a held page says nothing about the disk.
-        if (outcome === "saved") {
+        if (outcome === "saved" && isLatest()) {
           setSaveError(null);
         }
       },
-      (err: unknown) => setSaveError(toCommandError(err).message),
+      (err: unknown) => {
+        if (isLatest()) {
+          setSaveError(toCommandError(err).message);
+        }
+      },
     );
   }
 

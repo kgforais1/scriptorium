@@ -41,7 +41,7 @@ export function inspectFolder(path: string): Promise<FolderInfo> {
  */
 export function createBook(args: CreateBookArgs): Promise<BookView> {
   const { folder, title, id, rights, attribution } = args;
-  return call<BookView>("create_book", { folder, title, id, rights, attribution });
+  return call<BookView>("create_book", { folder, title, id, rights, attribution }).then(seeded);
 }
 
 /**
@@ -51,12 +51,18 @@ export function createBook(args: CreateBookArgs): Promise<BookView> {
  * @returns The open book. Rejects with a `CommandError`.
  */
 export function openBook(path: string): Promise<BookView> {
-  return call<BookView>("open_book", { path });
+  return call<BookView>("open_book", { path }).then(seeded);
 }
 
 // Numbers every save in this run. Rust ignores a save numbered below one it already has, so a
 // slow older save can never overwrite a newer page, even across two views of one book.
 let saveSeq = 0;
+
+/** Numbers later saves above the book's own, so a reloaded webview is never "stale". */
+function seeded(book: BookView): BookView {
+  saveSeq = Math.max(saveSeq, book.saveSeq);
+  return book;
+}
 
 /**
  * Records the page the reader is on.
@@ -77,7 +83,7 @@ export function saveProgress(root: string, page: number): Promise<SaveOutcome> {
  * @returns The book, or null when there is none or it no longer loads.
  */
 export function lastBook(): Promise<BookView | null> {
-  return call<BookView | null>("last_book");
+  return call<BookView | null>("last_book").then((book) => (book ? seeded(book) : null));
 }
 
 /**

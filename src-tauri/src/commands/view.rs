@@ -27,6 +27,9 @@ pub struct BookView {
     pub root: String,
     /// Zero-based page to open on.
     pub last_read_page: u32,
+    /// The highest save number Rust has for this book. The webview numbers its next save
+    /// above it, so a reloaded webview's saves are never mistaken for stale ones.
+    pub save_seq: u64,
     /// Every page in reading order.
     pub pages: Vec<PageView>,
 }
@@ -64,6 +67,7 @@ pub fn book_view(book: &LoadedBook) -> Result<BookView, BookError> {
         title: book.meta.title.clone(),
         root,
         last_read_page: book.meta.last_read_page,
+        save_seq: 0,
         pages,
     })
 }
