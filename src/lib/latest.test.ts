@@ -44,7 +44,6 @@ describe("latestOnly", () => {
       return Promise.resolve();
     });
     push(1);
-    await tick();
     push(2);
     await tick();
     expect(sent).toEqual([1, 2]);

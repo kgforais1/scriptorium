@@ -124,7 +124,7 @@ fn open_and_register(app: &AppHandle, root: &Path) -> Result<BookView, CommandEr
         .allow_directory(&pages_dir, true)
         .map_err(|e| CommandError::internal(format!("could not admit the book's pages: {e}")))?;
     for page in view.pages.iter().map(|p| Path::new(&p.path)) {
-        if page.parent() != Some(pages_dir.as_path()) {
+        if !page.starts_with(&pages_dir) {
             scope
                 .allow_file(page)
                 .map_err(|e| CommandError::internal(format!("could not admit a page: {e}")))?;
