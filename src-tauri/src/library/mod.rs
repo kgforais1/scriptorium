@@ -3,14 +3,19 @@
 //! Every failure is a [`BookError`] from the M1 error taxonomy, each with a message a reader
 //! can act on. Nothing here panics on bad input or aborts the process (acceptance A3).
 
+pub mod command_error;
 pub mod create;
+pub mod inspect;
 pub mod load;
 pub mod progress;
+pub mod slug;
 pub mod sort;
 pub mod sweep;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_callback;
 
 use std::path::{Path, PathBuf};
 
@@ -18,25 +23,61 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BookError {
     /// The source folder has no files.
-    EmptyFolder { folder: PathBuf },
+    EmptyFolder {
+        /// The folder that was scanned.
+        folder: PathBuf,
+    },
     /// The source folder has files, but none in a supported input format.
-    NoSupportedImages { folder: PathBuf },
+    NoSupportedImages {
+        /// The folder that was scanned.
+        folder: PathBuf,
+    },
     /// A file could not be read or decoded.
-    UnreadableFile { file: PathBuf, reason: String },
+    UnreadableFile {
+        /// The file that failed.
+        file: PathBuf,
+        /// Why it failed.
+        reason: String,
+    },
     /// A book with this id already exists (case-insensitively).
-    DestinationExists { id: String },
+    DestinationExists {
+        /// The id that is taken.
+        id: String,
+    },
     /// Two input files share a name stem (case-insensitively).
-    DuplicatePageStem { first: PathBuf, second: PathBuf },
+    DuplicatePageStem {
+        /// The first file with the stem.
+        first: PathBuf,
+        /// The second file with the stem.
+        second: PathBuf,
+    },
     /// The library volume lacks room for the copy.
-    InsufficientDiskSpace { needed: u64, available: u64 },
+    InsufficientDiskSpace {
+        /// Bytes needed.
+        needed: u64,
+        /// Bytes available.
+        available: u64,
+    },
     /// The package's `formatVersion` is not one this build reads.
-    UnsupportedFormatVersion { found: u64 },
+    UnsupportedFormatVersion {
+        /// The `formatVersion` found in `meta.json`.
+        found: u64,
+    },
     /// `meta.json` is missing or fails the schema or validation rules.
-    InvalidPackage { reason: String },
+    InvalidPackage {
+        /// What is wrong with the package.
+        reason: String,
+    },
     /// A page or original no longer matches its recorded checksum or size.
-    ChecksumMismatch { file: String },
+    ChecksumMismatch {
+        /// The file that no longer matches.
+        file: String,
+    },
     /// The operating system refused access.
-    PermissionDenied { path: PathBuf },
+    PermissionDenied {
+        /// The path that was refused.
+        path: PathBuf,
+    },
 }
 
 impl std::fmt::Display for BookError {
@@ -180,7 +221,8 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
     if let Err(e) = written {
         // Never leave a half-written temp file behind.
         let _ = std::fs::remove_file(&tmp);
-        return Err(io_error(&tmp, &e));
+        // Name the file the user knows, not the temp file next to it.
+        return Err(io_error(path, &e));
     }
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);

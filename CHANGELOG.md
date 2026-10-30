@@ -10,6 +10,7 @@ uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- You can now open a folder of scanned pages, turn it into a book, and page through it with the buttons or the arrow keys. Scriptorium remembers your page and reopens the book where you left off. Errors such as an empty folder or a damaged book now show a clear message.
 - Book package format version 2: a package can keep the untouched original of each converted page under `originals/`. Version 1 packages still open. See [`docs/book-format.md`](docs/book-format.md).
 - Public repository posture: [`SECURITY.md`](SECURITY.md) for vulnerability reporting; README reflects public/early-dev status.
 - Tauri 2 desktop shell (Vite + React + TypeScript) at repo root; book package format v1 spec and JSON Schema ([`docs/book-format.md`](docs/book-format.md), [`docs/book-format.v1.schema.json`](docs/book-format.v1.schema.json)); Rust types + schema-bind test; deterministic fixture generator.

@@ -1,6 +1,6 @@
 # Documentation Navigation
 
-Last reviewed: 2026-10-28
+Last reviewed: 2026-10-30
 
 Quick navigation guide for this template's documentation. Use this to find what you need without loading everything.
 
@@ -43,6 +43,7 @@ Quick navigation guide for this template's documentation. Use this to find what 
 - [`docs/book-format.md`](../docs/book-format.md) — book package format spec (formatVersion 2, reads 1); schema + ingest rules
 - [`docs/book-format.v2.schema.json`](../docs/book-format.v2.schema.json) / [`v1`](../docs/book-format.v1.schema.json) — JSON Schemas for `meta.json`
 - [`tests/fixtures/README.md`](../tests/fixtures/README.md) — regenerate fixtures via `scripts/generate-fixture-book.py`
+- [`docs/manual-test-m1.md`](../docs/manual-test-m1.md) — step-by-step manual test for creating, opening, and paging a book (includes the release-build CSP check)
 - [`src-tauri/`](../src-tauri/) — Tauri 2 Rust host (`book_format` types)
 
 ### Getting Started

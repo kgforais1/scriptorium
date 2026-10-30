@@ -42,8 +42,11 @@ pub const SOURCES_MAX_ITEMS: usize = 100_000;
 #[serde(rename_all = "lowercase")]
 pub enum RenderMode {
     #[default]
+    /// Pages are shown as scanned images.
     Scan,
+    /// Pages are shown as recognized text.
     Text,
+    /// Pages show the scan together with its text layer.
     Hybrid,
 }
 
@@ -52,7 +55,9 @@ pub enum RenderMode {
 #[serde(rename_all = "lowercase")]
 pub enum StorageMode {
     #[default]
+    /// The page image is copied into the package.
     Copied,
+    /// The page image stays at its original location.
     Referenced,
 }
 
@@ -62,57 +67,123 @@ pub enum BookMetaError {
     /// `formatVersion` is not the supported major version.
     UnsupportedFormatVersion(u32),
     /// `id` is empty, unsafe as a directory name, or fails the slug pattern.
-    InvalidBookId { id: String, reason: String },
+    InvalidBookId {
+        /// The rejected id.
+        id: String,
+        /// Why the id was rejected.
+        reason: String,
+    },
     /// `pages` must contain at least one entry.
     EmptyPages,
     /// `lastReadPage` is not a valid 0-based index into `pages`.
     LastReadPageOutOfRange {
+        /// The stored `lastReadPage`.
         last_read_page: u32,
+        /// The number of pages.
         page_count: usize,
     },
     /// `pages[i].index` does not equal the array position `i`.
-    PageIndexMismatch { position: usize, index: u32 },
+    PageIndexMismatch {
+        /// Array position of the page.
+        position: usize,
+        /// The `index` the page declares.
+        index: u32,
+    },
     /// A page `file` path is absolute, traverses, or uses disallowed characters.
     InvalidPageFile {
+        /// Index of the page.
         index: u32,
+        /// The rejected path.
         file: String,
+        /// Why the path was rejected.
         reason: String,
     },
     /// Image dimensions must be at least 1×1.
-    DegenerateImageSize { index: u32, width: u32, height: u32 },
+    DegenerateImageSize {
+        /// Index of the page.
+        index: u32,
+        /// Declared width in pixels.
+        width: u32,
+        /// Declared height in pixels.
+        height: u32,
+    },
     /// `byteSize` must be greater than zero.
-    ZeroByteSize { index: u32 },
+    ZeroByteSize {
+        /// Index of the page.
+        index: u32,
+    },
     /// `sha256` must be 64 lowercase hex characters.
-    InvalidSha256 { index: u32, sha256: String },
+    InvalidSha256 {
+        /// Index of the page.
+        index: u32,
+        /// The rejected digest.
+        sha256: String,
+    },
     /// `createdAt` / `updatedAt` must be RFC 3339 (ISO 8601 date-time).
-    InvalidTimestamp { field: &'static str, value: String },
+    InvalidTimestamp {
+        /// Name of the timestamp field.
+        field: &'static str,
+        /// The rejected value.
+        value: String,
+    },
     /// Two page `file` paths collide when compared case-insensitively.
     CaseInsensitivePathCollision {
+        /// Index of the later page.
         index: u32,
+        /// Path of the later page.
         file: String,
+        /// Path of the earlier page it collides with.
         earlier_file: String,
     },
     /// `title` exceeds the schema max length.
-    TitleTooLong { len: usize, max: usize },
+    TitleTooLong {
+        /// Actual length in characters.
+        len: usize,
+        /// Allowed length.
+        max: usize,
+    },
     /// `rights` or `attribution` exceeds the schema max length.
     TextFieldTooLong {
+        /// Name of the field.
         field: &'static str,
+        /// Actual length in characters.
         len: usize,
+        /// Allowed length.
         max: usize,
     },
     /// `pages` exceeds the schema maxItems bound.
-    TooManyPages { count: usize, max: usize },
+    TooManyPages {
+        /// Actual number of pages.
+        count: usize,
+        /// Allowed number of pages.
+        max: usize,
+    },
     /// A field appears in a package whose `formatVersion` predates it.
     FieldRequiresVersion {
+        /// Name of the field.
         field: &'static str,
+        /// First `formatVersion` that allows the field.
         min_version: u32,
     },
     /// The `sources` list as a whole breaks a v2 rule (empty, or too many entries).
-    InvalidSources { reason: String },
+    InvalidSources {
+        /// Which rule the list breaks.
+        reason: String,
+    },
     /// A `sources[]` entry breaks a v2 rule (id, path, shape, or is unreferenced).
-    InvalidSource { id: String, reason: String },
+    InvalidSource {
+        /// The `id` of the entry.
+        id: String,
+        /// Which rule the entry breaks.
+        reason: String,
+    },
     /// A page `source` reference breaks a v2 rule (unknown ref, frame rules).
-    InvalidPageSource { index: u32, reason: String },
+    InvalidPageSource {
+        /// Index of the page.
+        index: u32,
+        /// Which rule the reference breaks.
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for BookMetaError {
@@ -199,15 +270,23 @@ impl std::error::Error for BookMetaError {}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PageEntry {
+    /// Zero-based position in `pages`.
     pub index: u32,
+    /// Path of the display image, relative to the package root.
     pub file: String,
+    /// Width in pixels.
     pub width: u32,
+    /// Height in pixels.
     pub height: u32,
+    /// Size of the display image in bytes.
     pub byte_size: u64,
+    /// Lowercase hex SHA-256 of the display image.
     pub sha256: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional label, such as a printed page number.
     pub page_label: Option<String>,
     #[serde(default)]
+    /// How the image is stored.
     pub storage: StorageMode,
     /// v2: the original this display image was converted from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -242,15 +321,25 @@ impl PageEntry {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BookMeta {
+    /// The `formatVersion` of the package.
     pub format_version: u32,
+    /// Book id slug.
     pub id: String,
+    /// Book title.
     pub title: String,
+    /// Creation time (RFC 3339).
     pub created_at: String,
+    /// Last update time (RFC 3339).
     pub updated_at: String,
+    /// How the book renders.
     pub render_mode: RenderMode,
+    /// Zero-based index of the last page read.
     pub last_read_page: u32,
+    /// Rights statement.
     pub rights: String,
+    /// Attribution line.
     pub attribution: String,
+    /// The pages, in reading order.
     pub pages: Vec<PageEntry>,
     /// v2: originals kept under `originals/` for converted pages.
     #[serde(default, skip_serializing_if = "Option::is_none")]

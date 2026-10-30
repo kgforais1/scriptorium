@@ -1,6 +1,6 @@
 # Plan: M1 — Scan viewer (first product milestone)
 
-Last reviewed: 2026-10-28
+Last reviewed: 2026-10-30
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
 Status: in-progress (approved 2026-10-29)
@@ -227,7 +227,7 @@ If targets fail without lazy/windowed loading, **implement windowed page load in
 
 - [ ] `app.security.assetProtocol.enable: true`
 - [ ] **Replace `security.csp: null`** with an explicit CSP before Phase 2 (see A13)
-- [ ] `assetProtocol.scope.allow` covers app-data `books/**` (app-wide scope ≠ fs capability)
+- [ ] The static `assetProtocol.scope` is empty; `open_and_register` admits exactly the verified page files at runtime (app-wide scope ≠ fs capability)
 - [ ] CSP allows `img-src` (and media if needed) for `asset:` and `https://asset.localhost`
 - [ ] `convertFileSrc` only given **absolute** paths (Rust resolves relative → absolute)
 - [ ] After `package_root.join(file)`, canonicalize and assert result is under `package_root` (A12)
@@ -300,11 +300,152 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 
 ### Phase 2 — Commands + UI
 
-- [ ] Replace `security.csp: null` with production CSP (**A13** — do this **first** in Phase 2 before commands/asset URLs; open tracking issue when starting Phase 2)
-- [ ] Commands + capabilities for dialog + app-data fs + asset scope
-- [ ] Open… inspect-and-branch + confirm before ingest copy
-- [ ] Map errors to dialogs/toasts
-- [ ] Vitest (or equivalent) for pure TS helpers (URL resolve / UI state) — required, not optional
+Spec fleshed out 2026-10-30 on branch `m1/phase2-commands-ui`. Phase 2 ends with a plain
+`<img>` page view that proves the asset protocol end to end. The flipbook lands in Phase 3.
+
+**Library root.** Books live in `app_data_dir()/books/` (macOS:
+`~/Library/Application Support/dev.scriptorium.app/books/`). The app creates it on start and
+runs `sweep_orphans(lib, sweep::ORPHAN_AGE)` there once, off the main thread. Never use a zero
+age at startup: another instance may be between creating its temp dir and locking it.
+
+**Commands** (`src-tauri/src/commands/`). Each runs its file work in
+`tauri::async_runtime::spawn_blocking`, so the UI never freezes. Each returns
+`Result<T, CommandError>`, where `CommandError` serializes as
+`{ kind: "<BookError variant>", message: "<Display text>" }`. `message` is the A3 user text.
+
+| Command | Input | Output |
+|---|---|---|
+| `inspect_folder` | `path` | `{ kind: "book", id, title, pages }` when `meta.json` exists and `load_book` succeeds. A `meta.json` that fails to load returns its `BookError`; it never falls through to the scans branch. Otherwise `{ kind: "scans", files, frames, estimatedBytes, suggestedId, suggestedTitle }`. Folder errors (empty, no images, duplicate stems, unreadable file) come back as `CommandError` |
+| `create_book` | `folder`, `title`, `id`, `rights`, `attribution` | `BookView` (below). Emits `ingest-progress` `{ done, total }`, where `total` is the frame count, at most about 10 times a second plus a final `done == total`. The throttle lives at the emit site in `commands.rs`; the library calls back once per page. `inspect_folder`'s `frames` is the same total |
+| `open_book` | `path` | `BookView` |
+| `save_progress` | `root`, `page`, `seq` | `"saved" \| "pending"`. `seq` numbers each save in the run; Rust ignores one numbered below a save it already has, so a late older save never overwrites a newer page. Updates the session's in-memory page, and writes `meta.json` debounced (every ten seconds after a failed write). The UI clears its save warning only on `"saved"` |
+| `close_book` | `root` | `()`. Writes the book's held page now; called by **Close book** |
+| `last_book` | — | `BookView` or `null`: the last opened book, from `app_data_dir()/state.json` |
+
+`BookView` is `{ id, title, root, lastReadPage, pages: [{ path, width, height }] }`. `path`
+is the canonical absolute path from `LoadedBook::page_path`. TypeScript passes it to
+`convertFileSrc` and never builds paths itself.
+
+- `suggestedId` must always pass `validate_book_id`. Slug the folder name (lowercase ASCII,
+  `-` for runs of other characters), trim leading and trailing separators and periods, and
+  truncate to leave room for a suffix. Fall back to `book` when nothing is left, and add a
+  suffix to Windows-reserved names (`con`, `nul`, `com1`, and so on). On a collision, append
+  `-2`, `-3`, and so on. The tests reuse the `validate_book_id` cases. `suggestedTitle` is the
+  folder name.
+- Add `create_book_from_folder_with(folder, library, opts, on_frame)` to the library. The
+  existing three-argument function delegates to it with a no-op, so callers and tests stay
+  unchanged.
+- Every successful open goes through one `open_and_register(root)` helper. It canonicalizes
+  the root, calls `load_book`, admits exactly the verified page files with `allow_file`
+  (so an undeclared file in `pages/` stays unreachable, and a valid package that keeps pages
+  elsewhere still renders), and records the book
+  in the session. `open_book`, `last_book`, and `create_book` all use it, so an outside package
+  reopened at startup still shows its pages. `originals/` is never exposed to the webview.
+- The session is a `Mutex<HashMap<canonical root, { page, dirty }>>`, keyed by root, not by
+  the self-declared id, so two packages with the same id never cross. `save_progress` accepts
+  only a root in the map, after canonicalizing it, so a trailing slash or `..` still matches.
+  `save_last_read_page` still enforces the page bound. Never hold the lock across an `.await`.
+- The close flush runs in Rust: on `WindowEvent::CloseRequested` and
+  `RunEvent::ExitRequested`, write every dirty page synchronously. A JavaScript close handler
+  would race the window teardown.
+- `open_book` never copies the package (A7).
+- A panicked `spawn_blocking` task maps to a `CommandError` of kind `Internal`. The TS side
+  treats any rejection that is not a `CommandError` as unknown.
+- `lib.rs` has exactly one `generate_handler!` per cfg. The dev build adds `spike_pages` to
+  the real commands; a second `invoke_handler` call would replace the first.
+- `state.json` is `{ "lastBook": "<absolute package path>" }`, written with `write_atomic`.
+  If that book fails to load on start, the app shows the home screen and no error.
+
+**Security and config (A13).** Replace `csp: null` with:
+
+```
+default-src 'self'; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:;
+style-src 'self' 'unsafe-inline'; script-src 'self';
+connect-src 'self' asset: http://asset.localhost https://asset.localhost ipc: http://ipc.localhost
+```
+
+`connect-src` lists the asset origins because the engine `fetch`es page images. Tauri applies
+the CSP only to bundled assets, so `pnpm tauri dev` never shows it. The check is a
+`pnpm tauri build` run that opens a book. `devCsp` is the same policy with
+`script-src 'self' 'unsafe-inline'` (the React plugin's inline preamble) and
+`connect-src ws://localhost:1420 ws://localhost:1421` (HMR). The static
+`assetProtocol.scope` is empty: every page is admitted at runtime, after `load_book` has
+verified it. `devCsp` lists only the localhost HMR origins; a `TAURI_DEV_HOST` device build
+would need its host added, and `devCsp` has no effect on desktop dev anyway. Add `tauri-plugin-dialog`
+(Rust `tauri_plugin_dialog::init()` and the `@tauri-apps/plugin-dialog` JS package) with only
+`dialog:allow-open` in the default capability. The webview gets no `fs` plugin, because all
+file access goes through the commands above.
+
+**UI** (`src/features/home/`, `src/features/book/`, `src/lib/`). The UI is plain React and
+CSS. No skin tokens are needed until Phase 3.
+
+- Home has one **Open…** button. It opens a folder picker, then calls `inspect_folder`.
+- For a book, it calls `open_book`. For scans, it shows a confirm dialog with the page and
+  frame count, the estimated size, and editable title and id fields. The id is checked
+  against the slug rule as the user types. **Create** calls `create_book` and shows a
+  progress bar fed by `ingest-progress`.
+- Every `CommandError` shows as a dialog with its `message`. A `kind`-to-heading table lives
+  in `src/lib/errors.ts`. It includes `Internal` and a fallback heading for unknown kinds.
+- The book view shows the title, the page `n / total`, prev/next buttons and ←/→ keys (no-ops
+  at the ends, A5), and the current page as a padded `<img>` (`object-fit: contain`). A
+  **Close book** button returns home.
+- On start, the app calls `last_book` and reopens that book at its saved page (A6).
+- Every page change calls `save_progress` at once with a new `seq`. Rust drops stale saves and
+  owns the debounce. A held page is written about a second later by one delayed flush per
+  book, on **Close book** (`close_book`), and on window close or exit.
+
+**Tests.** Rust unit tests cover the slug helper, `inspect_folder` both ways, the
+`CommandError` JSON shape, and the progress callback count. Add Vitest with tests for the
+pure TS helpers: the error-heading map, the slug check, and the page clamp and keyboard
+step, and the length limits (`limits.ts`). Rust tests cover the debounced write, the flush of
+dirty pages, stale-save ordering, and the `save_progress` path end to end.
+
+**Chunks.** Each chunk gets its own commit and a qoder review.
+
+0. Quality gates, before any app code. ESLint (flat config) with typescript-eslint,
+   `eslint-plugin-react-hooks`, `complexity: 15`, and `jsdoc/require-jsdoc` on exported
+   functions, run by a pre-commit hook and a CI job. Add `tsc --noEmit` to pre-commit. Add
+   Vitest with v8 coverage: CI fails below 80% lines on `src/lib/**` (UI components and the
+   dev-only spike are excluded). Add `src-tauri/clippy.toml` with
+   `cognitive-complexity-threshold = 15` and turn on `clippy::cognitive_complexity`, plus
+   `missing_docs` for public items. Add a docstring rule to `AGENTS.md` conventions. Rust
+   coverage and a higher Python gate stay in M0.5.
+1. CSP, `devCsp`, asset scope, dialog plugin, and capability (A13).
+2. Library progress callback, slug helper, `inspect_folder` core, and `CommandError`, with
+   Rust tests.
+3. Tauri commands, app state, `state.json`, startup sweep, and the Rust close flush.
+4. TS API layer and types, and helper tests.
+5. Home, confirm, progress, error dialogs, book view, and the release-build gate.
+6. Docs: `docs/manual-test-m1.md` (Phase 2 steps, including a `pnpm tauri build` run that
+   opens a book under the production CSP, and how to reach the dev-only flipbook spike until
+   Phase 3 replaces it), changelog, plan ticks.
+
+Chunk 1's CSP has no visible effect in `tauri dev`. Chunk 5 is done only when a release
+build opens a book and shows its pages.
+
+- [x] Chunk 0: quality gates (ESLint, tsc hook, Vitest coverage, clippy complexity, docs)
+- [x] Chunk 1: CSP and capabilities (A13)
+- [x] Chunk 2: library hooks and `inspect_folder` core
+- [x] Chunk 3: commands and app state
+- [x] Chunk 4: TS API and Vitest
+- [ ] Chunk 5: UI (code done; the release-build gate below is still pending)
+- [x] Chunk 6: docs
+
+Manual verification (release build opens a book, A5–A7, A13) is pending and tracked in
+`to_do.md`. It does not block merging Phase 2 or starting Phase 3. See
+[`docs/manual-test-m1.md`](../docs/manual-test-m1.md). It needs one run on Windows too,
+because only a real webview shows whether page paths load there.
+
+Known limits after Phase 2:
+
+- Each page is admitted to the asset scope one file at a time. That costs about a second at
+  the 100,000-page format cap and is negligible for real books. Each image request scans the
+  admitted list.
+- Opened books stay in the session and the asset scope until the app quits. **Close book**
+  revokes nothing. Revisit when the bookshelf (M5) opens many books in one run.
+- A book whose progress cannot be saved (for example, on a read-only volume) shows a note in
+  the page bar until a save succeeds. Turns then retry about every ten seconds instead of
+  every second, and the close flush always tries.
 
 ### Phase 3 — Reader
 
@@ -312,7 +453,19 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 - [ ] Engine publishes each visible page's projected corners per frame, for M2's text overlay
       and M6's hotspots (fold into the Phase 3 refresh from ADR-0001)
 - [ ] ←/→ + on-screen controls; edge no-ops
-- [ ] Debounced progress + **flush on close**
+- [ ] Debounced progress + **flush on close**. Follow-ups from the CodeRabbit review of PR #66
+      (none block Phase 2):
+      - Replace the per-turn delayed flush with one worker per dirty book that owns its timer.
+        It keeps the 1 s interval and the 10 s backoff, retries after a failed write without
+        waiting for a turn, and cannot have its claim cleared by another flush.
+      - Tell the view when a background write succeeds (for example, a `progress-saved`
+        event), so the save warning clears without another page turn.
+      - Decide what **Close book** does when its flush fails: stay open with the warning, or
+        close and show it on the home screen.
+      - Test the `saveSeq` copy in `open_and_register` and the flush scheduling through
+        helpers that need no `AppHandle`.
+      - Tag `ingest-progress` events with an import id. Overlap is reachable only through the
+        dev-only `#spike` route today.
 - [ ] Loading / empty states
 - [ ] Reader chrome follows mockup E layout (header, bottom bar with scrubber); notes panel
       shell only — hotspots stay M6

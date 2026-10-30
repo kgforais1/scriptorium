@@ -21,6 +21,7 @@ const SCHEMA_V2: &str = include_str!("../../../docs/book-format.v2.schema.json")
 pub struct LoadedBook {
     /// Canonical package directory.
     pub root: PathBuf,
+    /// The validated `meta.json`.
     pub meta: BookMeta,
     /// Canonical path of each page's display image, verified inside `root` at load.
     page_paths: Vec<PathBuf>,

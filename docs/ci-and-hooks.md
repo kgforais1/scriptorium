@@ -1,6 +1,6 @@
 # Scriptorium — CI & hooks
 
-Last reviewed: 2026-10-28
+Last reviewed: 2026-10-30
 
 ## Recommendation (what runs where)
 
@@ -9,21 +9,24 @@ Last reviewed: 2026-10-28
 | **File line count** | ✅ `check-file-size` | — | ✅ all tracked files | — |
 | **Living backlog size** | ✅ `check-todo-limits` | — | ✅ `to_do.md` | — |
 | **Backlog ↔ plans sync** | ✅ `check-todo-plan-sync` (advisory) | — | ✅ advisory (allowed to fail) | — |
-| **Complexity** | ✅ ruff `C901` and `PLR0912` | — | ✅ same | — |
+| **Complexity** | ✅ ruff `C901` and `PLR0912`; ESLint `complexity` (`ts: eslint`) | — | ✅ same, plus clippy `cognitive_complexity` in `Rust (src-tauri)` | — |
 | **Secrets** | ✅ gitleaks + private-key | — | ✅ gitleaks full history | TruffleHog weekly (advisory) |
 | **Lint** | ✅ ruff, markdownlint, shellcheck | — | ✅ same + actionlint | — |
+| **Lint (TypeScript)** | ✅ `ts: eslint` on staged `.ts`/`.tsx` | — | ✅ `pnpm lint` (`Lint & test (TypeScript)`) | — |
+| **Doc comments** | ✅ `ts: eslint` (`jsdoc/require-jsdoc`, exports only) | — | ✅ same, plus `missing_docs` in `Rust (src-tauri)` | — |
 | **Type check (Python)** | — | ✅ basedpyright | ✅ basedpyright | — |
 | **Rust fmt / clippy / test** | — | — | ✅ required from **M0** once `src-tauri/` exists | — |
-| **Type check (TypeScript)** | — | — | ✅ `pnpm exec tsc --noEmit` | — |
+| **Type check (TypeScript)** | ✅ `types: tsc` on `.ts`/`.tsx` changes | — | ✅ `pnpm typecheck` (app and config files) | — |
 | **Audit (pnpm + cargo)** | — | — | ✅ required (`Dependency audit`; informational findings pass, audit and tooling failures fail closed) | ✅ weekly re-run (`Dependency audit (weekly)`) |
 | **Tests + coverage** | — | — | ✅ pytest-cov (report; gate later) | — |
+| **Tests + coverage (TypeScript)** | — | — | ✅ `pnpm test:coverage` (Vitest; lines ≥ 80 on `src/lib/**`) | — |
 | **SAST** | — | — | — | ✅ Semgrep on PR (whole repo; templates/scratch in `.semgrepignore`) |
 | **SonarQube (local, opt-in)** | `sonar-freshness` (no-op unless `SONAR_FRESHNESS_GATE=1`) | `sonar-freshness-push` (same opt-in) | — never | — never |
 | **CodeQL** | — | — | — | ✅ already required: GitHub default setup, ruleset code scanning (not a job in `security.yml`) |
 
 SonarQube is local and manual: see [`sonarqube.md`](sonarqube.md). CI never needs `SONAR_TOKEN`.
 
-**Later (M0.5):** Vitest coverage gates, TS eslint pre-push, Dependabot. CodeQL is already the ruleset code-scanning requirement above, not an M0.5 follow-up. **Rust fmt/clippy/test belong in M0**, not M0.5 — see foundation plan.
+**Later (M0.5):** Dependabot. CodeQL is already the ruleset code-scanning requirement above, not an M0.5 follow-up. **Rust fmt/clippy/test belong in M0**, not M0.5 — see foundation plan.
 
 ## Quick start
 
@@ -46,7 +49,8 @@ After the first green `CI` run, set default-branch ruleset required checks to:
 - `SAST — Semgrep` (from Security workflow)
 - `Rust (src-tauri)` — **required from M0** once `src-tauri/` exists (`cargo fmt` / `clippy` / `test` / `check`; exact job name must match `ci.yml`)
 - `Rust (windows-latest)` and `Rust (macos-latest)` — the `rust-cross` matrix (`clippy --all-targets`, `test`). Not required yet; make them required once they have been green on a few PRs
-- `Type check (TypeScript)` — `pnpm install` + `tsc --noEmit`
+- `Type check (TypeScript)` — `pnpm install` + `pnpm typecheck` (app and config files)
+- `Lint & test (TypeScript)` — `pnpm install` + `pnpm lint` (ESLint) + `pnpm test:coverage` (Vitest, lines ≥ 80 on `src/lib/**`)
 - `Dependency audit` — `pnpm audit --prod` + `cargo audit` (uses `src-tauri/.cargo/audit.toml`). Informational findings pass. The job fails closed on a vulnerability and when the audit did not complete: an advisory-database fetch failure, a command error, or exhausted registry retries.
 - `CodeQL` — GitHub **default setup** (`dynamic/github-code-scanning/codeql`). Already required by the branch ruleset as code scanning (alert threshold errors; security alerts high or higher), not a status-check context and not a workflow file
 

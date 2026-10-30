@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-10-30
 
 Single source of truth for AI coding agents working in this repository. Other agent
 entrypoints (`CLAUDE.md`, `GEMINI.md`, `QWEN.md`, `.github/copilot-instructions.md`,
@@ -133,6 +133,13 @@ Rule lives in [`policies/agent-tooling-contract.md`](policies/agent-tooling-cont
 **Notes_and_Ideas vs this template:** personal research dumps, private key dashboards, and
 exploratory idea notes belong in a Notes_and_Ideas (or similar) repo. Index only durable,
 reusable menus and conventions here.
+
+## Code rules (enforced by lint)
+
+- Every public Rust item and every exported TypeScript function or class gets a doc comment. It says what the item does, not how.
+- Lints enforce this: `missing_docs` for the Rust lib crate and `jsdoc/require-jsdoc` (exports only) in ESLint.
+- The complexity limit is 15: cyclomatic in ruff (`C901`) and ESLint (`complexity`), cognitive in clippy (`cognitive_complexity`).
+- Split a function that goes over the limit. Do not raise the limit or add a blanket suppression. The one existing exemption is `ci/scripts/check_gha_usage.py` in `ruff.toml`, and the dev-only flipbook spike in `eslint.config.js` until Phase 3 rewrites it.
 
 ## Agent compatibility
 

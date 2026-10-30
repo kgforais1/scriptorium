@@ -17,12 +17,19 @@ pub const JPEG_QUALITY: u8 = 92;
 /// A supported input format, chosen by file extension.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputKind {
+    /// A JPEG image.
     Jpeg,
+    /// A PNG image.
     Png,
+    /// A WebP image.
     Webp,
+    /// A BMP image.
     Bmp,
+    /// A GIF image.
     Gif,
+    /// A TIFF image.
     Tiff,
+    /// A JPEG 2000 image.
     Jp2,
 }
 
@@ -119,6 +126,7 @@ pub(super) fn unreadable(reason: impl std::fmt::Display) -> ConvertError {
 /// What ingest needs to know about one input file before it writes anything.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Inspection {
+    /// The detected input format.
     pub kind: InputKind,
     /// Number of pages this file yields (TIFF directories; 1 otherwise, GIF included).
     pub frames: u32,
@@ -131,8 +139,11 @@ pub struct Inspection {
 /// One page's display image.
 #[derive(Debug, Clone)]
 pub struct DisplayImage {
+    /// File extension of the display image.
     pub ext: &'static str,
+    /// Width in pixels.
     pub width: u32,
+    /// Height in pixels.
     pub height: u32,
     /// Encoded bytes, or `None` when the input file itself is the display image.
     pub bytes: Option<Vec<u8>>,
@@ -141,6 +152,7 @@ pub struct DisplayImage {
 /// An input file read once, with its inspection. Ingest opens each file once and asks for
 /// every frame from the same buffer, so a multi-page TIFF is not re-read per page.
 pub struct Source {
+    /// What inspection learned about the file.
     pub info: Inspection,
     bytes: Vec<u8>,
 }

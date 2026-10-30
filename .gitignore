@@ -51,6 +51,7 @@ cython_debug/
 .coverage.*
 coverage.xml
 htmlcov/
+coverage/
 nosetests.xml
 pytest.xml
 
@@ -218,3 +219,7 @@ temp/
 .serena/
 .aider*
 .tokensave/
+
+# The frontend helper folder `src/lib/` is source, not a Python build dir.
+!src/lib/
+*.tsbuildinfo

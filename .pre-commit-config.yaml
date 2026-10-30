@@ -82,6 +82,25 @@ repos:
         stages: [pre-push]
         description: "Python type check (pyrightconfig.json). Also runs in CI."
 
+      # TypeScript lint and typecheck. Both need `pnpm install` first (node_modules).
+      - id: eslint
+        name: "ts: eslint"
+        entry: pnpm exec eslint
+        language: system
+        files: '\.(ts|tsx)$'
+        exclude: '^src-tauri/|\.d\.ts$'
+        pass_filenames: true
+        description: "ESLint on staged TypeScript (eslint.config.js: complexity 15, doc comments). Also runs in CI."
+
+      - id: tsc
+        name: "types: tsc"
+        entry: pnpm typecheck
+        language: system
+        files: '\.(ts|tsx)$'
+        exclude: '^src-tauri/'
+        pass_filenames: false
+        description: "TypeScript type check (tsconfig.json and tsconfig.node.json via pnpm typecheck). Also runs in CI."
+
       # Optional: uncomment if your team uses gitignored backups/ before edits
       # - id: prune-backups
       #   name: "hygiene: prune old backups/"
