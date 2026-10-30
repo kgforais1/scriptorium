@@ -66,6 +66,9 @@ Do not load everything. Start here, then open only what the task needs.
    access should go read them. Just don't let the advice become unusable without them.
 11. **Progress is written down, not remembered.** Multi-phase work records state in `.context/`
     as it goes. A session that ends mid-task leaves a `Next action`, not a gap.
+12. **New Sonar issues get fixed.** When a local scan prints `ACTION REQUIRED`, fix the new
+    issues before pushing and scan again. Ask the user to accept one only if it is truly
+    trivial. See [`docs/sonarqube.md`](docs/sonarqube.md#read-the-issues).
 
 ## Agent tooling policy
 

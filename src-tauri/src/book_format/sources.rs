@@ -129,18 +129,7 @@ fn validate_entries<'a>(
         if by_id.insert(src.id.as_str(), src).is_some() {
             return Err(source_err(&src.id, "duplicate id"));
         }
-        if let Some(reason) = package_path_problem(&src.file) {
-            return Err(source_err(
-                &src.id,
-                format!("file {:?}: {reason}", src.file),
-            ));
-        }
-        if !src.file.starts_with(ORIGINALS_DIR) {
-            return Err(source_err(
-                &src.id,
-                format!("file {:?} must be under originals/", src.file),
-            ));
-        }
+        validate_entry(src)?;
         let folded = src.file.to_ascii_lowercase();
         if page_files.contains_key(&folded) || !files.insert(folded) {
             return Err(source_err(
@@ -151,20 +140,37 @@ fn validate_entries<'a>(
                 ),
             ));
         }
-        if src.frames < 1 {
-            return Err(source_err(&src.id, "frames must be at least 1"));
-        }
-        if src.byte_size == 0 {
-            return Err(source_err(&src.id, "byteSize must be > 0"));
-        }
-        if !is_lowercase_hex_sha256(&src.sha256) {
-            return Err(source_err(
-                &src.id,
-                "sha256 must be 64 lowercase hex characters",
-            ));
-        }
     }
     Ok(by_id)
+}
+
+/// The checks on one entry that need no other entry: path, frames, size, and checksum.
+fn validate_entry(src: &SourceEntry) -> Result<(), BookMetaError> {
+    if let Some(reason) = package_path_problem(&src.file) {
+        return Err(source_err(
+            &src.id,
+            format!("file {:?}: {reason}", src.file),
+        ));
+    }
+    if !src.file.starts_with(ORIGINALS_DIR) {
+        return Err(source_err(
+            &src.id,
+            format!("file {:?} must be under originals/", src.file),
+        ));
+    }
+    if src.frames < 1 {
+        return Err(source_err(&src.id, "frames must be at least 1"));
+    }
+    if src.byte_size == 0 {
+        return Err(source_err(&src.id, "byteSize must be > 0"));
+    }
+    if !is_lowercase_hex_sha256(&src.sha256) {
+        return Err(source_err(
+            &src.id,
+            "sha256 must be 64 lowercase hex characters",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_page_refs(

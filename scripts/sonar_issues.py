@@ -200,6 +200,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"sonar_issues: {exc}; not writing sonar-state.json.", file=sys.stderr)
         return 1
 
+    # Read the last scan before this one's dumps can overwrite it.
+    previous = load_previous(TMP / "sonar-state.json")
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
     dump_dir = TMP / "sonar-issues"
     dump_dir.mkdir(parents=True, exist_ok=True)
@@ -236,7 +238,56 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Issues on record: {total} (commit {head[:12]})")
     print("Summary: tmp/sonar-latest-issues.md  State: tmp/sonar-state.json")
+    report_new(previous, issues, total)
     return 0
+
+
+def issue_key(issue: dict) -> tuple[str, ...]:
+    """The server's issue key, which survives line shifts and message changes. Falls back
+    to rule, file, and message for a dump without keys."""
+    if issue.get("key"):
+        return (str(issue["key"]),)
+    return (
+        str(issue.get("rule", "")),
+        str(issue.get("component", "")).split(":", 1)[-1],
+        str(issue.get("message", "")),
+    )
+
+
+def load_previous(state_path: Path) -> tuple[int, list[dict]] | None:
+    """The last scan's count and issues, or None when there is no usable record."""
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        issues = json.loads((ROOT / state["issues_path"]).read_text(encoding="utf-8"))
+        if state.get("issues_truncated") or not isinstance(issues, list):
+            return None
+        if not all(isinstance(i, dict) for i in issues):
+            return None
+        return int(state["issues_count"]), issues
+    except (OSError, KeyError, TypeError, ValueError):
+        return None
+
+
+def report_new(previous: tuple[int, list[dict]] | None, issues: list[dict], total: int) -> None:
+    """Tell the agent to fix issues this change introduced, not just note the count."""
+    if previous is None:
+        print("No complete earlier scan to compare against; review tmp/sonar-latest-issues.md.")
+        return
+    old_total, old_issues = previous
+    seen = {issue_key(i) for i in old_issues}
+    new = [i for i in issues if issue_key(i) not in seen]
+    if not new and total <= old_total:
+        print(f"No new issues (was {old_total}).")
+        return
+    print(f"\nACTION REQUIRED: {len(new)} new issue(s); total went {old_total} -> {total}.")
+    for i in new:
+        path = str(i.get("component", "")).split(":", 1)[-1]
+        print(f"  - {i.get('rule', '?')} {path}:{i.get('line', '?')} {i.get('message', '')}")
+    print(
+        "Fix these before pushing, then re-run the scan. Do not just note the count and"
+        " move on. Only if an issue is truly trivial may you ask the user whether to"
+        " accept it instead."
+    )
 
 
 if __name__ == "__main__":

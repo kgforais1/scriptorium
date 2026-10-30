@@ -20,7 +20,9 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Unplanned / small
 
-_None._
+- **Sonar backlog (33 local issues)** — 11 in the flipbook spike (`src/spike/flipbook/`) and
+  22 in template hook and CI scripts (complexity, regexes, duplicated literals). See
+  `tmp/sonar-latest-issues.md` after a scan.
 
 ## Icebox
 

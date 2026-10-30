@@ -370,8 +370,8 @@ fn over_limit(w: u32, h: u32) -> bool {
     u64::from(w) * u64::from(h) > JP2_MAX_PIXELS
 }
 
-fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
-    use jpeg2k::ColorSpace;
+/// Read and bound the image size from the header, before OpenJPEG allocates anything.
+fn check_jp2_header(bytes: &[u8]) -> Result<(u32, u32), ConvertError> {
     let (hw, hh) =
         jp2_dimensions(bytes).ok_or_else(|| unreadable("JPEG 2000 header has no image size"))?;
     if hw == 0 || hh == 0 {
@@ -383,7 +383,11 @@ fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
         )));
     }
     check_siz(bytes)?;
-    let img = jpeg2k::Image::from_bytes(bytes).map_err(unreadable)?;
+    Ok((hw, hh))
+}
+
+/// The decoded image must match its header and have full-size, unsigned, 1–16-bit components.
+fn check_jp2_image(img: &jpeg2k::Image, (hw, hh): (u32, u32)) -> Result<(), ConvertError> {
     let comps = img.components();
     let (w, h) = (img.width(), img.height());
     // The decoder's own size must agree with the header; a lying header is refused here.
@@ -405,6 +409,16 @@ fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
             "JPEG 2000 with signed or unusual-precision samples",
         ));
     }
+    Ok(())
+}
+
+fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
+    use jpeg2k::ColorSpace;
+    let header = check_jp2_header(bytes)?;
+    let img = jpeg2k::Image::from_bytes(bytes).map_err(unreadable)?;
+    check_jp2_image(&img, header)?;
+    let comps = img.components();
+    let (w, h) = (img.width(), img.height());
     // Only RGB and grey are drawn; YCC and CMYK colour spaces are rejected, and a 4-component
     // image is taken as RGBA only when the file says sRGB.
     let space = img.color_space();
