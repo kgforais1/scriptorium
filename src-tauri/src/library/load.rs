@@ -43,21 +43,19 @@ pub(crate) fn read_meta_text(meta_path: &Path) -> Result<String, BookError> {
         std::io::ErrorKind::NotFound => invalid("meta.json is missing"),
         _ => io_error(meta_path, &e),
     })?;
-    let mut text = String::new();
+    let mut bytes = Vec::new();
     // Read one byte past the cap, so a file that grows after a size check is still caught.
     file.take(META_MAX_BYTES + 1)
-        .read_to_string(&mut text)
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::InvalidData => invalid("meta.json is not UTF-8 text"),
-            _ => io_error(meta_path, &e),
-        })?;
-    if text.len() as u64 > META_MAX_BYTES {
+        .read_to_end(&mut bytes)
+        .map_err(|e| io_error(meta_path, &e))?;
+    // Check the size before the encoding, so an oversized file reports its size.
+    if bytes.len() as u64 > META_MAX_BYTES {
         return Err(invalid(format!(
             "meta.json is larger than {} MB",
             META_MAX_BYTES >> 20
         )));
     }
-    Ok(text)
+    String::from_utf8(bytes).map_err(|_| invalid("meta.json is not UTF-8 text"))
 }
 
 fn invalid(reason: impl Into<String>) -> BookError {

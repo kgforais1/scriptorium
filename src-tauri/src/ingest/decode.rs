@@ -298,7 +298,9 @@ pub(super) struct Siz {
     pub tiles: u64,
 }
 
-/// Parse the SIZ marker at the start of a raw codestream (it must follow SOC directly).
+/// Parse the SIZ marker at the start of a raw codestream. JPEG 2000 Part 1 puts SIZ directly
+/// after SOC; Part 15 (HTJ2K) inserts a CAP segment first, which OpenJPEG cannot decode
+/// anyway, so such files are refused here as having no valid SIZ.
 pub(super) fn parse_siz(cs: &[u8]) -> Option<Siz> {
     if !cs.starts_with(&[0xFF, 0x4F, 0xFF, 0x51]) {
         return None;
@@ -448,8 +450,14 @@ fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
             DynamicImage::ImageRgb8(ImageBuffer::from_raw(w, h, interleave(3)).ok_or_else(bad)?)
         }
         // Grey or RGB plus transparency. A JPEG 2000 page becomes a JPEG, which has no
-        // alpha, so refuse rather than silently drop it.
-        2 | 4 => {
+        // alpha, so refuse rather than silently drop it. Other 4-component files (CMYK) fall
+        // through to the arm below, which names their colour space.
+        2 => {
+            return Err(unreadable(
+                "JPEG 2000 with transparency (an alpha channel) is not supported yet",
+            ))
+        }
+        4 if matches!(space, ColorSpace::SRGB) => {
             return Err(unreadable(
                 "JPEG 2000 with transparency (an alpha channel) is not supported yet",
             ))

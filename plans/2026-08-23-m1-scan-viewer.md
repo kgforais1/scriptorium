@@ -137,13 +137,13 @@ Known limits, each `UnreadableFile` unless noted:
   error). Images over 150 megapixels, zero-sized images, and images whose header size disagrees
   with the decoded size or whose samples run short are rejected; the size is read from the
   `jp2h`/`ihdr` box before decoding. The codestream's SIZ marker is also checked first: more
-  than 4 components or 65,536 tiles is refused. Images with transparency (2 or 4 components)
-  are refused, because the display copy is a JPEG.
+  than 4 components or 65,536 tiles is refused. Subsampled, signed, YCC, and CMYK images are
+  rejected, and so are images with transparency (2 components, or 4 in sRGB), because the
+  display copy is a JPEG.
 - `meta.json` over 64 MB is refused before it is read.
 - Known gap (Phase 2): inputs are checked for symbolic links when the folder is listed, not
   when each file is opened, so a file swapped for a link mid-ingest would be followed. Close it
-  with no-follow opens when Phase 2 adds the Open… flow. Subsampled, signed, YCC, and CMYK images are rejected; four components are read as
-  RGBA only when the file says sRGB.
+  with no-follow opens when Phase 2 adds the Open… flow.
 - TIFF: only 8- and 16-bit grey, RGB, and RGBA, plus 8-bit CMYK with a profile. Palette,
   YCbCr, Lab, grey with alpha, 16-bit CMYK, and 32/64-bit or float layouts are rejected.
 - A corrupt embedded ICC profile rejects the page rather than assuming sRGB, and a grey

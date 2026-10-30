@@ -142,6 +142,22 @@ pub(crate) fn now_rfc3339() -> String {
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into())
 }
 
+/// Errors that mean "this filesystem cannot sync a directory", as opposed to a failed write.
+/// errno values: EINVAL is 22 everywhere; ENOTSUP/EOPNOTSUPP are 45/102 on macOS and 95 on Linux.
+#[cfg(unix)]
+fn dir_sync_unsupported(e: &std::io::Error) -> bool {
+    #[cfg(target_os = "macos")]
+    const NOT_SUPPORTED: &[i32] = &[22, 45, 102];
+    #[cfg(not(target_os = "macos"))]
+    const NOT_SUPPORTED: &[i32] = &[22, 95];
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::Unsupported
+    ) || e
+        .raw_os_error()
+        .is_some_and(|code| NOT_SUPPORTED.contains(&code))
+}
+
 /// Write `bytes` to `path` atomically: a uniquely named sibling temp file, fsync, rename
 /// over, then fsync the directory.
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
@@ -173,9 +189,14 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
     // Sync the directory too, so the rename itself survives a crash.
     #[cfg(unix)]
     if let Some(dir) = path.parent() {
-        std::fs::File::open(dir)
-            .and_then(|d| d.sync_all())
-            .map_err(|e| io_error(dir, &e))?;
+        if let Err(e) = std::fs::File::open(dir).and_then(|d| d.sync_all()) {
+            // Some filesystems (network and FUSE mounts, write-only directories) cannot sync or
+            // open a directory. The new file is already in place, so that is not a failed save;
+            // only a real I/O error is reported.
+            if !dir_sync_unsupported(&e) {
+                return Err(io_error(dir, &e));
+            }
+        }
     }
     Ok(())
 }
