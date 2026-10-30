@@ -316,7 +316,7 @@ age at startup: another instance may be between creating its temp dir and lockin
 | Command | Input | Output |
 |---|---|---|
 | `inspect_folder` | `path` | `{ kind: "book", id, title, pages }` when `meta.json` exists and `load_book` succeeds. A `meta.json` that fails to load returns its `BookError`; it never falls through to the scans branch. Otherwise `{ kind: "scans", files, frames, estimatedBytes, suggestedId, suggestedTitle }`. Folder errors (empty, no images, duplicate stems, unreadable file) come back as `CommandError` |
-| `create_book` | `folder`, `title`, `id`, `rights`, `attribution` | `BookView` (below). Emits `ingest-progress` `{ done, total }`, where `total` is the frame count, at most about 10 times a second plus a final `done == total` |
+| `create_book` | `folder`, `title`, `id`, `rights`, `attribution` | `BookView` (below). Emits `ingest-progress` `{ done, total }`, where `total` is the frame count, at most about 10 times a second plus a final `done == total`. The throttle lives at the emit site in `commands.rs`; the library calls back once per page. `inspect_folder`'s `frames` is the same total |
 | `open_book` | `path` | `BookView` |
 | `save_progress` | `root`, `page` | `()`. Updates the session's in-memory page, and writes `meta.json` debounced |
 | `last_book` | — | `BookView` or `null`: the last opened book, from `app_data_dir()/state.json` |
@@ -341,7 +341,8 @@ is the canonical absolute path from `LoadedBook::page_path`. TypeScript passes i
   reopened at startup still shows its pages. `originals/` is never exposed to the webview.
 - The session is a `Mutex<HashMap<canonical root, { page, dirty }>>`, keyed by root, not by
   the self-declared id, so two packages with the same id never cross. `save_progress` accepts
-  only a root in the map. Never hold the lock across an `.await`.
+  only a root in the map, after canonicalizing it, so a trailing slash or `..` still matches.
+  `save_last_read_page` still enforces the page bound. Never hold the lock across an `.await`.
 - The close flush runs in Rust: on `WindowEvent::CloseRequested` and
   `RunEvent::ExitRequested`, write every dirty page synchronously. A JavaScript close handler
   would race the window teardown.
@@ -363,8 +364,8 @@ connect-src 'self' asset: http://asset.localhost https://asset.localhost ipc: ht
 
 `connect-src` lists the asset origins because the engine `fetch`es page images. Tauri applies
 the CSP only to bundled assets, so `pnpm tauri dev` never shows it. The check is a
-`pnpm tauri build` run that opens a book. `devCsp` is the same policy plus
-`script-src 'unsafe-inline'` (the React plugin's inline preamble) and
+`pnpm tauri build` run that opens a book. `devCsp` is the same policy with
+`script-src 'self' 'unsafe-inline'` (the React plugin's inline preamble) and
 `connect-src ws://localhost:1420 ws://localhost:1421` (HMR). The static
 `assetProtocol.scope` allows `$APPDATA/books/*/pages/**` only. Add `tauri-plugin-dialog`
 (Rust `tauri_plugin_dialog::init()` and the `@tauri-apps/plugin-dialog` JS package) with only
@@ -380,7 +381,7 @@ CSS. No skin tokens are needed until Phase 3.
   against the slug rule as the user types. **Create** calls `create_book` and shows a
   progress bar fed by `ingest-progress`.
 - Every `CommandError` shows as a dialog with its `message`. A `kind`-to-heading table lives
-  in `src/lib/errors.ts`.
+  in `src/lib/errors.ts`. It includes `Internal` and a fallback heading for unknown kinds.
 - The book view shows the title, the page `n / total`, prev/next buttons and ←/→ keys (no-ops
   at the ends, A5), and the current page as a padded `<img>` (`object-fit: contain`). A
   **Close book** button returns home.
@@ -405,11 +406,12 @@ step. Rust tests cover the debounced write and the flush of dirty pages.
 1. CSP, `devCsp`, asset scope, dialog plugin, and capability (A13).
 2. Library progress callback, slug helper, `inspect_folder` core, and `CommandError`, with
    Rust tests.
-3. Tauri commands, app state, `state.json`, and startup sweep.
-4. TS API layer and types, Vitest setup, and helper tests.
-5. Home, confirm, progress, error dialogs, book view, and close-flush.
+3. Tauri commands, app state, `state.json`, startup sweep, and the Rust close flush.
+4. TS API layer and types, and helper tests.
+5. Home, confirm, progress, error dialogs, book view, and the release-build gate.
 6. Docs: `docs/manual-test-m1.md` (Phase 2 steps, including a `pnpm tauri build` run that
-   opens a book under the production CSP), changelog, plan ticks.
+   opens a book under the production CSP, and how to reach the dev-only flipbook spike until
+   Phase 3 replaces it), changelog, plan ticks.
 
 Chunk 1's CSP has no visible effect in `tauri dev`. Chunk 5 is done only when a release
 build opens a book and shows its pages.
