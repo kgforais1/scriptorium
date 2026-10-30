@@ -122,7 +122,8 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
           <img
             key={`${current.path}#${attempt}`}
             className="page-image"
-            src={pageUrl(current.path)}
+            // The asset protocol reads only the path, so the query just defeats a cached failure.
+            src={attempt > 0 ? `${pageUrl(current.path)}?attempt=${attempt}` : pageUrl(current.path)}
             width={current.width}
             height={current.height}
             alt={pageAlt(page, count)}
