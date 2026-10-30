@@ -96,19 +96,17 @@ built app.
 ## 5. Progress survives a restart (A6)
 
 Progress is saved in the book's `meta.json`, at most once a second while you page. A turn
-made within a second of opening the book or of the last write is not written at once. It is
-written on the next turn that is more than a second later, or when the window closes. So
-after one turn, `meta.json` can still hold the old page until you close the app. This is
-expected.
+made within a second of the last write is held, then written about a second later. Closing
+the book or the window writes it at once.
 
 - [ ] Open a book, go to page 6, wait a few seconds, and quit the app (Cmd+Q, or close the
   window). Relaunch with `pnpm tauri dev`. Expected: the book opens by itself at page 6.
 - [ ] Open the book, press the right arrow key once, and quit within a second. Use Cmd+Q on
   macOS or the window close button elsewhere. Relaunch. Expected: the book reopens at the
   page you turned to. This checks the close flush in Rust.
-- [ ] Open a book at page 1, turn one page, and wait 10 seconds. Look at `meta.json` in the
-  book's library folder. Expected: `lastReadPage` may still be the old value. Quit and look
-  again. Expected: it now holds the new page (zero-based).
+- [ ] Open a book at page 1, turn one page, and wait 3 seconds. Look at `meta.json` in the
+  book's library folder. Expected: `lastReadPage` holds the new page (zero-based), without
+  quitting.
 - [ ] Click **Close book**, then quit. Relaunch. Expected: the app reopens the last book
   that was opened, at its saved page.
 - [ ] Move the book's library folder away and relaunch. Expected: the home screen shows and no

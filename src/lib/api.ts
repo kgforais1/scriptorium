@@ -78,6 +78,16 @@ export function saveProgress(root: string, page: number): Promise<SaveOutcome> {
 }
 
 /**
+ * Writes the book's held page now, as the reader closes it.
+ *
+ * @param root - The `root` of the open `BookView`.
+ * @returns Nothing. Rejects with a `CommandError` when the write fails.
+ */
+export function closeBook(root: string): Promise<void> {
+  return call<void>("close_book", { root });
+}
+
+/**
  * Reopens the book that was open last time.
  *
  * @returns The book, or null when there is none or it no longer loads.

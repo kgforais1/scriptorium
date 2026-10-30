@@ -35,6 +35,8 @@ struct Entry {
     /// The highest sequence number recorded. A page sent earlier but arriving later carries a
     /// lower number and is ignored, so it can never overwrite a newer page.
     last_seq: u64,
+    /// True while a delayed flush is scheduled for this book, so turns schedule at most one.
+    flush_scheduled: bool,
 }
 
 /// Why [`Session::record`] refused a page.
@@ -56,7 +58,11 @@ impl std::fmt::Display for RecordError {
         match self {
             Self::NotOpen => write!(f, "that book was not opened in this session"),
             Self::PageOutOfRange { page, page_count } => {
-                write!(f, "page {page} is past the last page ({})", page_count - 1)
+                write!(
+                    f,
+                    "page {page} is past the last page ({})",
+                    page_count.saturating_sub(1)
+                )
             }
         }
     }
@@ -112,9 +118,22 @@ impl Session {
                 last_write: now,
                 write_failed: false,
                 last_seq,
+                flush_scheduled: false,
             },
         );
         page
+    }
+
+    /// Claim the delayed flush for `root`: true when the caller should schedule one, false
+    /// when one is already scheduled or the book is clean. The flush clears the claim.
+    pub fn claim_delayed_flush(&mut self, root: &Path) -> bool {
+        match self.books.get_mut(root) {
+            Some(e) if e.dirty && !e.flush_scheduled => {
+                e.flush_scheduled = true;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// The highest save number recorded for `root`, or 0 when it is not open.
@@ -171,7 +190,12 @@ impl Session {
     ) -> Vec<(PathBuf, E)> {
         let mut failures = Vec::new();
         for (root, entry) in &mut self.books {
-            if !entry.dirty || only.is_some_and(|p| p != root.as_path()) {
+            if only.is_some_and(|p| p != root.as_path()) {
+                continue;
+            }
+            // Any flush of this book settles a pending delayed one.
+            entry.flush_scheduled = false;
+            if !entry.dirty {
                 continue;
             }
             match write(root, entry.page) {
@@ -284,6 +308,22 @@ mod tests {
         let mut log = Vec::new();
         s.flush(None, t0 + SEC * 3, ok_writer(&mut log));
         assert_eq!(log, [(PathBuf::from("/a"), 6)]);
+    }
+
+    #[test]
+    fn one_delayed_flush_is_claimed_per_dirty_book() {
+        let t0 = Instant::now();
+        let mut s = session_with(&["/a"], t0);
+        let a = Path::new("/a");
+        assert!(!s.claim_delayed_flush(a), "clean: nothing to flush");
+        s.record(a, 1, t0).unwrap();
+        assert!(s.claim_delayed_flush(a));
+        assert!(!s.claim_delayed_flush(a), "already scheduled");
+        let mut log = Vec::new();
+        s.flush(Some(a), t0 + SEC, ok_writer(&mut log));
+        assert_eq!(log, [(PathBuf::from("/a"), 1)]);
+        s.record(a, 2, t0 + SEC).unwrap();
+        assert!(s.claim_delayed_flush(a), "the flush released the claim");
     }
 
     #[test]

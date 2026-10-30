@@ -35,6 +35,7 @@ pub fn run() {
         commands::create_book,
         commands::open_book,
         commands::save_progress,
+        commands::close_book,
         commands::last_book,
         spike::spike_pages,
     ]);
@@ -44,6 +45,7 @@ pub fn run() {
         commands::create_book,
         commands::open_book,
         commands::save_progress,
+        commands::close_book,
         commands::last_book,
     ]);
     builder

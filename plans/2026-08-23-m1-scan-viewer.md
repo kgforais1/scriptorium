@@ -319,6 +319,7 @@ age at startup: another instance may be between creating its temp dir and lockin
 | `create_book` | `folder`, `title`, `id`, `rights`, `attribution` | `BookView` (below). Emits `ingest-progress` `{ done, total }`, where `total` is the frame count, at most about 10 times a second plus a final `done == total`. The throttle lives at the emit site in `commands.rs`; the library calls back once per page. `inspect_folder`'s `frames` is the same total |
 | `open_book` | `path` | `BookView` |
 | `save_progress` | `root`, `page`, `seq` | `"saved" \| "pending"`. `seq` numbers each save in the run; Rust ignores one numbered below a save it already has, so a late older save never overwrites a newer page. Updates the session's in-memory page, and writes `meta.json` debounced (every ten seconds after a failed write). The UI clears its save warning only on `"saved"` |
+| `close_book` | `root` | `()`. Writes the book's held page now; called by **Close book** |
 | `last_book` | — | `BookView` or `null`: the last opened book, from `app_data_dir()/state.json` |
 
 `BookView` is `{ id, title, root, lastReadPage, pages: [{ path, width, height }] }`. `path`
@@ -389,8 +390,9 @@ CSS. No skin tokens are needed until Phase 3.
   at the ends, A5), and the current page as a padded `<img>` (`object-fit: contain`). A
   **Close book** button returns home.
 - On start, the app calls `last_book` and reopens that book at its saved page (A6).
-- Every page change calls `save_progress` at once with a new `seq`. Rust drops stale saves,
-  owns the debounce, and flushes on close, so the newest page that reached Rust is saved.
+- Every page change calls `save_progress` at once with a new `seq`. Rust drops stale saves and
+  owns the debounce. A held page is written about a second later by one delayed flush per
+  book, on **Close book** (`close_book`), and on window close or exit.
 
 **Tests.** Rust unit tests cover the slug helper, `inspect_folder` both ways, the
 `CommandError` JSON shape, and the progress callback count. Add Vitest with tests for the

@@ -10,6 +10,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open }));
 
 import {
+  closeBook,
   createBook,
   inspectFolder,
   lastBook,
@@ -65,6 +66,12 @@ describe("commands", () => {
     await saveProgress("/r", 1);
     const sent = invoke.mock.calls[invoke.mock.calls.length - 1][1] as { seq: number };
     expect(sent.seq).toBe(501);
+  });
+
+  it("closeBook sends { root }", async () => {
+    invoke.mockResolvedValue(undefined);
+    await expect(closeBook("/r")).resolves.toBeUndefined();
+    expect(invoke).toHaveBeenCalledWith("close_book", { root: "/r" });
   });
 
   it("lastBook sends no arguments and may return null", async () => {

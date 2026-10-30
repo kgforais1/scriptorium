@@ -86,7 +86,15 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Re
     wasIngesting.current = ingesting;
   }, [ingesting]);
 
+  // A ref, not state: a second Enter or click before the next render must not start a
+  // second import of the same folder.
+  const submitting = useRef(false);
+
   async function create() {
+    if (submitting.current) {
+      return;
+    }
+    submitting.current = true;
     setProgress(0);
     let unlisten: (() => void) | undefined;
     try {
@@ -98,6 +106,7 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Re
       onError(toCommandError(err));
     } finally {
       unlisten?.();
+      submitting.current = false;
     }
   }
 

@@ -220,14 +220,44 @@ pub async fn save_progress(
 ) -> Result<SaveOutcome, CommandError> {
     blocking(move || {
         let state = app.state::<Mutex<Session>>();
-        save_in(
+        let outcome = save_in(
             &state,
             Path::new(&root),
             page,
             seq,
             Instant::now(),
-            |root, page| save_last_read_page(root, page).map(|_| ()),
-        )
+            |r, p| save_last_read_page(r, p).map(|_| ()),
+        )?;
+        if outcome == SaveOutcome::Pending {
+            schedule_flush(&app, &root);
+        }
+        Ok(outcome)
+    })
+    .await
+}
+
+/// Write a held page once the debounce interval has passed, so a reader who stops on a page
+/// does not depend on the close flush. At most one is scheduled per book at a time.
+fn schedule_flush(app: &AppHandle, root: &str) {
+    let Ok(root) = canonical_key(Path::new(root)) else {
+        return;
+    };
+    if !lock(&app.state::<Mutex<Session>>()).claim_delayed_flush(&root) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(SAVE_INTERVAL);
+        flush_session(&app, Some(&root));
+    });
+}
+
+/// Write the book's held page now. Called when the reader closes the book.
+#[tauri::command]
+pub async fn close_book(app: AppHandle, root: String) -> Result<(), CommandError> {
+    blocking(move || {
+        let root = canonical_key(Path::new(&root))?;
+        flush_session(&app, Some(&root)).map_or(Ok(()), Err)
     })
     .await
 }

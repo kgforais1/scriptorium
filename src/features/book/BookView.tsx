@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { pageUrl, saveProgress } from "../../lib/api";
+import { closeBook, pageUrl, saveProgress } from "../../lib/api";
 import type { BookView as Book } from "../../lib/bookTypes";
 import { clampPage } from "../../lib/clamp";
 import { isTypingTarget } from "../../lib/dom";
@@ -88,7 +88,17 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
         <h1 className="book-title" title={book.title} ref={titleRef} tabIndex={-1}>
           {book.title}
         </h1>
-        <button type="button" className="button" onClick={onClose}>
+        <button
+          type="button"
+          className="button"
+          onClick={() => {
+            // Write the held page now. A failure is logged; the close flush on exit retries it.
+            closeBook(book.root).catch((err: unknown) =>
+              console.error(`could not save on close: ${toCommandError(err).message}`),
+            );
+            onClose();
+          }}
+        >
           Close book
         </button>
       </header>
