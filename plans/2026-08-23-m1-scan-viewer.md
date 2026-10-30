@@ -502,10 +502,14 @@ interface. The texture height respects both the display and a memory budget:
 
 ```
 texH = min(devicePixelHeight, 2048,
-           floor(sqrt(TEX_BUDGET / 12 / 4 / boxAspect)),
+           floor(sqrt(TEX_BUDGET * boxAspect / 64)),
            MAX_TEXTURE_SIZE, floor(MAX_TEXTURE_SIZE * boxAspect))
-TEX_BUDGET = 256 MB   (12 cached pages, 4 bytes per pixel, before mipmaps)
+TEX_BUDGET = 256 MB
 ```
+
+A texture is `texH / boxAspect` wide (`boxAspect` is height over width), so one page costs
+`4 * texH² / boxAspect` bytes, plus a third for mipmaps. Twelve cached pages within the budget
+give `texH² <= TEX_BUDGET * boxAspect / (12 * 4 * 4/3)`, which is the `/ 64` term.
 
 `EngineStats` reports the chosen height. After a resize or a DPR change, uploaded textures keep
 their size and new uploads use the new one. Keep the LRU of 12 around the open spread; the open
