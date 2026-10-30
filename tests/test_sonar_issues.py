@@ -201,6 +201,11 @@ class ReportNewTests(unittest.TestCase):
         twin = dict(old, key="k2")
         self.assertIn("No new issues", self._run((1, [old]), [fixed_some], 1))
         self.assertIn("ACTION REQUIRED", self._run((1, [old]), [old, twin], 2))
+        self.assertIn("ACTION REQUIRED", self._run((1, [old]), [twin], 1), "replaced, same total")
+
+    def test_truncated_scan_warns(self) -> None:
+        old = {"key": "k1"}
+        self.assertIn("only 1 of 5", self._run((5, [old]), [old], 5))
 
     def test_load_previous_refuses_bad_records(self) -> None:
         import json

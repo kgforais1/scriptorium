@@ -23,6 +23,9 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 - **Sonar backlog (33 local issues)** — 11 in the flipbook spike (`src/spike/flipbook/`) and
   22 in template hook and CI scripts (complexity, regexes, duplicated literals). See
   `tmp/sonar-latest-issues.md` after a scan.
+- **Grey+alpha JPEG 2000 fixture** — the transparency refusal test depends on macOS `sips`
+  writing two components. Generate a two-component JP2 in-test (or check in a tiny fixture)
+  so it runs on every OS. From CodeRabbit on PR #65.
 
 ## Icebox
 

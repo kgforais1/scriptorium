@@ -390,6 +390,40 @@ fn checksums_and_frames_are_verified() {
         Err(BookError::InvalidPackage { reason }) => assert!(reason.contains("frame"), "{reason}"),
         other => panic!("expected a frame-count error, got {other:?}"),
     }
+
+    // `format` must match the original too.
+    let book = create_book_from_folder(&src, &lib, &opts("format")).unwrap();
+    let mut meta = read_meta(&book);
+    meta.sources.as_mut().unwrap()[1].format = crate::book_format::SourceFormat::Gif;
+    write_meta(&book, &meta);
+    match load_book(&book) {
+        Err(BookError::InvalidPackage { reason }) => assert!(reason.contains("format"), "{reason}"),
+        other => panic!("expected a format error, got {other:?}"),
+    }
+
+    // An original with an unknown extension is refused rather than skipped.
+    let book = create_book_from_folder(&src, &lib, &opts("unknown")).unwrap();
+    std::fs::rename(
+        book.join("originals/0001.bmp"),
+        book.join("originals/0001.xyz"),
+    )
+    .unwrap();
+    let mut meta = read_meta(&book);
+    meta.sources.as_mut().unwrap()[1].file = "originals/0001.xyz".into();
+    write_meta(&book, &meta);
+    match load_book(&book) {
+        Err(BookError::InvalidPackage { reason }) => {
+            assert!(reason.contains("cannot be read"), "{reason}")
+        }
+        other => panic!("expected an unreadable original, got {other:?}"),
+    }
+
+    // A PDF original is checked by checksum only until M1.5.
+    let book = create_book_from_folder(&src, &lib, &opts("pdf")).unwrap();
+    let mut meta = read_meta(&book);
+    meta.sources.as_mut().unwrap()[1].format = crate::book_format::SourceFormat::Pdf;
+    write_meta(&book, &meta);
+    assert!(load_book(&book).is_ok());
 }
 
 #[cfg(unix)]

@@ -202,7 +202,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # Read the last scan before this one's dumps can overwrite it.
     previous = load_previous(TMP / "sonar-state.json")
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
+    # Microseconds keep two scans in one second from sharing, or overwriting, a dump.
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S%fZ")
     dump_dir = TMP / "sonar-issues"
     dump_dir.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(issues, indent=1)
@@ -270,6 +271,11 @@ def load_previous(state_path: Path) -> tuple[int, list[dict]] | None:
 
 def report_new(previous: tuple[int, list[dict]] | None, issues: list[dict], total: int) -> None:
     """Tell the agent to fix issues this change introduced, not just note the count."""
+    if total > len(issues):
+        print(
+            f"WARNING: only {len(issues)} of {total} issues were fetched, so new issues"
+            " past that point are not listed."
+        )
     if previous is None:
         print("No complete earlier scan to compare against; review tmp/sonar-latest-issues.md.")
         return

@@ -141,6 +141,8 @@ Known limits, each `UnreadableFile` unless noted:
   rejected, and so are images with transparency (2 components, or 4 in sRGB), because the
   display copy is a JPEG.
 - `meta.json` over 64 MB is refused before it is read.
+- An original recorded as `pdf` is checked by checksum only, because ingest cannot decode PDF
+  before M1.5. Any original can skip the format and frame checks by claiming `pdf` until then.
 - Loading refuses a `meta.json`, page, or original that is itself a symlink
   (`InvalidPackage`). Only the last path component is checked, so a linked `pages/`
   directory, a hard link, or a Windows junction that stays inside the package is still

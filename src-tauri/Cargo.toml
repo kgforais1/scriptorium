@@ -31,3 +31,6 @@ zune-jpeg = "0.5"
 zune-core = "0.5"
 sha2 = "0.11.1"
 fs4 = "1.1.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

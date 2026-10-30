@@ -3276,6 +3276,7 @@ dependencies = [
  "jpeg2k",
  "jsonschema",
  "lcms2",
+ "libc",
  "serde",
  "serde_json",
  "sha2 0.11.1",

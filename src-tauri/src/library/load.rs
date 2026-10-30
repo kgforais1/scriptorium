@@ -5,7 +5,9 @@
 //! path stays inside the package (A12), and the bytes match their size and sha256 (A10).
 
 use super::{io_error, sha256_file, BookError};
-use crate::book_format::{BookMeta, BookMetaError, CURRENT_FORMAT_VERSION, MIN_FORMAT_VERSION};
+use crate::book_format::{
+    BookMeta, BookMetaError, SourceFormat, CURRENT_FORMAT_VERSION, MIN_FORMAT_VERSION,
+};
 use crate::ingest::convert;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -48,15 +50,12 @@ pub(crate) fn read_meta_text(meta_path: &Path) -> Result<String, BookError> {
     }
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
-    // Open nonblocking, so a FIFO named meta.json cannot hang the open.
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    // Open nonblocking, so a FIFO named meta.json cannot hang the open, and without
+    // following a link swapped in after the check above.
+    #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        #[cfg(target_os = "macos")]
-        const O_NONBLOCK: i32 = 0x4;
-        #[cfg(target_os = "linux")]
-        const O_NONBLOCK: i32 = 0o4000;
-        options.custom_flags(O_NONBLOCK);
+        options.custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW);
     }
     let file = options.open(meta_path).map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => invalid("meta.json is missing"),
@@ -174,6 +173,14 @@ fn verify_file(root: &Path, rel: &str, size: u64, sha256: &str) -> Result<PathBu
     Ok(path)
 }
 
+/// The format's name as `meta.json` spells it.
+fn format_name(format: SourceFormat) -> String {
+    serde_json::to_value(format)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
 /// Open and fully verify the book package at `dir`.
 pub fn load_book(dir: &Path) -> Result<LoadedBook, BookError> {
     let root = dir.canonicalize().map_err(|e| io_error(dir, &e))?;
@@ -191,14 +198,22 @@ pub fn load_book(dir: &Path) -> Result<LoadedBook, BookError> {
     }
     for src in meta.sources.iter().flatten() {
         let path = verify_file(&root, &src.file, src.byte_size, &src.sha256)?;
-        // `frames` must match what the file itself reports. Formats ingest cannot decode yet
-        // (PDF before M1.5) are checked by checksum only.
-        if convert::InputKind::from_path(&path).is_none() {
+        // `format` and `frames` must match the file itself. PDF, which ingest cannot decode
+        // before M1.5, is checked by checksum only.
+        if src.format == SourceFormat::Pdf {
             continue;
         }
-        let found = convert::inspect(&path)
-            .map_err(|e| invalid(format!("original {} cannot be read: {e}", src.file)))?
-            .frames;
+        let info = convert::inspect(&path)
+            .map_err(|e| invalid(format!("original {} cannot be read: {e}", src.file)))?;
+        if info.kind.source_format() != src.format {
+            return Err(invalid(format!(
+                "original {} records format {} but is {}",
+                src.file,
+                format_name(src.format),
+                format_name(info.kind.source_format())
+            )));
+        }
+        let found = info.frames;
         if found != src.frames {
             return Err(invalid(format!(
                 "original {} records {} frame(s) but has {found}",
