@@ -88,13 +88,13 @@ repos:
         entry: pnpm exec eslint
         language: system
         files: '\.(ts|tsx)$'
-        exclude: '^src-tauri/'
+        exclude: '^src-tauri/|\.d\.ts$'
         pass_filenames: true
         description: "ESLint on staged TypeScript (eslint.config.js: complexity 15, doc comments). Also runs in CI."
 
       - id: tsc
         name: "types: tsc"
-        entry: pnpm exec tsc --noEmit
+        entry: pnpm typecheck
         language: system
         files: '\.(ts|tsx)$'
         exclude: '^src-tauri/'

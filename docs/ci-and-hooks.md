@@ -16,7 +16,7 @@ Last reviewed: 2026-10-30
 | **Doc comments** | ✅ `ts: eslint` (`jsdoc/require-jsdoc`, exports only) | — | ✅ same, plus `missing_docs` in `Rust (src-tauri)` | — |
 | **Type check (Python)** | — | ✅ basedpyright | ✅ basedpyright | — |
 | **Rust fmt / clippy / test** | — | — | ✅ required from **M0** once `src-tauri/` exists | — |
-| **Type check (TypeScript)** | ✅ `types: tsc` on `.ts`/`.tsx` changes | — | ✅ `pnpm exec tsc --noEmit` | — |
+| **Type check (TypeScript)** | ✅ `types: tsc` on `.ts`/`.tsx` changes | — | ✅ `pnpm typecheck` (app and config files) | — |
 | **Audit (pnpm + cargo)** | — | — | ✅ required (`Dependency audit`; informational findings pass, audit and tooling failures fail closed) | ✅ weekly re-run (`Dependency audit (weekly)`) |
 | **Tests + coverage** | — | — | ✅ pytest-cov (report; gate later) | — |
 | **Tests + coverage (TypeScript)** | — | — | ✅ `pnpm test:coverage` (Vitest; lines ≥ 80 on `src/lib/**`) | — |
@@ -49,7 +49,7 @@ After the first green `CI` run, set default-branch ruleset required checks to:
 - `SAST — Semgrep` (from Security workflow)
 - `Rust (src-tauri)` — **required from M0** once `src-tauri/` exists (`cargo fmt` / `clippy` / `test` / `check`; exact job name must match `ci.yml`)
 - `Rust (windows-latest)` and `Rust (macos-latest)` — the `rust-cross` matrix (`clippy --all-targets`, `test`). Not required yet; make them required once they have been green on a few PRs
-- `Type check (TypeScript)` — `pnpm install` + `tsc --noEmit`
+- `Type check (TypeScript)` — `pnpm install` + `pnpm typecheck` (app and config files)
 - `Lint & test (TypeScript)` — `pnpm install` + `pnpm lint` (ESLint) + `pnpm test:coverage` (Vitest, lines ≥ 80 on `src/lib/**`)
 - `Dependency audit` — `pnpm audit --prod` + `cargo audit` (uses `src-tauri/.cargo/audit.toml`). Informational findings pass. The job fails closed on a vulnerability and when the audit did not complete: an advisory-database fetch failure, a command error, or exhausted registry retries.
 - `CodeQL` — GitHub **default setup** (`dynamic/github-code-scanning/codeql`). Already required by the branch ruleset as code scanning (alert threshold errors; security alerts high or higher), not a status-check context and not a workflow file

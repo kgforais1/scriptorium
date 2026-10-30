@@ -130,16 +130,16 @@ Rule lives in [`policies/agent-tooling-contract.md`](policies/agent-tooling-cont
 | Agent tooling: one tool per role, `.agent-state/` untracked, smoke tests | [`policies/agent-tooling-contract.md`](policies/agent-tooling-contract.md) (rule), [`inventory/agent-tooling-efficiency.md`](inventory/agent-tooling-efficiency.md) (menu) |
 | Tool-catalog staleness (dead links, renamed projects) | [`ci/scripts/check_doc_links.py`](ci/scripts/check_doc_links.py), [`policies/doc-freshness.md`](policies/doc-freshness.md) |
 
-**Code rules (enforced by lint):**
-
-- Every public Rust item and every exported TypeScript function or class gets a doc comment. It says what the item does, not how.
-- Lints enforce this: `missing_docs` for the Rust lib crate and `jsdoc/require-jsdoc` (exports only) in ESLint.
-- The complexity limit is 15 in all three languages: ruff `C901`, ESLint `complexity`, and clippy `cognitive_complexity`.
-- Split a function that goes over the limit. Do not raise the limit or add a blanket suppression.
-
 **Notes_and_Ideas vs this template:** personal research dumps, private key dashboards, and
 exploratory idea notes belong in a Notes_and_Ideas (or similar) repo. Index only durable,
 reusable menus and conventions here.
+
+## Code rules (enforced by lint)
+
+- Every public Rust item and every exported TypeScript function or class gets a doc comment. It says what the item does, not how.
+- Lints enforce this: `missing_docs` for the Rust lib crate and `jsdoc/require-jsdoc` (exports only) in ESLint.
+- The complexity limit is 15: cyclomatic in ruff (`C901`) and ESLint (`complexity`), cognitive in clippy (`cognitive_complexity`).
+- Split a function that goes over the limit. Do not raise the limit or add a blanket suppression. The one existing exemption is `ci/scripts/check_gha_usage.py` in `ruff.toml`, and the dev-only flipbook spike in `eslint.config.js` until Phase 3 rewrites it.
 
 ## Agent compatibility
 

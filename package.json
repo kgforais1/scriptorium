@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },

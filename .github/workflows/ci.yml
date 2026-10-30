@@ -281,8 +281,8 @@ jobs:
       - name: pnpm install
         run: pnpm install --frozen-lockfile
 
-      - name: tsc --noEmit
-        run: pnpm exec tsc --noEmit
+      - name: tsc --noEmit (app and config files)
+        run: pnpm typecheck
 
   lint-test-ts:
     name: Lint & test (TypeScript)
