@@ -5,6 +5,7 @@ import { clampPage } from "../../lib/clamp";
 import { isTypingTarget } from "../../lib/dom";
 import { toCommandError } from "../../lib/errors";
 import { pageAlt, pageLabel } from "../../lib/format";
+import { saveResultGate } from "../../lib/saveResult";
 import { stepPage } from "../../lib/paging";
 import "./book.css";
 
@@ -32,8 +33,8 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
   // A failed progress save is shown in the page bar, not a dialog, so a read-only book
   // stays readable.
   const [saveError, setSaveError] = useState<string | null>(null);
-  const saveCalls = useRef(0);
-  const shownCall = useRef(0);
+  // Pending results never go through the gate, so they cannot hide an earlier failure.
+  const [gate] = useState(saveResultGate);
 
   function goTo(next: number) {
     if (next === page) {
@@ -42,23 +43,16 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
     setPage(next);
     // Each save is numbered, so Rust drops one that arrives after a newer page.
     // Saves can overlap, so only a result newer than the last one shown may change the note.
-    const call = ++saveCalls.current;
-    const isLatest = () => {
-      if (call < shownCall.current) {
-        return false;
-      }
-      shownCall.current = call;
-      return true;
-    };
+    const call = gate.next();
     saveProgress(book.root, next).then(
       (outcome) => {
         // Only a real write clears the warning; a held page says nothing about the disk.
-        if (outcome === "saved" && isLatest()) {
+        if (outcome === "saved" && gate.accept(call)) {
           setSaveError(null);
         }
       },
       (err: unknown) => {
-        if (isLatest()) {
+        if (gate.accept(call)) {
           setSaveError(toCommandError(err).message);
         }
       },

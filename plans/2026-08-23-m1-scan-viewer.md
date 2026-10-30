@@ -436,8 +436,9 @@ because only a real webview shows whether page paths load there.
 
 Known limits after Phase 2:
 
-- Each page is admitted to the asset scope one file at a time. That costs well under a second
-  even at the 100,000-page format cap, and each image request scans the admitted list.
+- Each page is admitted to the asset scope one file at a time. That costs about a second at
+  the 100,000-page format cap and is negligible for real books. Each image request scans the
+  admitted list.
 - Opened books stay in the session and the asset scope until the app quits. **Close book**
   revokes nothing. Revisit when the bookshelf (M5) opens many books in one run.
 - A book whose progress cannot be saved (for example, on a read-only volume) shows a note in

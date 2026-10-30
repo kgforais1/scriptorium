@@ -28,7 +28,8 @@ pub struct BookView {
     /// Zero-based page to open on.
     pub last_read_page: u32,
     /// The highest save number Rust has for this book. The webview numbers its next save
-    /// above it, so a reloaded webview's saves are never mistaken for stale ones.
+    /// above it, so a reloaded webview's saves are never mistaken for stale ones. `book_view`
+    /// leaves it 0; `open_and_register` fills it in after `register`.
     pub save_seq: u64,
     /// Every page in reading order.
     pub pages: Vec<PageView>,
