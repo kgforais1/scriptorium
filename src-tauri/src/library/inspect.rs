@@ -1,6 +1,6 @@
 //! Looking at a folder the user picked: an existing book, or a folder of scans to import.
 
-use super::create::{inspect_all, ordered_inputs};
+use super::create::{inspect_all, ordered_inputs, total_frames};
 use super::load::load_book;
 use super::slug::suggest_book_id;
 use super::BookError;
@@ -66,7 +66,7 @@ pub fn inspect_folder(path: &Path, library: &Path) -> Result<FolderInfo, BookErr
     let name = folder_name(path);
     Ok(FolderInfo::Scans {
         files: opened.len(),
-        frames: opened.iter().map(|(_, info)| info.frames).sum(),
+        frames: total_frames(&opened),
         estimated_bytes,
         suggested_id: suggest_book_id(&name, library),
         suggested_title: name,

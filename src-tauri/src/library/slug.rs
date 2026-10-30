@@ -1,12 +1,14 @@
 //! Suggesting a book id from a folder name.
 
-use super::create::id_taken;
 use crate::book_format::validate_book_id;
+use std::collections::HashSet;
 use std::path::Path;
 
 /// Longest slug before a suffix. `validate_book_id` allows 64; this leaves room for `-book`
-/// or a collision counter such as `-12345`.
+/// (53 at most) plus a collision counter up to `-4294967295` (64). The loop in
+/// `suggest_book_id` terminates only while that sum stays within 64.
 const MAX_BASE_LEN: usize = 48;
+const _: () = assert!(MAX_BASE_LEN + "-book".len() + "-4294967295".len() <= 64);
 
 /// Id used when the folder name has no ASCII letters or digits.
 const FALLBACK_ID: &str = "book";
@@ -23,7 +25,7 @@ fn slugify(name: &str) -> String {
         }
     }
     out.truncate(MAX_BASE_LEN);
-    out.trim_matches(|c| matches!(c, '-' | '.')).to_string()
+    out.trim_matches('-').to_string()
 }
 
 /// The slug of `name`, adjusted so that it passes `validate_book_id` (empty names and
@@ -46,9 +48,17 @@ fn base_id(name: &str) -> String {
 /// because create reports that failure itself.
 pub fn suggest_book_id(folder_name: &str, library: &Path) -> String {
     let base = base_id(folder_name);
+    let taken: HashSet<String> = std::fs::read_dir(library)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().to_lowercase())
+                .collect()
+        })
+        .unwrap_or_default();
     let mut candidate = base.clone();
     let mut n = 2u32;
-    while validate_book_id(&candidate).is_err() || id_taken(library, &candidate).unwrap_or(false) {
+    while validate_book_id(&candidate).is_err() || taken.contains(&candidate.to_lowercase()) {
         candidate = format!("{base}-{n}");
         n += 1;
     }

@@ -186,6 +186,12 @@ pub(crate) fn estimate_bytes(size: u64, info: &Inspection) -> u64 {
     size.saturating_add(frames.saturating_mul((size / frames).max(DISPLAY_FRAME_ESTIMATE)))
 }
 
+/// The number of pages `opened` produces: one per frame. Create's progress total and
+/// `inspect_folder`'s `frames` both use this.
+pub(super) fn total_frames(opened: &[(&Path, Inspection)]) -> u32 {
+    opened.iter().map(|(_, info)| info.frames).sum()
+}
+
 /// Each input path with its inspection, in page order.
 pub(super) type Inspected<'a> = Vec<(&'a Path, Inspection)>;
 
@@ -246,7 +252,7 @@ impl Builder {
         }
         let builder = Self {
             tmp,
-            page_count: opened.iter().map(|(_, i)| i.frames as usize).sum(),
+            page_count: total_frames(opened) as usize,
             originals_count: opened.iter().filter(|(_, i)| i.needs_conversion).count(),
             pages: Vec::new(),
             sources: Vec::new(),
