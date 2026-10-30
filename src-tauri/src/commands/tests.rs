@@ -57,7 +57,8 @@ fn view_of(root: &Path) -> BookView {
 fn book_view_paths_are_absolute_canonical_and_under_pages() {
     let (_fx, root) = Fixture::new("view");
     let view = view_of(&root);
-    let canonical_root = root.canonicalize().unwrap();
+    // The view drops Windows' verbatim prefix; elsewhere `simplified` changes nothing.
+    let canonical_root = dunce::simplified(&root.canonicalize().unwrap()).to_path_buf();
     assert_eq!(view.root, canonical_root.to_str().unwrap());
     assert_eq!((view.id.as_str(), view.title.as_str()), ("bk", "A Book"));
     assert_eq!(view.last_read_page, 0);
@@ -67,7 +68,7 @@ fn book_view_paths_are_absolute_canonical_and_under_pages() {
         let path = Path::new(&page.path);
         assert!(path.is_absolute(), "{path:?}");
         assert!(path.starts_with(&pages_dir), "{path:?}");
-        assert_eq!(path.canonicalize().unwrap(), path);
+        assert_eq!(dunce::simplified(&path.canonicalize().unwrap()), path);
         assert_eq!((page.width, page.height), (w, h));
     }
 }
