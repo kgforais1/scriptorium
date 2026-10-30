@@ -131,3 +131,37 @@ fn save_outcome_matches_the_ts_type() {
         "pending"
     );
 }
+
+#[test]
+fn save_progress_path_records_writes_and_drops_stale_pages() {
+    use super::{save_in, SaveOutcome};
+    use std::sync::Mutex;
+    let (_fx, root) = Fixture::new("save-in");
+    let t0 = Instant::now();
+    let session = Mutex::new(Session::new(SAVE_INTERVAL));
+    session
+        .lock()
+        .unwrap()
+        .register(canonical_key(&root).unwrap(), 0, 3, t0);
+    let write = |r: &Path, p: u32| save_last_read_page(r, p).map(|_| ());
+    // Inside the debounce window the page is held; after it, the newest page is written.
+    assert_eq!(
+        save_in(&session, &root, 1, 1, t0, write),
+        Ok(SaveOutcome::Pending)
+    );
+    let later = t0 + SAVE_INTERVAL;
+    assert_eq!(
+        save_in(&session, &root, 2, 3, later, write),
+        Ok(SaveOutcome::Saved)
+    );
+    assert_eq!(view_of(&root).last_read_page, 2);
+    // A save numbered before the one just written arrives late and is ignored.
+    let late = later + SAVE_INTERVAL;
+    assert_eq!(
+        save_in(&session, &root, 0, 2, late, write),
+        Ok(SaveOutcome::Pending)
+    );
+    assert_eq!(view_of(&root).last_read_page, 2);
+    // A page past the end is refused.
+    assert!(save_in(&session, &root, 3, 4, late, write).is_err());
+}

@@ -51,7 +51,11 @@ describe("commands", () => {
   it("saveProgress sends { root, page }", async () => {
     invoke.mockResolvedValue("saved");
     await expect(saveProgress("/r", 4)).resolves.toBe("saved");
-    expect(invoke).toHaveBeenCalledWith("save_progress", { root: "/r", page: 4 });
+    const first = invoke.mock.calls[invoke.mock.calls.length - 1][1] as { seq: number };
+    expect(invoke).toHaveBeenCalledWith("save_progress", { root: "/r", page: 4, seq: first.seq });
+    await saveProgress("/r", 5);
+    const second = invoke.mock.calls[invoke.mock.calls.length - 1][1] as { seq: number };
+    expect(second.seq).toBeGreaterThan(first.seq);
   });
 
   it("lastBook sends no arguments and may return null", async () => {

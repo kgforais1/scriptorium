@@ -91,9 +91,7 @@
       },
       "assetProtocol": {
         "enable": true,
-        "scope": [
-          "$APPDATA/books/*/pages/**"
-        ]
+        "scope": []
       }
     }
   },

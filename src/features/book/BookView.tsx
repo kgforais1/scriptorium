@@ -3,7 +3,6 @@ import { pageUrl, saveProgress } from "../../lib/api";
 import type { BookView as Book } from "../../lib/bookTypes";
 import { clampPage } from "../../lib/clamp";
 import { isTypingTarget } from "../../lib/dom";
-import { latestOnly } from "../../lib/latest";
 import { toCommandError } from "../../lib/errors";
 import { pageAlt, pageLabel } from "../../lib/format";
 import { stepPage } from "../../lib/paging";
@@ -33,28 +32,22 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
   // A failed progress save is shown in the page bar, not a dialog, so a read-only book
   // stays readable.
   const [saveError, setSaveError] = useState<string | null>(null);
-  // One save in flight per book, newest page last, so a slow earlier save can never land
-  // after a later one and overwrite it.
-  const [pushSave] = useState(() =>
-    latestOnly<number>((next) =>
-      saveProgress(book.root, next).then(
-        (outcome) => {
-          // Only a real write clears the warning; a held page says nothing about the disk.
-          if (outcome === "saved") {
-            setSaveError(null);
-          }
-        },
-        (err: unknown) => setSaveError(toCommandError(err).message),
-      ),
-    ),
-  );
 
   function goTo(next: number) {
     if (next === page) {
       return;
     }
     setPage(next);
-    pushSave(next);
+    // Each save is numbered, so Rust drops one that arrives after a newer page.
+    saveProgress(book.root, next).then(
+      (outcome) => {
+        // Only a real write clears the warning; a held page says nothing about the disk.
+        if (outcome === "saved") {
+          setSaveError(null);
+        }
+      },
+      (err: unknown) => setSaveError(toCommandError(err).message),
+    );
   }
 
   // Re-registered on each render, so the handler always sees the current page.

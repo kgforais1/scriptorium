@@ -1,5 +1,6 @@
 //! Suggesting a book id from a folder name.
 
+use super::{io_error, BookError};
 use crate::book_format::validate_book_id;
 use std::collections::HashSet;
 use std::path::Path;
@@ -44,25 +45,29 @@ fn base_id(name: &str) -> String {
 /// A valid book id for `folder_name` that no entry in `library` already uses.
 ///
 /// The result always passes `validate_book_id`. A taken id (matched case-insensitively, as
-/// create does) gets `-2`, `-3`, and so on. A library that cannot be read counts as empty,
-/// because create reports that failure itself.
-pub fn suggest_book_id(folder_name: &str, library: &Path) -> String {
+/// create does) gets `-2`, `-3`, and so on. A library that does not exist yet counts as
+/// empty. Any other read error is returned, as create would return it, so an entry that
+/// could not be read is never mistaken for a free id.
+pub fn suggest_book_id(folder_name: &str, library: &Path) -> Result<String, BookError> {
     let base = base_id(folder_name);
-    let taken: HashSet<String> = std::fs::read_dir(library)
-        .map(|entries| {
-            entries
-                .flatten()
-                .map(|e| e.file_name().to_string_lossy().to_lowercase())
-                .collect()
-        })
-        .unwrap_or_default();
+    let mut taken = HashSet::new();
+    match std::fs::read_dir(library) {
+        Ok(entries) => {
+            for entry in entries {
+                let entry = entry.map_err(|e| io_error(library, &e))?;
+                taken.insert(entry.file_name().to_string_lossy().to_lowercase());
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(io_error(library, &e)),
+    }
     let mut candidate = base.clone();
     let mut n = 2u32;
     while validate_book_id(&candidate).is_err() || taken.contains(&candidate.to_lowercase()) {
         candidate = format!("{base}-{n}");
         n += 1;
     }
-    candidate
+    Ok(candidate)
 }
 
 #[cfg(test)]
@@ -106,7 +111,7 @@ mod tests {
             "日本語",
             "COM9",
         ] {
-            let id = suggest_book_id(bad, &lib);
+            let id = suggest_book_id(bad, &lib).unwrap();
             assert!(validate_book_id(&id).is_ok(), "{bad:?} -> {id:?}");
         }
     }
@@ -123,42 +128,45 @@ mod tests {
             "v1.2",
             "x".repeat(64).as_str(),
         ] {
-            let id = suggest_book_id(ok, &lib);
+            let id = suggest_book_id(ok, &lib).unwrap();
             assert!(validate_book_id(&id).is_ok(), "{ok:?} -> {id:?}");
         }
-        assert_eq!(suggest_book_id("my-book", &lib), "my-book");
+        assert_eq!(suggest_book_id("my-book", &lib).unwrap(), "my-book");
     }
 
     #[test]
     fn slug_rules() {
         let (_t, lib) = empty_lib("slug-rules");
-        assert_eq!(suggest_book_id("日本語", &lib), "book");
-        assert_eq!(suggest_book_id("--Foo  Bar..", &lib), "foo-bar");
-        assert_eq!(suggest_book_id("Moby_Dick (1851)", &lib), "moby-dick-1851");
-        assert_eq!(suggest_book_id("", &lib), "book");
-        assert_eq!(suggest_book_id("Café Ünï", &lib), "caf-n");
+        assert_eq!(suggest_book_id("日本語", &lib).unwrap(), "book");
+        assert_eq!(suggest_book_id("--Foo  Bar..", &lib).unwrap(), "foo-bar");
+        assert_eq!(
+            suggest_book_id("Moby_Dick (1851)", &lib).unwrap(),
+            "moby-dick-1851"
+        );
+        assert_eq!(suggest_book_id("", &lib).unwrap(), "book");
+        assert_eq!(suggest_book_id("Café Ünï", &lib).unwrap(), "caf-n");
     }
 
     #[test]
     fn windows_reserved_names_get_a_suffix() {
         let (_t, lib) = empty_lib("slug-reserved");
         for name in ["CON", "nul", "com1", "LPT9", "con.txt"] {
-            let id = suggest_book_id(name, &lib);
+            let id = suggest_book_id(name, &lib).unwrap();
             assert!(validate_book_id(&id).is_ok(), "{name:?} -> {id:?}");
             assert_ne!(id, name.to_lowercase());
         }
-        assert_eq!(suggest_book_id("CON", &lib), "con-book");
+        assert_eq!(suggest_book_id("CON", &lib).unwrap(), "con-book");
     }
 
     #[test]
     fn long_names_are_truncated_and_stay_valid() {
         let (_t, lib) = empty_lib("slug-long");
         let long = "a".repeat(200);
-        let id = suggest_book_id(&long, &lib);
+        let id = suggest_book_id(&long, &lib).unwrap();
         assert!(validate_book_id(&id).is_ok(), "{id:?}");
         assert_eq!(id.len(), MAX_BASE_LEN);
         std::fs::create_dir(lib.join(&id)).unwrap();
-        let next = suggest_book_id(&long, &lib);
+        let next = suggest_book_id(&long, &lib).unwrap();
         assert!(validate_book_id(&next).is_ok(), "{next:?}");
         assert_eq!(next, format!("{id}-2"));
     }
@@ -167,7 +175,7 @@ mod tests {
     fn truncation_does_not_leave_a_trailing_separator() {
         let (_t, lib) = empty_lib("slug-trunc");
         let name = format!("{}  tail", "a".repeat(MAX_BASE_LEN - 1));
-        let id = suggest_book_id(&name, &lib);
+        let id = suggest_book_id(&name, &lib).unwrap();
         assert!(validate_book_id(&id).is_ok(), "{id:?}");
         assert!(!id.ends_with('-'), "{id:?}");
     }
@@ -175,17 +183,17 @@ mod tests {
     #[test]
     fn collisions_count_up_and_ignore_case() {
         let (_t, lib) = empty_lib("slug-collide");
-        assert_eq!(suggest_book_id("Foo", &lib), "foo");
+        assert_eq!(suggest_book_id("Foo", &lib).unwrap(), "foo");
         std::fs::create_dir(lib.join("foo")).unwrap();
-        assert_eq!(suggest_book_id("Foo", &lib), "foo-2");
+        assert_eq!(suggest_book_id("Foo", &lib).unwrap(), "foo-2");
         std::fs::create_dir(lib.join("FOO-2")).unwrap();
-        assert_eq!(suggest_book_id("Foo", &lib), "foo-3");
+        assert_eq!(suggest_book_id("Foo", &lib).unwrap(), "foo-3");
     }
 
     #[test]
     fn a_missing_library_counts_as_empty() {
         let (_t, lib) = empty_lib("slug-missing");
-        assert_eq!(suggest_book_id("Foo", &lib.join("nope")), "foo");
+        assert_eq!(suggest_book_id("Foo", &lib.join("nope")).unwrap(), "foo");
     }
 
     #[test]
@@ -232,7 +240,7 @@ mod tests {
             inputs.push(format!("con{}", ".".repeat(n)));
         }
         for name in &inputs {
-            let id = suggest_book_id(name, &lib);
+            let id = suggest_book_id(name, &lib).unwrap();
             assert!(validate_book_id(&id).is_ok(), "{name:?} -> {id:?}");
             assert!(!lib.join(&id).exists(), "{name:?} -> {id:?} is taken");
         }

@@ -32,6 +32,9 @@ struct Entry {
     /// True after a write failed, such as on a read-only volume. Page turns then retry only
     /// every [`RETRY_FACTOR`] intervals; the close flush always tries.
     write_failed: bool,
+    /// The highest sequence number recorded. A page sent earlier but arriving later carries a
+    /// lower number and is ignored, so it can never overwrite a newer page.
+    last_seq: u64,
 }
 
 /// Why [`Session::record`] refused a page.
@@ -91,11 +94,14 @@ impl Session {
     /// return the page to open on. A book already tracked with an unsaved page keeps that
     /// page, so a write that failed is retried on close rather than lost.
     pub fn register(&mut self, root: PathBuf, page: u32, page_count: u32, now: Instant) -> u32 {
+        // Keep the sequence across a reopen, so a late save from the old view stays stale.
+        let mut last_seq = 0;
         if let Some(entry) = self.books.get_mut(&root) {
             if entry.dirty && entry.page < page_count {
                 entry.page_count = page_count;
                 return entry.page;
             }
+            last_seq = entry.last_seq;
         }
         self.books.insert(
             root,
@@ -105,6 +111,7 @@ impl Session {
                 dirty: false,
                 last_write: now,
                 write_failed: false,
+                last_seq,
             },
         );
         page
@@ -112,8 +119,25 @@ impl Session {
 
     /// Remember that the reader is on `page` and mark the book dirty. Returns true when at
     /// least one interval has passed since the last write, so the caller should flush now.
+    #[cfg(test)]
     pub fn record(&mut self, root: &Path, page: u32, now: Instant) -> Result<bool, RecordError> {
+        let seq = self.books.get(root).map_or(0, |e| e.last_seq + 1);
+        self.record_seq(root, page, seq, now)
+    }
+
+    /// Like [`Session::record`], for a page the webview numbered `seq`. A `seq` no higher than
+    /// one already recorded is stale: it changes nothing and returns `Ok(false)`.
+    pub fn record_seq(
+        &mut self,
+        root: &Path,
+        page: u32,
+        seq: u64,
+        now: Instant,
+    ) -> Result<bool, RecordError> {
         let entry = self.books.get_mut(root).ok_or(RecordError::NotOpen)?;
+        if seq <= entry.last_seq && entry.last_seq > 0 {
+            return Ok(false);
+        }
         if page >= entry.page_count {
             return Err(RecordError::PageOutOfRange {
                 page,
@@ -122,6 +146,7 @@ impl Session {
         }
         entry.page = page;
         entry.dirty = true;
+        entry.last_seq = seq;
         let wait = if entry.write_failed {
             self.interval * RETRY_FACTOR
         } else {
@@ -235,6 +260,25 @@ mod tests {
             Ok(true),
             "a success clears the flag"
         );
+    }
+
+    #[test]
+    fn a_late_older_save_never_overwrites_a_newer_page() {
+        let t0 = Instant::now();
+        let mut s = session_with(&["/a"], t0);
+        let a = Path::new("/a");
+        assert_eq!(s.record_seq(a, 5, 2, t0), Ok(false));
+        assert_eq!(s.record_seq(a, 4, 1, t0 + SEC), Ok(false), "stale: ignored");
+        // A reopen keeps the sequence, so the old view's late save stays stale.
+        let mut log = Vec::new();
+        s.flush(None, t0 + SEC, ok_writer(&mut log));
+        assert_eq!(log, [(PathBuf::from("/a"), 5)]);
+        s.register(PathBuf::from("/a"), 5, 10, t0 + SEC);
+        assert_eq!(s.record_seq(a, 3, 2, t0 + SEC * 3), Ok(false));
+        assert_eq!(s.record_seq(a, 6, 3, t0 + SEC * 3), Ok(true));
+        let mut log = Vec::new();
+        s.flush(None, t0 + SEC * 3, ok_writer(&mut log));
+        assert_eq!(log, [(PathBuf::from("/a"), 6)]);
     }
 
     #[test]

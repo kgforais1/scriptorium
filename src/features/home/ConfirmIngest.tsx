@@ -90,7 +90,8 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Re
     setProgress(0);
     let unlisten: (() => void) | undefined;
     try {
-      unlisten = await onIngestProgress((tick) => setProgress(tick.done));
+      // Progress is a nicety: if the listener cannot attach, the import still runs.
+      unlisten = await onIngestProgress((tick) => setProgress(tick.done)).catch(() => undefined);
       onCreated(await createBook({ folder, title: title.trim(), id, rights, attribution }));
     } catch (err) {
       setProgress(null);

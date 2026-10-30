@@ -53,7 +53,14 @@ fn folder_name(path: &Path) -> String {
 /// listed exactly as create lists it, and `library` is used to pick a free id.
 pub fn inspect_folder(path: &Path, library: &Path) -> Result<FolderInfo, BookError> {
     // `symlink_metadata`, so a dangling or symlinked `meta.json` still goes to `load_book`.
-    if path.join("meta.json").symlink_metadata().is_ok() {
+    // Only a missing `meta.json` means scans; any other probe failure is reported.
+    let meta = path.join("meta.json");
+    let has_meta = match meta.symlink_metadata() {
+        Ok(_) => true,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(e) => return Err(super::io_error(&meta, &e)),
+    };
+    if has_meta {
         let book = load_book(path)?;
         return Ok(FolderInfo::Book {
             id: book.meta.id.clone(),
@@ -68,7 +75,7 @@ pub fn inspect_folder(path: &Path, library: &Path) -> Result<FolderInfo, BookErr
         files: opened.len(),
         frames: total_frames(&opened),
         estimated_bytes,
-        suggested_id: suggest_book_id(&name, library),
+        suggested_id: suggest_book_id(&name, library)?,
         suggested_title: name,
     })
 }

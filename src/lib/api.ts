@@ -54,6 +54,10 @@ export function openBook(path: string): Promise<BookView> {
   return call<BookView>("open_book", { path });
 }
 
+// Numbers every save in this run. Rust ignores a save numbered below one it already has, so a
+// slow older save can never overwrite a newer page, even across two views of one book.
+let saveSeq = 0;
+
 /**
  * Records the page the reader is on.
  *
@@ -63,7 +67,8 @@ export function openBook(path: string): Promise<BookView> {
  * later write. Rejects with a `CommandError` when a write fails.
  */
 export function saveProgress(root: string, page: number): Promise<SaveOutcome> {
-  return call<SaveOutcome>("save_progress", { root, page });
+  saveSeq += 1;
+  return call<SaveOutcome>("save_progress", { root, page, seq: saveSeq });
 }
 
 /**

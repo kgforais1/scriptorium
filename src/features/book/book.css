@@ -44,6 +44,7 @@
 }
 
 .save-error {
+  overflow-wrap: anywhere;
   font-size: 0.9rem;
   color: #8a3b12;
 }

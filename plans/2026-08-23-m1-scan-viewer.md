@@ -318,7 +318,7 @@ age at startup: another instance may be between creating its temp dir and lockin
 | `inspect_folder` | `path` | `{ kind: "book", id, title, pages }` when `meta.json` exists and `load_book` succeeds. A `meta.json` that fails to load returns its `BookError`; it never falls through to the scans branch. Otherwise `{ kind: "scans", files, frames, estimatedBytes, suggestedId, suggestedTitle }`. Folder errors (empty, no images, duplicate stems, unreadable file) come back as `CommandError` |
 | `create_book` | `folder`, `title`, `id`, `rights`, `attribution` | `BookView` (below). Emits `ingest-progress` `{ done, total }`, where `total` is the frame count, at most about 10 times a second plus a final `done == total`. The throttle lives at the emit site in `commands.rs`; the library calls back once per page. `inspect_folder`'s `frames` is the same total |
 | `open_book` | `path` | `BookView` |
-| `save_progress` | `root`, `page` | `"saved" \| "pending"`. Updates the session's in-memory page, and writes `meta.json` debounced (every ten seconds after a failed write). The UI clears its save warning only on `"saved"` |
+| `save_progress` | `root`, `page`, `seq` | `"saved" \| "pending"`. `seq` numbers each save in the run; Rust ignores one numbered below a save it already has, so a late older save never overwrites a newer page. Updates the session's in-memory page, and writes `meta.json` debounced (every ten seconds after a failed write). The UI clears its save warning only on `"saved"` |
 | `last_book` | — | `BookView` or `null`: the last opened book, from `app_data_dir()/state.json` |
 
 `BookView` is `{ id, title, root, lastReadPage, pages: [{ path, width, height }] }`. `path`
@@ -335,9 +335,9 @@ is the canonical absolute path from `LoadedBook::page_path`. TypeScript passes i
   existing three-argument function delegates to it with a no-op, so callers and tests stay
   unchanged.
 - Every successful open goes through one `open_and_register(root)` helper. It canonicalizes
-  the root, calls `load_book`, admits `root/pages` with `allow_directory(…, true)`,
-  plus `allow_file` for any verified page outside `pages/`, so a valid package that keeps
-  pages elsewhere still renders, and records the book
+  the root, calls `load_book`, admits exactly the verified page files with `allow_file`
+  (so an undeclared file in `pages/` stays unreachable, and a valid package that keeps pages
+  elsewhere still renders), and records the book
   in the session. `open_book`, `last_book`, and `create_book` all use it, so an outside package
   reopened at startup still shows its pages. `originals/` is never exposed to the webview.
 - The session is a `Mutex<HashMap<canonical root, { page, dirty }>>`, keyed by root, not by
@@ -368,7 +368,9 @@ the CSP only to bundled assets, so `pnpm tauri dev` never shows it. The check is
 `pnpm tauri build` run that opens a book. `devCsp` is the same policy with
 `script-src 'self' 'unsafe-inline'` (the React plugin's inline preamble) and
 `connect-src ws://localhost:1420 ws://localhost:1421` (HMR). The static
-`assetProtocol.scope` allows `$APPDATA/books/*/pages/**` only. Add `tauri-plugin-dialog`
+`assetProtocol.scope` is empty: every page is admitted at runtime, after `load_book` has
+verified it. `devCsp` lists only the localhost HMR origins; a `TAURI_DEV_HOST` device build
+would need its host added, and `devCsp` has no effect on desktop dev anyway. Add `tauri-plugin-dialog`
 (Rust `tauri_plugin_dialog::init()` and the `@tauri-apps/plugin-dialog` JS package) with only
 `dialog:allow-open` in the default capability. The webview gets no `fs` plugin, because all
 file access goes through the commands above.
@@ -387,15 +389,14 @@ CSS. No skin tokens are needed until Phase 3.
   at the ends, A5), and the current page as a padded `<img>` (`object-fit: contain`). A
   **Close book** button returns home.
 - On start, the app calls `last_book` and reopens that book at its saved page (A6).
-- Page changes go to `save_progress` through `latestOnly` (`src/lib/latest.ts`): one save in
-  flight per book, newest page last. Rust owns the debounce and the close flush. A turn still
-  queued when the app quits is lost, so the book can reopen one page back.
+- Every page change calls `save_progress` at once with a new `seq`. Rust drops stale saves,
+  owns the debounce, and flushes on close, so the newest page that reached Rust is saved.
 
 **Tests.** Rust unit tests cover the slug helper, `inspect_folder` both ways, the
 `CommandError` JSON shape, and the progress callback count. Add Vitest with tests for the
 pure TS helpers: the error-heading map, the slug check, and the page clamp and keyboard
-step, the length limits (`limits.ts`), and the one-in-flight save queue (`latest.ts`). Rust
-tests cover the debounced write and the flush of dirty pages.
+step, and the length limits (`limits.ts`). Rust tests cover the debounced write, the flush of
+dirty pages, stale-save ordering, and the `save_progress` path end to end.
 
 **Chunks.** Each chunk gets its own commit and a qoder review.
 
@@ -425,7 +426,7 @@ build opens a book and shows its pages.
 - [x] Chunk 2: library hooks and `inspect_folder` core
 - [x] Chunk 3: commands and app state
 - [x] Chunk 4: TS API and Vitest
-- [x] Chunk 5: UI (code done; the release-build gate is pending, below)
+- [ ] Chunk 5: UI (code done; the release-build gate below is still pending)
 - [x] Chunk 6: docs
 
 Manual verification (release build opens a book, A5–A7, A13) is pending and tracked in
