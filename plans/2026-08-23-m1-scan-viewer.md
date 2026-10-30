@@ -424,7 +424,8 @@ build opens a book and shows its pages.
 - [x] Chunk 5: UI (code done; the release-build gate is pending, below)
 - [x] Chunk 6: docs
 
-Manual verification (release build opens a book, A5–A7, A13) is pending: see
+Manual verification (release build opens a book, A5–A7, A13) is pending and tracked in
+`to_do.md`. It does not block merging Phase 2 or starting Phase 3. See
 [`docs/manual-test-m1.md`](../docs/manual-test-m1.md). It needs one run on Windows too,
 because only a real webview shows whether page paths load there.
 

@@ -20,6 +20,9 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Unplanned / small
 
+- **M1 manual smoke (non-blocking)** — run [`docs/manual-test-m1.md`](docs/manual-test-m1.md):
+  release build under the production CSP (A13), A5–A7, and one Windows release run. Does not
+  block merging Phase 2 PRs or starting Phase 3.
 - **Sonar backlog (33 local issues)** — 11 in the flipbook spike (`src/spike/flipbook/`) and
   22 in template hook and CI scripts (complexity, regexes, duplicated literals). See
   `tmp/sonar-latest-issues.md` after a scan.
