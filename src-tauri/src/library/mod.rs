@@ -3,14 +3,19 @@
 //! Every failure is a [`BookError`] from the M1 error taxonomy, each with a message a reader
 //! can act on. Nothing here panics on bad input or aborts the process (acceptance A3).
 
+pub mod command_error;
 pub mod create;
+pub mod inspect;
 pub mod load;
 pub mod progress;
+pub mod slug;
 pub mod sort;
 pub mod sweep;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_callback;
 
 use std::path::{Path, PathBuf};
 

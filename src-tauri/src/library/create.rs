@@ -30,7 +30,7 @@ pub struct CreateOptions {
 
 /// List the supported image files in `folder`. Hidden files and subfolders are skipped;
 /// a symbolic link is an error, because ingest copies real files only.
-fn list_inputs(folder: &Path) -> Result<Vec<PathBuf>, BookError> {
+pub(super) fn list_inputs(folder: &Path) -> Result<Vec<PathBuf>, BookError> {
     let entries = std::fs::read_dir(folder).map_err(|e| io_error(folder, &e))?;
     let mut any_file = false;
     let mut inputs = Vec::new();
@@ -70,7 +70,7 @@ fn list_inputs(folder: &Path) -> Result<Vec<PathBuf>, BookError> {
 
 /// Two inputs whose stems match case-insensitively (`1.jpg` and `1.JPG`, or `1.jpg` and
 /// `1.png`) are ambiguous page names.
-fn check_duplicate_stems(inputs: &[PathBuf]) -> Result<(), BookError> {
+pub(super) fn check_duplicate_stems(inputs: &[PathBuf]) -> Result<(), BookError> {
     let mut seen = std::collections::HashMap::new();
     for path in inputs {
         let stem = path
@@ -88,14 +88,22 @@ fn check_duplicate_stems(inputs: &[PathBuf]) -> Result<(), BookError> {
     Ok(())
 }
 
-/// Refuse an id that matches an existing entry in the library case-insensitively (A11).
-fn check_destination(library: &Path, id: &str) -> Result<(), BookError> {
+/// Whether `id` matches an existing entry in the library case-insensitively (A11).
+pub(super) fn id_taken(library: &Path, id: &str) -> Result<bool, BookError> {
     let folded = id.to_lowercase();
     for entry in std::fs::read_dir(library).map_err(|e| io_error(library, &e))? {
         let entry = entry.map_err(|e| io_error(library, &e))?;
         if entry.file_name().to_string_lossy().to_lowercase() == folded {
-            return Err(BookError::DestinationExists { id: id.to_string() });
+            return Ok(true);
         }
+    }
+    Ok(false)
+}
+
+/// Refuse an id that matches an existing entry in the library case-insensitively (A11).
+fn check_destination(library: &Path, id: &str) -> Result<(), BookError> {
+    if id_taken(library, id)? {
+        return Err(BookError::DestinationExists { id: id.to_string() });
     }
     Ok(())
 }
@@ -179,12 +187,12 @@ pub(crate) fn estimate_bytes(size: u64, info: &Inspection) -> u64 {
 }
 
 /// Each input path with its inspection, in page order.
-type Inspected<'a> = Vec<(&'a Path, Inspection)>;
+pub(super) type Inspected<'a> = Vec<(&'a Path, Inspection)>;
 
 /// Inspect every input before writing anything, so a bad file fails fast. Only the
 /// inspection is kept: each file is read again when its pages are written, so memory holds
 /// one input at a time, not the whole folder. Returns the inspections and a size estimate.
-fn inspect_all(inputs: &[PathBuf]) -> Result<(Inspected<'_>, u64), BookError> {
+pub(super) fn inspect_all(inputs: &[PathBuf]) -> Result<(Inspected<'_>, u64), BookError> {
     let mut opened = Vec::with_capacity(inputs.len());
     let mut estimated = 0u64;
     for path in inputs {
@@ -302,7 +310,12 @@ impl Builder {
     }
 
     /// Write every page of one input, plus its original when it was converted.
-    fn add_input(&mut self, path: &Path, info: &Inspection) -> Result<(), BookError> {
+    fn add_input(
+        &mut self,
+        path: &Path,
+        info: &Inspection,
+        on_frame: &mut impl FnMut(u32, u32),
+    ) -> Result<(), BookError> {
         let source = convert::open(path).map_err(|e| unreadable(path, e))?;
         if source.info != *info {
             return Err(BookError::UnreadableFile {
@@ -322,6 +335,7 @@ impl Builder {
                 frame: (info.frames > 1).then_some(frame),
             });
             self.add_page(&source, &display, page_source)?;
+            on_frame(self.pages.len() as u32, self.page_count as u32);
         }
         Ok(())
     }
@@ -376,11 +390,32 @@ fn commit(tmp: &Path, library: &Path, id: &str) -> Result<PathBuf, BookError> {
     Ok(dest)
 }
 
+/// The supported inputs of `folder` in page order: listed, checked for duplicate stems, and
+/// naturally sorted. Shared by create and `inspect_folder` so both see the same pages.
+pub(super) fn ordered_inputs(folder: &Path) -> Result<Vec<PathBuf>, BookError> {
+    let mut inputs = list_inputs(folder)?;
+    check_duplicate_stems(&inputs)?;
+    sort::sort_pages(&mut inputs);
+    Ok(inputs)
+}
+
 /// Build a new book in `library` from the images in `folder`. Returns the package path.
 pub fn create_book_from_folder(
     folder: &Path,
     library: &Path,
     opts: &CreateOptions,
+) -> Result<PathBuf, BookError> {
+    create_book_from_folder_with(folder, library, opts, |_, _| {})
+}
+
+/// Like [`create_book_from_folder`], and calls `on_frame(done, total)` once after each page
+/// is written. `total` is the page count across all inputs, so the last call has
+/// `done == total`.
+pub fn create_book_from_folder_with(
+    folder: &Path,
+    library: &Path,
+    opts: &CreateOptions,
+    mut on_frame: impl FnMut(u32, u32),
 ) -> Result<PathBuf, BookError> {
     validate_book_id(&opts.id).map_err(|e| BookError::InvalidPackage {
         reason: e.to_string(),
@@ -389,15 +424,13 @@ pub fn create_book_from_folder(
     sweep::sweep_orphans(library, sweep::ORPHAN_AGE);
     check_destination(library, &opts.id)?;
 
-    let mut inputs = list_inputs(folder)?;
-    check_duplicate_stems(&inputs)?;
-    sort::sort_pages(&mut inputs);
+    let inputs = ordered_inputs(folder)?;
     let (opened, estimated) = inspect_all(&inputs)?;
     check_space(library, estimated)?;
 
     let (mut builder, mut guard) = Builder::new(library, &opts.id, &opened)?;
     for (path, info) in &opened {
-        builder.add_input(path, info)?;
+        builder.add_input(path, info, &mut on_frame)?;
     }
     let tmp = builder.finish(opts)?;
     guard.unlock()?;

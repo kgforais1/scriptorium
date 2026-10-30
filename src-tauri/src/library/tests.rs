@@ -12,9 +12,9 @@ use image::{ImageBuffer, ImageEncoder, Rgb, RgbImage};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-struct Tmp(PathBuf);
+pub(super) struct Tmp(PathBuf);
 impl Tmp {
-    fn new(tag: &str) -> Self {
+    pub(super) fn new(tag: &str) -> Self {
         let p = std::env::temp_dir().join(format!(
             "scriptorium-lib-{tag}-{}-{}",
             std::process::id(),
@@ -26,7 +26,7 @@ impl Tmp {
         std::fs::create_dir_all(&p).unwrap();
         Self(p.canonicalize().unwrap())
     }
-    fn dir(&self, name: &str) -> PathBuf {
+    pub(super) fn dir(&self, name: &str) -> PathBuf {
         let p = self.0.join(name);
         std::fs::create_dir_all(&p).unwrap();
         p
@@ -87,7 +87,7 @@ fn tiff(frames: &[RgbImage]) -> Vec<u8> {
     out.into_inner()
 }
 
-fn opts(id: &str) -> CreateOptions {
+pub(super) fn opts(id: &str) -> CreateOptions {
     CreateOptions {
         id: id.into(),
         title: "Test Book".into(),
@@ -98,7 +98,7 @@ fn opts(id: &str) -> CreateOptions {
 
 /// `1.jpg`, `2.TIF` (three frames), `3.png`, `cover (front).bmp`, plus a stray text file. The
 /// uppercase extension and the spaced name must never reach the package.
-fn mixed_folder(t: &Tmp) -> PathBuf {
+pub(super) fn mixed_folder(t: &Tmp) -> PathBuf {
     let src = t.dir("src");
     std::fs::write(src.join("3.png"), png(&picture(30))).unwrap();
     std::fs::write(src.join("cover (front).bmp"), bmp(&picture(40))).unwrap();
