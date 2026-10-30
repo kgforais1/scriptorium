@@ -59,7 +59,8 @@ export function openBook(path: string): Promise<BookView> {
  *
  * @param root - The `root` of the open `BookView`.
  * @param page - The zero-based page.
- * @returns Nothing. Rejects with a `CommandError`.
+ * @returns `"saved"` when the page reached `meta.json`, `"pending"` while it is held for a
+ * later write. Rejects with a `CommandError` when a write fails.
  */
 export function saveProgress(root: string, page: number): Promise<SaveOutcome> {
   return call<SaveOutcome>("save_progress", { root, page });

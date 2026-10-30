@@ -221,7 +221,8 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
     if let Err(e) = written {
         // Never leave a half-written temp file behind.
         let _ = std::fs::remove_file(&tmp);
-        return Err(io_error(&tmp, &e));
+        // Name the file the user knows, not the temp file next to it.
+        return Err(io_error(path, &e));
     }
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);

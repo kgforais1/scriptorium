@@ -318,7 +318,7 @@ age at startup: another instance may be between creating its temp dir and lockin
 | `inspect_folder` | `path` | `{ kind: "book", id, title, pages }` when `meta.json` exists and `load_book` succeeds. A `meta.json` that fails to load returns its `BookError`; it never falls through to the scans branch. Otherwise `{ kind: "scans", files, frames, estimatedBytes, suggestedId, suggestedTitle }`. Folder errors (empty, no images, duplicate stems, unreadable file) come back as `CommandError` |
 | `create_book` | `folder`, `title`, `id`, `rights`, `attribution` | `BookView` (below). Emits `ingest-progress` `{ done, total }`, where `total` is the frame count, at most about 10 times a second plus a final `done == total`. The throttle lives at the emit site in `commands.rs`; the library calls back once per page. `inspect_folder`'s `frames` is the same total |
 | `open_book` | `path` | `BookView` |
-| `save_progress` | `root`, `page` | `()`. Updates the session's in-memory page, and writes `meta.json` debounced |
+| `save_progress` | `root`, `page` | `"saved" \| "pending"`. Updates the session's in-memory page, and writes `meta.json` debounced (every ten seconds after a failed write). The UI clears its save warning only on `"saved"` |
 | `last_book` | — | `BookView` or `null`: the last opened book, from `app_data_dir()/state.json` |
 
 `BookView` is `{ id, title, root, lastReadPage, pages: [{ path, width, height }] }`. `path`
