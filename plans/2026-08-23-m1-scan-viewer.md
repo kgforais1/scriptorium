@@ -453,7 +453,19 @@ Known limits after Phase 2:
 - [ ] Engine publishes each visible page's projected corners per frame, for M2's text overlay
       and M6's hotspots (fold into the Phase 3 refresh from ADR-0001)
 - [ ] ←/→ + on-screen controls; edge no-ops
-- [ ] Debounced progress + **flush on close**
+- [ ] Debounced progress + **flush on close**. Follow-ups from the CodeRabbit review of PR #66
+      (none block Phase 2):
+      - Replace the per-turn delayed flush with one worker per dirty book that owns its timer.
+        It keeps the 1 s interval and the 10 s backoff, retries after a failed write without
+        waiting for a turn, and cannot have its claim cleared by another flush.
+      - Tell the view when a background write succeeds (for example, a `progress-saved`
+        event), so the save warning clears without another page turn.
+      - Decide what **Close book** does when its flush fails: stay open with the warning, or
+        close and show it on the home screen.
+      - Test the `saveSeq` copy in `open_and_register` and the flush scheduling through
+        helpers that need no `AppHandle`.
+      - Tag `ingest-progress` events with an import id. Overlap is reachable only through the
+        dev-only `#spike` route today.
 - [ ] Loading / empty states
 - [ ] Reader chrome follows mockup E layout (header, bottom bar with scrubber); notes panel
       shell only — hotspots stay M6
