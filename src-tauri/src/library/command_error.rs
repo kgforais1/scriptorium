@@ -4,7 +4,8 @@ use super::BookError;
 use serde::Serialize;
 
 /// Serializes as `{ "kind": "<BookError variant>", "message": "<Display text>" }`.
-/// `kind` is `"Internal"` when a background task panicked.
+/// `kind` is `"Internal"` when a background task panicked, and `"SaveHeld"` when a reading
+/// position is held in memory after an earlier save failed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CommandError {
     /// The `BookError` variant name, or `Internal`.
@@ -36,6 +37,15 @@ impl CommandError {
         Self {
             kind: "Internal".into(),
             message: message.into(),
+        }
+    }
+
+    /// An error of kind `SaveHeld`: the page is held in memory because an earlier save failed,
+    /// and a retry is scheduled.
+    pub fn save_held() -> Self {
+        Self {
+            kind: "SaveHeld".into(),
+            message: "The last save failed. It will be retried.".into(),
         }
     }
 }

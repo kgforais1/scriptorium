@@ -210,7 +210,8 @@ pub enum SaveOutcome {
 
 /// Record the page the reader is on. The session remembers it at once, and `meta.json` is
 /// written at most once a second per book (every ten seconds after a failure). The rest is
-/// written on close. A failed write is an error; the UI clears its warning only on `Saved`.
+/// written on close. A failed write is an error, and so is a page held after an earlier
+/// failure (`SaveHeld`). The UI clears its warning only on `Saved`.
 #[tauri::command]
 pub async fn save_progress(
     app: AppHandle,
@@ -278,10 +279,7 @@ fn save_in(
     if !session.record_seq(&root, page, seq, now)? {
         // A held page after a failed write is not safe yet: say so, so the warning stays up.
         if session.write_failed(&root) {
-            return Err(CommandError {
-                kind: "SaveHeld".into(),
-                message: "The last save failed. It will be retried.".into(),
-            });
+            return Err(CommandError::save_held());
         }
         return Ok(SaveOutcome::Pending);
     }

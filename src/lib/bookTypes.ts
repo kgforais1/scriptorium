@@ -54,7 +54,10 @@ export interface IngestProgress {
   total: number;
 }
 
-/** The error every command rejects with. `kind` is a `BookError` variant name or "Internal". */
+/**
+ * The error every command rejects with. `kind` is a `BookError` variant name, "Internal",
+ * or "SaveHeld" (a page held after an earlier failed save).
+ */
 export interface CommandError {
   kind: string;
   message: string;

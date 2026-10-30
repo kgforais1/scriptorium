@@ -70,7 +70,8 @@ function seeded(book: BookView): BookView {
  * @param root - The `root` of the open `BookView`.
  * @param page - The zero-based page.
  * @returns `"saved"` when the page reached `meta.json`, `"pending"` while it is held for a
- * later write. Rejects with a `CommandError` when a write fails.
+ * later write. Rejects with a `CommandError` when a write fails, or with kind "SaveHeld" when
+ * the page is held after an earlier failure.
  */
 export function saveProgress(root: string, page: number): Promise<SaveOutcome> {
   saveSeq += 1;
