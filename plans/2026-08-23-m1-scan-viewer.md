@@ -416,13 +416,16 @@ step. Rust tests cover the debounced write and the flush of dirty pages.
 Chunk 1's CSP has no visible effect in `tauri dev`. Chunk 5 is done only when a release
 build opens a book and shows its pages.
 
-- [ ] Chunk 0: quality gates (ESLint, tsc hook, Vitest coverage, clippy complexity, docs)
-- [ ] Chunk 1: CSP and capabilities (A13)
-- [ ] Chunk 2: library hooks and `inspect_folder` core
-- [ ] Chunk 3: commands and app state
-- [ ] Chunk 4: TS API and Vitest
-- [ ] Chunk 5: UI
-- [ ] Chunk 6: docs
+- [x] Chunk 0: quality gates (ESLint, tsc hook, Vitest coverage, clippy complexity, docs)
+- [x] Chunk 1: CSP and capabilities (A13)
+- [x] Chunk 2: library hooks and `inspect_folder` core
+- [x] Chunk 3: commands and app state
+- [x] Chunk 4: TS API and Vitest
+- [x] Chunk 5: UI
+- [x] Chunk 6: docs
+
+Manual verification (release build opens a book, A5–A7, A13) is pending: see
+[`docs/manual-test-m1.md`](../docs/manual-test-m1.md).
 
 ### Phase 3 — Reader
 

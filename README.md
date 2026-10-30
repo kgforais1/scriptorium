@@ -1,6 +1,6 @@
 # Scriptorium
 
-Last reviewed: 2026-08-27
+Last reviewed: 2026-10-30
 
 Tauri-first app for assembling scanned page folders into textured virtual books
 (page-turn reading, faithful page images, curator hotspots with lore popups) and
@@ -52,6 +52,14 @@ python3 scripts/generate-fixture-book.py --pages 8 --seed 42
 
 Output lands under gitignored `tmp/fixtures/` (see [`tests/fixtures/README.md`](tests/fixtures/README.md)).
 Spec: [`docs/book-format.md`](docs/book-format.md).
+
+## Try it
+
+Run `pnpm tauri dev`, click **Open…**, and choose a folder of scanned pages. The app asks
+you to confirm, copies the pages into your library, and opens the book. You can page
+through it with the buttons or the arrow keys. It reopens at your last page the next time
+you start it. The page-turn animation arrives in the next phase. Follow
+[`docs/manual-test-m1.md`](docs/manual-test-m1.md) for the full step-by-step check.
 
 ## What's here and why
 
