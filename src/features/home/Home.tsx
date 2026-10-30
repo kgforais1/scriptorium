@@ -17,7 +17,7 @@ interface PendingScans {
 }
 
 /** The start screen: one Open button that opens a book or imports a folder of scans. */
-export function Home({ onOpen, onError }: HomeProps) {
+export function Home({ onOpen, onError }: Readonly<HomeProps>) {
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingScans | null>(null);
 

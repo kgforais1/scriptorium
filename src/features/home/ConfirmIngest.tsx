@@ -25,7 +25,7 @@ interface TextFieldProps {
   describedBy?: string;
 }
 
-function TextField({ label, value, onChange, invalid, describedBy }: TextFieldProps) {
+function TextField({ label, value, onChange, invalid, describedBy }: Readonly<TextFieldProps>) {
   return (
     <label className="field">
       <span>{label}</span>
@@ -46,7 +46,7 @@ function TextField({ label, value, onChange, invalid, describedBy }: TextFieldPr
  * Asks the user to confirm turning a folder of scans into a book. It shows the counts and
  * estimated size, lets them edit the metadata, and shows progress while the book is built.
  */
-export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: ConfirmIngestProps) {
+export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Readonly<ConfirmIngestProps>) {
   const [title, setTitle] = useState(info.suggestedTitle);
   const [id, setId] = useState(info.suggestedId);
   const [rights, setRights] = useState("");
@@ -58,11 +58,17 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Co
   const canCreate = progress === null && hint === null && !titleMissing;
   const ingesting = progress !== null;
   // Every control is disabled while the book is built, so focus moves to the progress text.
+  // If the build fails, focus returns to Create, so it is not lost on the page body.
   const progressRef = useRef<HTMLDivElement>(null);
+  const createRef = useRef<HTMLButtonElement>(null);
+  const wasIngesting = useRef(false);
   useEffect(() => {
     if (ingesting) {
       progressRef.current?.focus();
+    } else if (wasIngesting.current) {
+      createRef.current?.focus();
     }
+    wasIngesting.current = ingesting;
   }, [ingesting]);
 
   async function create() {
@@ -124,14 +130,19 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Co
         {progress !== null && (
           <div className="ingest-progress" ref={progressRef} tabIndex={-1}>
             <progress max={info.frames} value={progress} aria-label="Import progress" />
-            <span role="status">{progressLabel(progress, info.frames)}</span>
+            <output>{progressLabel(progress, info.frames)}</output>
           </div>
         )}
         <div className="modal-actions">
           <button type="button" className="button" onClick={onCancel} disabled={progress !== null}>
             Cancel
           </button>
-          <button type="submit" className="button primary" disabled={!canCreate}>
+          <button
+            type="submit"
+            className="button primary"
+            disabled={!canCreate}
+            ref={createRef}
+          >
             Create
           </button>
         </div>

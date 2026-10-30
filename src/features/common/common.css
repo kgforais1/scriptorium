@@ -38,6 +38,7 @@
 }
 
 .status {
+  display: block;
   margin: auto;
   font-size: 1.1rem;
 }

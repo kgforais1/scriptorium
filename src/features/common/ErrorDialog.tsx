@@ -8,7 +8,7 @@ interface ErrorDialogProps {
 }
 
 /** Shows a failed command's heading and message, with one OK button. */
-export function ErrorDialog({ error, onClose }: ErrorDialogProps) {
+export function ErrorDialog({ error, onClose }: Readonly<ErrorDialogProps>) {
   return (
     <Modal title={errorHeading(error.kind)} onClose={onClose}>
       <p className="modal-message" role="alert">

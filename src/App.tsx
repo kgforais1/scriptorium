@@ -50,9 +50,9 @@ function Reader() {
   return (
     <div className="app">
       {screen.name === "loading" && (
-        <p className="status" role="status">
+        <output className="status">
           Loading…
-        </p>
+        </output>
       )}
       {screen.name === "home" && (
         <Home onOpen={(book) => setScreen({ name: "book", book })} onError={setError} />

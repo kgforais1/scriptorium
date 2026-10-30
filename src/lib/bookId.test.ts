@@ -26,7 +26,7 @@ const REJECTED = [
   "_x",
   ".hidden",
   "  ",
-  "a/b\\c",
+  String.raw`a/b\c`,
   "nul\0",
   "日本語",
   "x".repeat(65),

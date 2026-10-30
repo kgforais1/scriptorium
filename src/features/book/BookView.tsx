@@ -24,7 +24,7 @@ function shouldIgnoreKey(event: KeyboardEvent): boolean {
 }
 
 /** Shows one page of an open book, with the page indicator, Prev/Next buttons, and arrow keys. */
-export function BookView({ book, onClose, onError }: BookViewProps) {
+export function BookView({ book, onClose, onError }: Readonly<BookViewProps>) {
   const count = book.pages.length;
   const [page, setPage] = useState(() => clampPage(book.lastReadPage, count));
 

@@ -14,7 +14,7 @@ interface ModalProps {
  * and makes the rest of the page inert. Escape calls `onClose`, and focus returns to the
  * control that had it before the dialog opened.
  */
-export function Modal({ title, onClose, children }: ModalProps) {
+export function Modal({ title, onClose, children }: Readonly<ModalProps>) {
   const ref = useRef<HTMLDialogElement>(null);
   const headingId = useId();
 
