@@ -200,3 +200,153 @@ fn a_held_page_after_a_failed_write_is_reported() {
         Ok(SaveOutcome::Saved)
     );
 }
+
+#[test]
+fn a_reopened_view_carries_the_save_seq_and_the_unsaved_page() {
+    use super::register_in_session;
+    let (_fx, root) = Fixture::new("reopen");
+    let key = canonical_key(&root).unwrap();
+    let t0 = Instant::now();
+    let mut session = Session::new(SAVE_INTERVAL);
+    let open = |session: &mut Session| {
+        let book = load_book(&key).unwrap();
+        let mut view = book_view(&book).unwrap();
+        register_in_session(session, &book, &mut view, t0);
+        view
+    };
+    let first = open(&mut session);
+    assert_eq!((first.save_seq, first.last_read_page), (0, 0));
+    session.record_seq(&key, 2, 7, t0).unwrap();
+    // The page was never written, so the reopened view shows it, numbered above save 7.
+    let second = open(&mut session);
+    assert_eq!((second.save_seq, second.last_read_page), (7, 2));
+    // After the page is written the sequence still carries over, and the disk page wins.
+    let failures = session.flush(None, t0, |r, p| save_last_read_page(r, p).map(|_| ()));
+    assert!(failures.is_empty(), "{failures:?}");
+    let third = open(&mut session);
+    assert_eq!((third.save_seq, third.last_read_page), (7, 2));
+}
+
+#[test]
+fn a_held_or_failed_save_claims_exactly_one_worker() {
+    use super::{claim_after_save, save_in, SaveOutcome};
+    use std::sync::Mutex;
+    let (_fx, root) = Fixture::new("claim");
+    let key = canonical_key(&root).unwrap();
+    let t0 = Instant::now();
+    let session = Mutex::new(Session::new(SAVE_INTERVAL));
+    session.lock().unwrap().register(key.clone(), 0, 3, t0);
+    let ok = |r: &Path, p: u32| save_last_read_page(r, p).map(|_| ());
+    // A page held inside the debounce window needs a worker, once.
+    let held = save_in(&session, &root, 1, 1, t0, ok);
+    assert_eq!(held, Ok(SaveOutcome::Pending));
+    let claim = claim_after_save(&session, &root, &held);
+    let (claimed_key, token) = claim.expect("a held page starts a worker");
+    assert_eq!(claimed_key, key);
+    assert_eq!(claim_after_save(&session, &root, &held), None, "one worker");
+    // The same holds after a failed write, and a held page after that failure.
+    let fail = |_: &Path, _: u32| {
+        Err(crate::library::BookError::PermissionDenied {
+            path: PathBuf::from("/ro"),
+        })
+    };
+    let failed = save_in(&session, &root, 2, 2, t0 + SAVE_INTERVAL, fail);
+    assert!(failed.is_err());
+    assert_eq!(
+        claim_after_save(&session, &root, &failed),
+        None,
+        "still owned"
+    );
+    let held_again = save_in(&session, &root, 2, 3, t0 + SAVE_INTERVAL, fail);
+    assert_eq!(claim_after_save(&session, &root, &held_again), None);
+    // A saved page needs none, and neither does a book nobody opened.
+    assert_eq!(
+        claim_after_save(&session, &root, &Ok(SaveOutcome::Saved)),
+        None
+    );
+    let gone = root.join("nowhere");
+    assert_eq!(
+        claim_after_save(&session, &gone, &Ok(SaveOutcome::Pending)),
+        None
+    );
+    // The worker's write ends it, which frees the claim for the next held page.
+    let step = session
+        .lock()
+        .unwrap()
+        .worker_step(&key, token, t0 + SAVE_INTERVAL * 20, ok);
+    assert_eq!(step, super::WorkerStep::Saved);
+    assert_eq!(view_of(&root).last_read_page, 2);
+    let next = save_in(&session, &root, 0, 4, t0 + SAVE_INTERVAL * 20, ok);
+    assert_eq!(next, Ok(SaveOutcome::Pending));
+    assert!(claim_after_save(&session, &root, &next).is_some());
+}
+
+#[test]
+fn a_worker_retries_after_a_failure_then_announces_once() {
+    use super::run_worker;
+    use std::cell::Cell;
+    use std::sync::Mutex;
+    use std::time::Duration;
+    let key = PathBuf::from("/book");
+    let tick = Duration::from_millis(5);
+    let session = Mutex::new(Session::new(tick));
+    let t0 = Instant::now();
+    {
+        let mut s = session.lock().unwrap();
+        s.register(key.clone(), 0, 3, t0);
+        s.record_seq(&key, 2, 1, t0).unwrap();
+    }
+    let token = session.lock().unwrap().claim_worker(&key).unwrap();
+    let attempts = Cell::new(0);
+    let announced = Cell::new(0);
+    let slept = Cell::new(0);
+    run_worker(
+        &session,
+        &key,
+        token,
+        |_, page| {
+            attempts.set(attempts.get() + 1);
+            assert_eq!(page, 2);
+            if attempts.get() < 3 {
+                return Err(crate::library::BookError::PermissionDenied {
+                    path: PathBuf::from("/ro"),
+                });
+            }
+            Ok(())
+        },
+        |d| {
+            slept.set(slept.get() + 1);
+            std::thread::sleep(d);
+        },
+        || announced.set(announced.get() + 1),
+    );
+    assert_eq!(attempts.get(), 3, "two failures, then a success");
+    assert_eq!(announced.get(), 1);
+    assert!(
+        slept.get() >= 3,
+        "it waited for the interval and each backoff"
+    );
+    // A worker whose book is already clean exits and announces nothing.
+    let none = Cell::new(0);
+    run_worker(&session, &key, token, |_, _| Ok(()), |_| {}, || none.set(1));
+    assert_eq!(none.get(), 0);
+}
+
+#[test]
+fn event_payloads_serialize_camel_case() {
+    use super::{IngestProgress, ProgressSaved};
+    let tick = IngestProgress {
+        import_id: "i1".into(),
+        done: 2,
+        total: 5,
+    };
+    assert_eq!(
+        serde_json::to_value(tick).unwrap(),
+        serde_json::json!({ "importId": "i1", "done": 2, "total": 5 })
+    );
+    let saved = ProgressSaved { root: "/r".into() };
+    assert_eq!(
+        serde_json::to_value(saved).unwrap(),
+        serde_json::json!({ "root": "/r" })
+    );
+}

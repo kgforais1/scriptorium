@@ -97,7 +97,9 @@ built app.
 
 Progress is saved in the book's `meta.json`, at most once a second while you page. A turn
 made within a second of the last write is held, then written about a second later. Closing
-the book or the window writes it at once.
+the book or the window writes it at once. A held page is written by one background worker
+per book, with no further turn needed. If a write fails, the page bar shows a note, the
+worker retries about every ten seconds, and the note clears by itself once a retry succeeds.
 
 - [ ] Open a book, go to page 6, wait a few seconds, and quit the app (Cmd+Q, or close the
   window). Relaunch with `pnpm tauri dev`. Expected: the book opens by itself at page 6.
@@ -107,6 +109,13 @@ the book or the window writes it at once.
 - [ ] Open a book at page 1, turn one page, and wait 3 seconds. Look at `meta.json` in the
   book's library folder. Expected: `lastReadPage` holds the new page (zero-based), without
   quitting.
+- [ ] Make the book's `meta.json` read-only (or the book's folder, on Windows), then turn a
+  page and wait 2 seconds. Expected: the page bar shows "Your place could not be saved."
+  Make it writable again and wait up to 10 seconds, without turning a page. Expected: the
+  note disappears by itself, and `meta.json` holds the page.
+- [ ] Make `meta.json` read-only again, turn a page, and click **Close book**. Expected: the
+  book stays open, the button is enabled again, and the note shows. Make it writable and
+  click **Close book** again. Expected: the home screen returns.
 - [ ] Click **Close book**, then quit. Relaunch. Expected: the app reopens the last book
   that was opened, at its saved page.
 - [ ] Move the book's library folder away and relaunch. Expected: the home screen shows and no

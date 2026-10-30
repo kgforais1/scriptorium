@@ -35,8 +35,34 @@ struct Entry {
     /// The highest sequence number recorded. A page sent earlier but arriving later carries a
     /// lower number and is ignored, so it can never overwrite a newer page.
     last_seq: u64,
-    /// True while a delayed flush is scheduled for this book, so turns schedule at most one.
-    flush_scheduled: bool,
+    /// The token of the background worker that owns this book's delayed write, if one runs.
+    /// Only that worker (or a later claim after it released) can change it, so no flush can
+    /// clear a live worker's claim and let a second worker start.
+    worker: Option<u64>,
+}
+
+/// What a background worker should do next, from [`Session::worker_step`].
+#[derive(Debug, PartialEq, Eq)]
+pub enum WorkerStep<E> {
+    /// Nothing is due yet. Sleep until this instant, then ask again.
+    Wait(Instant),
+    /// The held page was written. The book is clean and the worker's claim is released.
+    Saved,
+    /// The write failed. The book stays dirty and the claim is kept, so the worker asks again
+    /// after the retry backoff.
+    Failed(E),
+    /// Stop: the book is clean, is no longer in the session, or the claim is not this
+    /// worker's. A claim that is this worker's is released.
+    Done,
+}
+
+/// How long a book waits after its last write before the next one is due.
+fn wait_for(interval: Duration, write_failed: bool) -> Duration {
+    if write_failed {
+        interval * RETRY_FACTOR
+    } else {
+        interval
+    }
 }
 
 /// Why [`Session::record`] refused a page.
@@ -85,6 +111,8 @@ pub const RETRY_FACTOR: u32 = 10;
 pub struct Session {
     interval: Duration,
     books: HashMap<PathBuf, Entry>,
+    /// The last worker token handed out. Tokens never repeat in a run.
+    last_token: u64,
 }
 
 impl Session {
@@ -93,6 +121,7 @@ impl Session {
         Self {
             interval,
             books: HashMap::new(),
+            last_token: 0,
         }
     }
 
@@ -118,26 +147,60 @@ impl Session {
                 last_write: now,
                 write_failed: false,
                 last_seq,
-                flush_scheduled: false,
+                worker: None,
             },
         );
         page
     }
 
-    /// Claim the delayed flush for `root` and return how long to wait before it: the normal
-    /// interval, or the longer retry backoff after a failed write. `None` when one is already
-    /// scheduled or the book is clean. The flush clears the claim.
-    pub fn claim_delayed_flush(&mut self, root: &Path) -> Option<Duration> {
+    /// Claim the background write for `root` and return the worker's token. `None` when a
+    /// worker already owns it or the book is clean. The claim lasts until the worker releases
+    /// it through [`Session::worker_step`]; no flush clears it.
+    pub fn claim_worker(&mut self, root: &Path) -> Option<u64> {
         let e = self.books.get_mut(root)?;
-        if !e.dirty || e.flush_scheduled {
+        if !e.dirty || e.worker.is_some() {
             return None;
         }
-        e.flush_scheduled = true;
-        Some(if e.write_failed {
-            self.interval * RETRY_FACTOR
-        } else {
-            self.interval
-        })
+        self.last_token += 1;
+        e.worker = Some(self.last_token);
+        e.worker
+    }
+
+    /// When the held page of `root` is due: the normal interval, or the longer retry backoff
+    /// after a failed write, counted from the last write attempt. `None` when the book is
+    /// clean or not open.
+    pub fn next_due(&self, root: &Path) -> Option<Instant> {
+        let e = self.books.get(root)?;
+        e.dirty
+            .then(|| e.last_write + wait_for(self.interval, e.write_failed))
+    }
+
+    /// One turn of a background worker holding `token` for `root`, under the caller's session
+    /// lock. Waits if the page is not due, writes it if it is, and releases the claim whenever
+    /// the worker should stop, in the same step, so no turn can slip between "clean" and
+    /// "released".
+    pub fn worker_step<E>(
+        &mut self,
+        root: &Path,
+        token: u64,
+        now: Instant,
+        write: impl FnMut(&Path, u32) -> Result<(), E>,
+    ) -> WorkerStep<E> {
+        if self.books.get(root).is_none_or(|e| e.worker != Some(token)) {
+            return WorkerStep::Done;
+        }
+        let step = match self.next_due(root) {
+            None => WorkerStep::Done,
+            Some(due) if now < due => return WorkerStep::Wait(due),
+            Some(_) => match self.flush(Some(root), now, write).into_iter().next() {
+                Some((_, e)) => return WorkerStep::Failed(e),
+                None => WorkerStep::Saved,
+            },
+        };
+        if let Some(e) = self.books.get_mut(root) {
+            e.worker = None;
+        }
+        step
     }
 
     /// True when the last write of `root` failed and has not succeeded since.
@@ -180,11 +243,7 @@ impl Session {
         entry.page = page;
         entry.dirty = true;
         entry.last_seq = seq;
-        let wait = if entry.write_failed {
-            self.interval * RETRY_FACTOR
-        } else {
-            self.interval
-        };
+        let wait = wait_for(self.interval, entry.write_failed);
         Ok(now.saturating_duration_since(entry.last_write) >= wait)
     }
 
@@ -202,8 +261,6 @@ impl Session {
             if only.is_some_and(|p| p != root.as_path()) {
                 continue;
             }
-            // Any flush of this book settles a pending delayed one.
-            entry.flush_scheduled = false;
             if !entry.dirty {
                 continue;
             }
@@ -320,28 +377,113 @@ mod tests {
     }
 
     #[test]
-    fn one_delayed_flush_is_claimed_per_dirty_book() {
+    fn one_worker_is_claimed_per_dirty_book() {
         let t0 = Instant::now();
         let mut s = session_with(&["/a"], t0);
         let a = Path::new("/a");
-        assert_eq!(s.claim_delayed_flush(a), None, "clean: nothing to flush");
+        assert_eq!(s.claim_worker(a), None, "clean: nothing to write");
+        assert_eq!(s.claim_worker(Path::new("/zzz")), None, "not open");
         s.record(a, 1, t0).unwrap();
-        assert_eq!(s.claim_delayed_flush(a), Some(SEC));
-        assert_eq!(s.claim_delayed_flush(a), None, "already scheduled");
+        let token = s.claim_worker(a).expect("a dirty book gets a worker");
+        assert_eq!(s.claim_worker(a), None, "already owned");
+        // No flush other than the worker's own releases the claim.
         let mut log = Vec::new();
         s.flush(Some(a), t0 + SEC, ok_writer(&mut log));
-        assert_eq!(log, [(PathBuf::from("/a"), 1)]);
         s.record(a, 2, t0 + SEC).unwrap();
-        assert_eq!(
-            s.claim_delayed_flush(a),
-            Some(SEC),
-            "the flush released the claim"
-        );
-        // After a failed write the delayed flush waits the retry backoff, not the interval.
-        s.flush(Some(a), t0 + SEC * 2, |_, _| Err("read-only"));
+        assert_eq!(s.claim_worker(a), None, "an inline flush kept the claim");
+        // The owner writes when due and releases.
+        let step = s.worker_step(a, token, t0 + SEC * 2, ok_writer(&mut log));
+        assert_eq!(step, WorkerStep::<()>::Saved);
+        assert_eq!(log.last(), Some(&(PathBuf::from("/a"), 2)));
         s.record(a, 3, t0 + SEC * 2).unwrap();
-        assert!(s.write_failed(a));
-        assert_eq!(s.claim_delayed_flush(a), Some(SEC * RETRY_FACTOR));
+        let next = s.claim_worker(a).expect("released after the write");
+        assert!(next > token, "tokens never repeat");
+    }
+
+    #[test]
+    fn next_due_counts_from_the_last_attempt_with_backoff() {
+        let t0 = Instant::now();
+        let mut s = session_with(&["/a"], t0);
+        let a = Path::new("/a");
+        assert_eq!(s.next_due(a), None, "clean");
+        assert_eq!(s.next_due(Path::new("/zzz")), None, "not open");
+        s.record(a, 1, t0).unwrap();
+        assert_eq!(s.next_due(a), Some(t0 + SEC));
+        s.flush(Some(a), t0 + SEC, |_, _| Err("read-only"));
+        assert_eq!(s.next_due(a), Some(t0 + SEC + SEC * RETRY_FACTOR));
+    }
+
+    #[test]
+    fn a_worker_waits_retries_after_failure_and_stops_when_clean() {
+        let t0 = Instant::now();
+        let mut s = session_with(&["/a"], t0);
+        let a = Path::new("/a");
+        s.record(a, 4, t0).unwrap();
+        let token = s.claim_worker(a).unwrap();
+        let mut log = Vec::new();
+        assert_eq!(
+            s.worker_step(a, token, t0 + SEC / 2, ok_writer(&mut log)),
+            WorkerStep::Wait(t0 + SEC),
+            "not due"
+        );
+        assert!(log.is_empty());
+        let fail = s.worker_step(a, token, t0 + SEC, |_, _| Err("read-only"));
+        assert_eq!(fail, WorkerStep::Failed("read-only"));
+        let due = t0 + SEC + SEC * RETRY_FACTOR;
+        assert_eq!(
+            s.worker_step(a, token, t0 + SEC * 2, ok_writer(&mut log)),
+            WorkerStep::Wait(due),
+            "backs off without a turn"
+        );
+        assert_eq!(s.claim_worker(a), None, "a failure keeps the claim");
+        let saved = s.worker_step(a, token, due, ok_writer(&mut log));
+        assert_eq!(saved, WorkerStep::<()>::Saved);
+        assert_eq!(log, [(PathBuf::from("/a"), 4)]);
+        // The claim was released, so the token is spent.
+        let done = s.worker_step(a, token, due, ok_writer(&mut log));
+        assert_eq!(done, WorkerStep::<()>::Done);
+    }
+
+    #[test]
+    fn a_worker_stops_when_another_write_made_the_book_clean() {
+        let t0 = Instant::now();
+        let mut s = session_with(&["/a"], t0);
+        let a = Path::new("/a");
+        s.record(a, 1, t0).unwrap();
+        let token = s.claim_worker(a).unwrap();
+        let mut log = Vec::new();
+        s.flush(Some(a), t0, ok_writer(&mut log)); // the close flush
+        let step = s.worker_step(a, token, t0 + SEC, ok_writer(&mut log));
+        assert_eq!(step, WorkerStep::<()>::Done);
+        assert_eq!(log.len(), 1, "the worker wrote nothing");
+        assert!(s.claim_worker(a).is_none(), "clean, and the claim is free");
+        s.record(a, 2, t0).unwrap();
+        assert!(s.claim_worker(a).is_some(), "released when it stopped");
+    }
+
+    #[test]
+    fn a_superseded_worker_exits_without_touching_the_new_claim() {
+        let t0 = Instant::now();
+        let mut s = session_with(&["/a"], t0);
+        let a = Path::new("/a");
+        s.record(a, 1, t0).unwrap();
+        let old = s.claim_worker(a).unwrap();
+        // A reopen of a clean book replaces its entry, dropping the claim.
+        let mut log = Vec::new();
+        s.flush(Some(a), t0, ok_writer(&mut log));
+        s.register(PathBuf::from("/a"), 1, 10, t0);
+        s.record(a, 2, t0).unwrap();
+        let new = s.claim_worker(a).expect("the entry was replaced");
+        assert_ne!(old, new);
+        let step = s.worker_step(a, old, t0 + SEC * 5, ok_writer(&mut log));
+        assert_eq!(step, WorkerStep::<()>::Done, "superseded: exits");
+        assert_eq!(log.len(), 1, "and writes nothing");
+        assert_eq!(s.claim_worker(a), None, "the live claim is intact");
+        assert_eq!(
+            s.worker_step(Path::new("/zzz"), new, t0, ok_writer(&mut log)),
+            WorkerStep::<()>::Done,
+            "a book no longer in the session"
+        );
     }
 
     #[test]

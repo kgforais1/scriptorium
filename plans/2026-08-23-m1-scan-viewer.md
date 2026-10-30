@@ -444,8 +444,10 @@ Known limits after Phase 2:
 - Opened books stay in the session and the asset scope until the app quits. **Close book**
   revokes nothing. Revisit when the bookshelf (M5) opens many books in one run.
 - A book whose progress cannot be saved (for example, on a read-only volume) shows a note in
-  the page bar until a save succeeds. Turns then retry about every ten seconds instead of
-  every second, and the close flush always tries.
+  the page bar until a save succeeds. One background worker per dirty book then retries about
+  every ten seconds instead of every second, with no page turn needed. When it succeeds, Rust
+  emits `progress-saved` and the note clears. **Close book** waits for its write: on a failure
+  the book stays open with the note, and the exit flush still tries.
 
 ### Phase 3 — Reader
 
