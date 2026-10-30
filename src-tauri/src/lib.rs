@@ -15,7 +15,7 @@ mod spike;
 /// Starts the Tauri app and returns when the app exits.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default();
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
     #[cfg(dev)]
     let builder = builder.invoke_handler(tauri::generate_handler![spike::spike_pages]);
     builder
