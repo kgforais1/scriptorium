@@ -1,24 +1,40 @@
 # Scriptorium book package format
 
-Last reviewed: 2026-10-28
+Last reviewed: 2026-10-29
 
-Normative spec for a Scriptorium **book package** (formatVersion 1). A package is a
+Normative spec for a Scriptorium **book package** (formatVersion 2; formatVersion 1 is still read). A package is a
 self-contained directory that the app can open, verify, and re-locate on disk without
 dangling references. The locked decisions here come from the
 [M0 foundation plan](../plans/archive/completed/2026-08-23-m0-tauri-foundation.md); this doc is the
 human-readable source of truth. Field *types* are normative in
-[`book-format.schema.json`](book-format.schema.json) — when the two disagree, the schema
-wins on types, this doc wins on rules and intent.
+[`book-format.v2.schema.json`](book-format.v2.schema.json) (and
+[`book-format.v1.schema.json`](book-format.v1.schema.json) for v1 packages) — when a schema and
+this doc disagree, the schema wins on types, this doc wins on rules and intent.
 
 ## Package layout
 
 ```
 <book-id>/
 ├── meta.json          # required — see fields below
-├── pages/             # required — page images, relative paths stored in meta.json
-├── ocr/               # reserved — may be empty; text layer lands here in M2+
+├── pages/             # required — display images, relative paths stored in meta.json
+├── originals/         # v2, optional — untouched originals of converted pages (see sources[])
+├── ocr/               # reserved — page text lands here in M2 (layout below)
 └── annotations.json   # reserved — empty form is `[]` (canonical); `{}` tolerated on read, never written
 ```
+
+### Reserved layout for page text and annotations (provisional)
+
+M1 writes neither of these. The shapes are recorded now so M2 and M6 add files without a
+`formatVersion` bump, because neither lives in `meta.json`. They stay provisional until M2
+(text) and M6 (annotations) ship and may change before then.
+
+- `ocr/<NNNN>.json` holds one page's text, named by its 0-based page position like
+  `pages/`. It carries the plain text, word and line boxes in **normalized page coordinates**
+  (`x`, `y`, `w`, `h` from 0 to 1, origin top-left of the display image), and a `source` of
+  `ocr`, `pdf`, or `curator`. Curator text keeps the OCR original and a correction history.
+- `ocr/index.json` holds per-page status (`status`, `engine`, `generatedAt`) and a book-level
+  rollup. OCR status never goes in `meta.json`.
+- `annotations.json` regions use the same normalized page coordinates, as `xywh` or a polygon.
 
 **Portability:** everything inside the package is addressed with **relative paths**.
 `meta.json` MUST NOT contain absolute paths (no home directory, no root-anchored source
@@ -27,11 +43,14 @@ contain `.` or `..` path segments or null bytes (enforced in the schema and in R
 `BookMeta::validate`). A package directory can be moved or copied to another machine and
 still load.
 
-## meta.json fields (formatVersion 1)
+## meta.json fields (formatVersion 2)
+
+Every v1 field below is unchanged in v2. v2 adds the optional `sources[]` and page `source`
+([Originals](#originals-formatversion-2)).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `formatVersion` | number | yes | `1` for this spec |
+| `formatVersion` | number | yes | `2` for new packages; a `1` package is read as-is and saved as `2` |
 | `id` | string | yes | stable book identifier **and** package directory name; lowercase slug (1–64 chars); no trailing `.`; not a Windows-reserved device name (`con`/`prn`/`aux`/`nul`/`com1`–`9`/`lpt1`–`9`, optional extension) |
 | `title` | string | yes | display title (`maxLength: 4096`) |
 | `createdAt` | string | yes | RFC 3339 / ISO 8601 date-time (enforced in schema + `BookMeta::validate`) |
@@ -41,6 +60,7 @@ still load.
 | `rights` | string | yes | may be empty (`maxLength: 8192`) |
 | `attribution` | string | yes | may be empty (`maxLength: 8192`) |
 | `pages[]` | array | yes | one entry per page, in order (`minItems: 1`, `maxItems: 100000`) |
+| `sources[]` | array | no (v2) | originals of converted pages; omit when there are none, never write `[]` |
 
 `pages[]` item:
 
@@ -54,48 +74,57 @@ still load.
 | `sha256` | string | yes | hex digest of the page file |
 | `pageLabel` | string | no | optional human label |
 | `storage` | string | no | `"copied"` default; `"referenced"` reserved, not implemented in M1 |
+| `source` | object | no (v2) | `ref` (a `sources[].id`) and, for a multi-frame source, a 0-based `frame` |
 
-## Planned: originals and display copies
+## Originals (formatVersion 2)
 
 M1 ingest accepts formats the webview cannot show, such as TIFF and JPEG 2000, and converts
 some JPEG, PNG, and WebP inputs. `file` stays the display image. When a display image was
 converted, the untouched original is kept. Input formats and conversion rules are in the
 [M1 plan](../plans/2026-08-23-m1-scan-viewer.md#input-formats-normative-for-m1).
 
-Planned shape for `formatVersion` 2:
-
-- Package layout gains `originals/`. Original files live there, named `<stem>.<ext>`.
-- `meta.json` gains an optional book-level `sources[]`. Each entry has `id`, `file`,
-  `format`, `byteSize`, and `sha256`.
-- A page entry gains an optional `source` with `ref` (a `sources[].id`) and a 0-based
-  `frame`. `frame` is required when the source has more than one frame, such as a
-  multi-page TIFF or a PDF, and omitted for a single-frame source. Several pages may share one source.
-- `sources[].file` follows the same path rules as `pages[].file`. Case-insensitive
-  uniqueness applies within `sources[]`, not across pages that share a source.
+- Originals live under `originals/`, numbered by position among the kept originals and keeping
+  the input's lowercase extension (`originals/0000.tif`). Input names may hold spaces or
+  non-ASCII characters that the path rules forbid, so they are never used in the package.
+- `sources[]` item fields: `id` (lowercase slug, 1–64 characters, unique in the book), `file`,
+  `format` (`jpeg`, `png`, `webp`, `bmp`, `gif`, `tiff`, `jp2`, or `pdf`), `frames` (number of
+  frames, 1 for a single image), `byteSize`, and `sha256`.
+- A page's `source` has `ref` and an optional `frame`. Pages of one multi-frame source share
+  it, at most one page per frame (ingest writes one page for every frame); a single-frame
+  source is referenced by exactly one page.
+- `frames` is written at ingest. `load_book` checks it against the frame count the file reports.
 - `load_book` verifies each `sources[]` sha256 once. Drift is `ChecksumMismatch`.
 - Free-space preflight counts originals plus display copies in `estimated_bytes`.
 
-Validation rules for v2, added to the loader table when v2 ships:
+Validation rules (in addition to the [loader table](#loader-validation)):
 
-- `sources[].id` is non-empty and unique within the book.
-- Every page `source.ref` names an existing `sources[].id`.
-- `source.frame` is present exactly when the source has more than one frame. It is an
-  integer ≥ 0, below the source's frame count when the format reports one, and unique
-  among pages that share the source.
-- `sources` and `source` appear only when `formatVersion` is 2 or higher.
+- `sources[].file` follows the same path rules as `pages[].file`, starts with `originals/`, and
+  does not collide case-insensitively with another source file or any page file.
+- `sources[].frames` is at least 1; `byteSize` is above 0; `sha256` is 64 lowercase hex.
+- Every page `source.ref` names an existing `sources[].id`, and every source is referenced by
+  at least one page.
+- `source.frame` is present exactly when the source has more than one frame, is below
+  `frames`, and is unique among pages that share the source.
+- `sources` and `source` appear only when `formatVersion` is 2 or higher
+  (`FieldRequiresVersion`).
 
-v1 packages stay readable. A v1 package has no originals and loads unchanged.
+### Migrating v1 to v2
+
+A v1 package is a valid v2 package once `formatVersion` is set to `2`: v1 has no originals,
+so no other field changes. The app reads v1 as-is and writes v2 the next time it saves the
+package, for example when it records `lastReadPage`. After that save, a build that reads only
+v1 refuses the package. That is accepted before 1.0.
 
 ## Evolution rule
 
-Today there is one schema file, [`book-format.schema.json`](book-format.schema.json), for
-`formatVersion` 1. Planned for v2 (M1 Phase 1): it is renamed `book-format.v1.schema.json`,
-`book-format.v2.schema.json` is added, and the loader reads `formatVersion` first, then
-validates against the matching file. Version 2 keeps the same strict policy: unknown keys are
-rejected. A v1-only reader must reject a v2 package with `SchemaVersionUnsupported`. The
-v1→v2 migration note will live in this document.
+Each `formatVersion` has its own schema file:
+[`book-format.v1.schema.json`](book-format.v1.schema.json) and
+[`book-format.v2.schema.json`](book-format.v2.schema.json). Loaders read `formatVersion`
+first, then validate against the matching file. Any other version is rejected
+(`UnsupportedFormatVersion`); a v1-only reader rejects a v2 package the same way. Version 2
+keeps the same strict policy as v1.
 
-While `formatVersion` is `1`, the schema and Rust loaders reject unknown keys
+In every version, the schema and Rust loaders reject unknown keys
 (`additionalProperties: false` / `#[serde(deny_unknown_fields)]`). Therefore any
 **new field** in `meta.json` (or nested page objects) REQUIRES bumping
 `formatVersion` and a migration note — older v1 readers cannot ignore unknown keys.
@@ -109,7 +138,8 @@ bumping `formatVersion` and a migration note describing how to upgrade packages.
 
 ## Loader validation
 
-After JSON Schema validation, loaders MUST run the Rust `BookMeta::validate` checks (or
+Loaders read `formatVersion` first and validate against that version's schema (the app
+embeds both schema files). After JSON Schema validation, loaders MUST run the Rust `BookMeta::validate` checks (or
 an equivalent):
 
 | Check | Behavior |
@@ -124,6 +154,8 @@ an equivalent):
 | `pages[].file` (cross-page) | Reject two pages whose `file` paths collide case-insensitively (`pages/A.png` vs `pages/a.png`) — required for Windows/macOS default volumes; not expressible in JSON Schema. |
 | `pages[].width` / `height` | Reject values `< 1` (degenerate images). |
 | `pages[].byteSize` | Reject `0` (empty page files). |
+| `formatVersion` | MUST be `1` or `2`; any other value is `UnsupportedFormatVersion`. |
+| `sources[]` / `source` (v2) | See [Originals](#originals-formatversion-2). |
 
 ### Page `file` schema pattern (invariants)
 
@@ -146,12 +178,35 @@ ingest pipeline returns on failure.
 
 | Rule | Behavior on violation | Error |
 |---|---|---|
+| **Page names** | Display images are named by final 0-based page position, at least four digits (`pages/0000.jpg`), never by input name. | — |
 | **Storage default** | Copy page bytes into `pages/`. Symlinks are rejected. `storage: "referenced"` is reserved and NOT implemented in M1. | — |
 | **Source collisions** | If two source files map to the same destination stem, including case-insensitive match on APFS/NTFS (e.g. `1.jpg` + `1.JPG`), ingest fails — never silently overwrite. | `DuplicatePageStem` |
 | **Atomic write** | Write to a temp dir under the destination parent → validate → rename into place. If a destination book id already exists, ingest fails. | `DestinationExists` |
-| **Orphan cleanup** | On startup and before ingest, delete orphaned `*.scriptorium-tmp` / `.ingest-tmp-*` dirs under the library root older than 1 hour (or any left from a previous crashed run). | — |
+| **Input format** | A file's contents must match its extension (a TIFF named `.png` is refused), because the extension decides how the page is stored. | `UnreadableFile` |
+| **Orphan cleanup** | Before each ingest (and, once Phase 2 wires it, at app startup), delete `.ingest-tmp-*` directories older than 1 hour unless a running ingest holds their `.ingest.lock`, and `*.scriptorium-tmp` files older than 1 hour at the library root and inside each book. Only `.ingest-tmp-*` directories are ever deleted: a directory that merely ends in the temp suffix is treated as a book. | — |
 | **Checksums** | Compute `sha256` at ingest and store it in `meta.json`. `load_book` re-verifies the sha256 of each page file; drift is a hard failure. Skip re-verify only behind an explicit future flag — not in M1. | `ChecksumMismatch` |
 | **Free space** | Pre-flight check: refuse the copy if free space is less than `estimated_bytes × 1.1 + 50 MB` headroom. `estimated_bytes` is the total ingest will write: every display image plus every retained original (v2). | — |
+
+## Planned: export and import (M5)
+
+A built book is exported as one `.scriptorium` file and imported on another machine. The
+bundle format is specified here before M5 builds it. Planned shape, provisional:
+
+- A `.scriptorium` file is a zip of the package folder with the package's own layout at the
+  zip root (`meta.json`, `pages/`, and the rest). Entries are stored, not compressed.
+- A manifest at `bundle.json` in the zip root records the bundle version, `formatVersion`, and
+  the exporting app version.
+- Import unpacks into an `.ingest-tmp-*` directory under the library root, so the orphan sweep
+  covers a crashed import. It rejects entries with absolute paths, `..`, or symlinks, caps the
+  unpacked size, and extracts only `meta.json`, `annotations.json`, `bundle.json`, the files
+  `meta.json` names, and files under `ocr/` (bounded only by the size cap, since `meta.json`
+  does not list them). Anything else is rejected. `bundle.json` is read for validation and
+  not kept in the package. Then `load_book` runs before the book joins the library.
+- A taken `id` is never overwritten. Importing under a new id rewrites both the directory name
+  and `meta.json`'s `id`, and the new id follows the usual id rules.
+
+Because a package already holds only relative paths, a plain folder copy is also a valid
+export; the bundle just makes it one file.
 
 ## Provenance and privacy
 

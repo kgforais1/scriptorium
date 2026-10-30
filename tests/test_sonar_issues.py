@@ -172,5 +172,71 @@ class SummaryTests(unittest.TestCase):
         self.assertNotIn("Truncated", mod.summarize([], 0))
 
 
+class ReportNewTests(unittest.TestCase):
+    def _run(self, previous, issues, total) -> str:
+        import io
+        from contextlib import redirect_stdout
+
+        out = io.StringIO()
+        with redirect_stdout(out):
+            mod.report_new(previous, issues, total)
+        return out.getvalue()
+
+    def test_a_moved_issue_is_not_new(self) -> None:
+        old = {"rule": "r", "component": "p:a.rs", "message": "m", "line": 3}
+        moved = dict(old, line=9)
+        self.assertIn("No new issues", self._run((1, [old]), [moved], 1))
+
+    def test_a_new_issue_demands_a_fix(self) -> None:
+        old = {"rule": "r", "component": "p:a.rs", "message": "m"}
+        new = {"rule": "s", "component": "p:b.rs", "message": "n", "line": 4}
+        text = self._run((1, [old]), [old, new], 2)
+        self.assertIn("ACTION REQUIRED", text)
+        self.assertIn("b.rs:4", text)
+        self.assertIn("Fix these", text)
+
+    def test_server_keys_win_over_messages(self) -> None:
+        old = {"key": "k1", "rule": "S3776", "component": "p:a.rs", "message": "from 18"}
+        fixed_some = dict(old, message="from 16")
+        twin = dict(old, key="k2")
+        self.assertIn("No new issues", self._run((1, [old]), [fixed_some], 1))
+        self.assertIn("ACTION REQUIRED", self._run((1, [old]), [old, twin], 2))
+        self.assertIn("ACTION REQUIRED", self._run((1, [old]), [twin], 1), "replaced, same total")
+
+    def test_truncated_scan_warns(self) -> None:
+        old = {"key": "k1"}
+        self.assertIn("only 1 of 5", self._run((5, [old]), [old], 5))
+
+    def test_load_previous_refuses_bad_records(self) -> None:
+        import json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dump = root / "d.json"
+            state = root / "s.json"
+            with mock.patch.object(mod, "ROOT", root):
+                for issues, truncated in (([{"key": "a"}], True), ({"a": 1}, False), ([1], False)):
+                    dump.write_text(json.dumps(issues), encoding="utf-8")
+                    state.write_text(
+                        json.dumps(
+                            {
+                                "issues_path": "d.json",
+                                "issues_count": 1,
+                                "issues_truncated": truncated,
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                    self.assertIsNone(mod.load_previous(state), issues)
+                dump.write_text(json.dumps([{"key": "a"}]), encoding="utf-8")
+                state.write_text(
+                    json.dumps({"issues_path": "d.json", "issues_count": 1}), encoding="utf-8"
+                )
+                self.assertEqual(mod.load_previous(state), (1, [{"key": "a"}]))
+
+    def test_no_previous_scan(self) -> None:
+        self.assertIn("No complete earlier scan", self._run(None, [], 0))
+
+
 if __name__ == "__main__":
     unittest.main()

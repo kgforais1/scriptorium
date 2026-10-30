@@ -3,7 +3,7 @@
 Last reviewed: 2026-10-28
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
-Status: draft
+Status: in-progress (approved 2026-10-29)
 Linked issue/PR: n/a
 Depends on:
 - [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md) **complete**
@@ -61,7 +61,7 @@ folder pickers.
 | A5 | Keys: **←/→** and on-screen prev/next; at last page next is no-op; at first page prev is no-op | Manual script |
 | A6 | `lastReadPage` persists across quit/relaunch for the same book **`id`** (not filesystem path); progress flush on window close (not only debounced flip) | Manual script |
 | A7 | Open… on an existing package directory loads without re-copy | Manual script |
-| A8 | Unsupported `formatVersion` → `SchemaVersionUnsupported` message | `cargo test` |
+| A8 | Unsupported `formatVersion` → `UnsupportedFormatVersion` message | `cargo test` |
 | A9 | Perf budget (below) holds on the **named reference class** against the **pinned gate corpus** | Manual timed run; record results in PR |
 | A10 | Mutating one byte of a page file, or of a `sources[]` original, causes `ChecksumMismatch` on load | `cargo test` |
 | A11 | Ingest rejects `id` that case-folds equal to an existing book directory on case-insensitive FS | `cargo test` |
@@ -78,7 +78,7 @@ folder pickers.
 | `DestinationExists` | Target book path exists (incl. case-insensitive `id` collision on macOS/Windows) | Refuse overwrite |
 | `DuplicatePageStem` | Two sources map to same stem (incl. case-insensitive) | Duplicate page names |
 | `InsufficientDiskSpace` | Pre-flight fail | Need more free space |
-| `SchemaVersionUnsupported` | Unknown/newer formatVersion | Unsupported book version |
+| `UnsupportedFormatVersion` | Unknown/newer formatVersion | Unsupported book version |
 | `InvalidPackage` | missing meta / schema fail | Not a valid Scriptorium book |
 | `ChecksumMismatch` | Page or original bytes ≠ stored sha256 | Book files corrupted or modified |
 | `PermissionDenied` | OS denied | Permission denied |
@@ -121,9 +121,47 @@ Decoder choices, confirmed in Phase 1 with a small spike per crate:
 | ICC and CMYK to sRGB | `lcms2`, statically linked |
 | JPEG 2000 | `jpeg2k` over OpenJPEG, statically linked so no runtime library ships |
 
+Spike result (2026-10-29, macOS): all four crates confirmed, with three findings.
+
+- `image` silently turns a CMYK JPEG into RGB with no colour management. Ingest reads the SOF
+  component count itself and decodes CMYK JPEGs with `zune-jpeg`, honouring the Adobe APP14
+  inversion, then converts with `lcms2`.
+- The pure-Rust `openjp2` port tripped an undefined-behaviour check in a debug build, so
+  `jpeg2k` uses the bundled C OpenJPEG (`openjpeg-sys`). An 11 MP page decodes in about 130 ms.
+- `lcms2` links a system LittleCMS when one is installed. Its `static` feature is on, so the
+  binary links no image library dynamically.
+
+Known limits, each `UnreadableFile` unless noted:
+
+- JPEG 2000: an embedded colour profile is ignored and the image treated as sRGB (not an
+  error). Images over 150 megapixels, zero-sized images, and images whose header size disagrees
+  with the decoded size or whose samples run short are rejected; the size is read from the
+  `jp2h`/`ihdr` box before decoding. The codestream's SIZ marker is also checked first: more
+  than 4 components or 65,536 tiles is refused. Subsampled, signed, YCC, and CMYK images are
+  rejected, and so are images with transparency (2 components, or 4 in sRGB), because the
+  display copy is a JPEG.
+- `meta.json` over 64 MB is refused before it is read.
+- An original recorded as `pdf` is checked by checksum only, because ingest cannot decode PDF
+  before M1.5. Any original can skip the format and frame checks by claiming `pdf` until then.
+- Loading refuses a `meta.json`, page, or original that is itself a symlink
+  (`InvalidPackage`). Only the last path component is checked, so a linked `pages/`
+  directory, a hard link, or a Windows junction that stays inside the package is still
+  accepted (Phase 2).
+- Known gap (Phase 2): inputs are checked for symbolic links when the folder is listed, not
+  when each file is opened, so a file swapped for a link mid-ingest would be followed. Close it
+  with no-follow opens when Phase 2 adds the Open… flow.
+- TIFF: only 8- and 16-bit grey, RGB, and RGBA, plus 8-bit CMYK with a profile. Palette,
+  YCbCr, Lab, grey with alpha, 16-bit CMYK, and 32/64-bit or float layouts are rejected.
+- A corrupt embedded ICC profile rejects the page rather than assuming sRGB, and a grey
+  profile on a colour image is rejected rather than turning the page grey (grey and
+  grey-with-alpha images convert normally). Files copied as-is are still fully decoded at
+  ingest, so a damaged file is rejected.
+- A JPEG that only needs a rotation or a colour fix is re-encoded at q92. A lossless JPEG
+  rotation is a possible later improvement.
+
 Originals need a book-level `sources[]` list and a per-page `source` reference, so M1 writes
 `formatVersion` 2. See
-[`docs/book-format.md`](../docs/book-format.md#planned-originals-and-display-copies).
+[`docs/book-format.md`](../docs/book-format.md#originals-formatversion-2).
 
 ### Natural-sort specification (normative for M1)
 
@@ -212,36 +250,53 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 
 ### Phase 0 — Integration gate (ADR already done)
 
-- [ ] Confirm ADR library still loads in current shell
+- [x] Confirm ADR library still loads in current shell (spike on `main`, 2026-10-29)
 - [ ] Complete asset-protocol checklist above (macOS required; Windows if available)
 - [ ] Stop if G1–G6 from spike no longer hold
 - [ ] Close ADR-0001's open items: WebGL2 on WebView2 (Windows) and WebKitGTK (Linux), touch on
       real hardware, frame rate in WKWebView, and a process RSS sample
+- [ ] CI on Windows and macOS for the Rust crate (`cargo test`, clippy): the `rust-cross` job in
+      `ci.yml` (added 2026-10-29, green on both). Tick once both are marked required in the
+      branch ruleset. Until then Windows path handling is untested, and the two `sips` fixtures (CMYK
+      with a profile, JPEG 2000) run only on macOS
 
 ### Phase 1 — Book I/O (Rust)
 
-- [ ] Book format v2: rename the current schema to `book-format.v1.schema.json` and add
+- [x] Book format v2: rename the current schema to `book-format.v1.schema.json` and add
       `book-format.v2.schema.json` with `sources[]` and page `source`. The loader reads
       `formatVersion` first, then picks the schema; any other version is
-      `SchemaVersionUnsupported` (A8). Rust reads v1 and v2 and writes v2. Add the `sources[]`
+      `UnsupportedFormatVersion` (A8). Rust reads v1 and v2 and writes v2. Add the `sources[]`
       validation rules and the v1→v2 migration note to `docs/book-format.md`. Update every
       reference to the old schema path (`src-tauri/src/book_format.rs` `load_schema`,
       `tests/test_generate_fixture_book.py`, README, `docs/NAVIGATION.md`, `CHANGELOG.md`,
-      comments) and give each schema file its own `$id`
-- [ ] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
+      comments) and give each schema file its own `$id`. Done 2026-10-29: schemas, Rust types
+      and rules, spec and migration note, fixture generator writes v2. The loader's
+      schema-by-version pick lands with `load_book`
+- [x] Format conversion per [Input formats](#input-formats-normative-for-m1), with one
       fixture per row and per conversion rule (CMYK, 16-bit, ICC, EXIF orientation,
-      multi-page TIFF)
-- [ ] Natural sort + table tests
-- [ ] Atomic create_book_from_folder + free-space check + DestinationExists
-- [ ] Per-page width/height/sha256/byteSize written
-- [ ] load_book + schema validation
-- [ ] lastReadPage read/write keyed by book **`id`**; flush API for window close
-- [ ] load_book re-verifies per-page sha256 and each `sources[]` sha256 once (negative test: A10)
-- [ ] load_book canonical path prefix check (A12)
-- [ ] Ingest case-insensitive `id` collision check (A11)
-- [ ] Orphan temp-dir sweep + DuplicatePageStem tests
-- [ ] All error taxonomy variants tested with `tempfile`
-- [ ] Schema bind: Rust sample serialize ↔ `docs/book-format.v2.schema.json` (and v1 samples ↔ v1 schema)
+      multi-page TIFF). Done 2026-10-29 in `src-tauri/src/ingest/convert.rs`; fixtures are
+      generated at test time, and the CMYK-with-profile and JPEG 2000 cases need macOS `sips`
+- [x] Reserve the M2 and M6 layout in `docs/book-format.md` with no schema change: `ocr/` holds
+      one JSON per page (text, word and line boxes in normalized page coordinates, `source` of
+      `ocr`, `pdf`, or `curator`) plus `ocr/index.json` (per-page status and book rollup);
+      `annotations.json` regions use normalized page coordinates. Shapes are provisional until M2/M6
+- [x] Natural sort + table tests
+- [x] Atomic create_book_from_folder + free-space check + DestinationExists
+- [x] Per-page width/height/sha256/byteSize written
+- [x] load_book + schema validation
+- [x] lastReadPage read/write keyed by book **`id`**; flush API for window close
+- [x] load_book re-verifies per-page sha256 and each `sources[]` sha256 once (negative test: A10),
+      and checks each source's `frames` against the frame count the file reports
+- [x] load_book canonical path prefix check (A12) for `pages/` and `originals/`
+- [x] Ingest case-insensitive `id` collision check (A11)
+- [x] Orphan temp-dir sweep + DuplicatePageStem tests
+- [x] All error taxonomy variants tested with `tempfile`. Done 2026-10-29 in
+      `src-tauri/src/library/` (create, load, progress, sort, sweep). Smoke on the Dulac corpus:
+      202 pages created in 6.1 s (every page decoded once to validate it) and loaded with full
+      checksum verification in 0.17 s. `lastReadPage` lives in the book's own `meta.json`, so it
+      follows the book `id`; `save_last_read_page` is synchronous and atomic, ready for the
+      Phase 2 close-flush command
+- [x] Schema bind: Rust sample serialize ↔ `docs/book-format.v2.schema.json` (and v1 samples ↔ v1 schema)
 
 ### Phase 2 — Commands + UI
 
@@ -254,6 +309,8 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 ### Phase 3 — Reader
 
 - [ ] ADR flip library bound to page list
+- [ ] Engine publishes each visible page's projected corners per frame, for M2's text overlay
+      and M6's hotspots (fold into the Phase 3 refresh from ADR-0001)
 - [ ] ←/→ + on-screen controls; edge no-ops
 - [ ] Debounced progress + **flush on close**
 - [ ] Loading / empty states
@@ -272,6 +329,12 @@ scripts/generate-fixture-book.*  — small + large corpora → tmp/
 ### Phase 4 — Docs & release
 
 - [ ] `docs/manual-test-m1.md` + README try-it
+- [ ] User docs, first pass: a getting-started guide for curators (install, build a book from a
+      folder, read it, where books live) and a short tutorial using a public-domain sample book.
+      Keep them in `docs/user/` so later in-app help can reuse the same text
+- [ ] Third-party notices file for statically linked C libraries (OpenJPEG BSD-2, LittleCMS
+      MIT) shipped with the app bundle; re-check the bundled OpenJPEG version (2.5.3) for advisories,
+      since `cargo audit` cannot see C code
 - [ ] `VERSION` → **0.2.0**; `CHANGELOG.md` user-facing
 - [ ] Update roadmap / `to_do.md`; archive this plan when verified
 

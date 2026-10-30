@@ -10,8 +10,9 @@ uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Book package format version 2: a package can keep the untouched original of each converted page under `originals/`. Version 1 packages still open. See [`docs/book-format.md`](docs/book-format.md).
 - Public repository posture: [`SECURITY.md`](SECURITY.md) for vulnerability reporting; README reflects public/early-dev status.
-- Tauri 2 desktop shell (Vite + React + TypeScript) at repo root; book package format v1 spec and JSON Schema ([`docs/book-format.md`](docs/book-format.md), [`docs/book-format.schema.json`](docs/book-format.schema.json)); Rust types + schema-bind test; deterministic fixture generator.
+- Tauri 2 desktop shell (Vite + React + TypeScript) at repo root; book package format v1 spec and JSON Schema ([`docs/book-format.md`](docs/book-format.md), [`docs/book-format.v1.schema.json`](docs/book-format.v1.schema.json)); Rust types + schema-bind test; deterministic fixture generator.
 
 ### Changed
 - GitHub repository ownership transferred to [`kgforais1/scriptorium`](https://github.com/kgforais1/scriptorium); security reporting links updated in [`SECURITY.md`](SECURITY.md).

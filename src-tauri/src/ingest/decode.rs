@@ -1,0 +1,490 @@
+//! Decoding one frame of each input format into an `image::DynamicImage`, with the ICC
+//! profile and orientation the conversion rules need.
+
+use super::color;
+use super::convert::{unreadable, ConvertError, InputKind};
+use image::metadata::Orientation;
+use image::{DynamicImage, ImageBuffer, ImageDecoder, ImageReader};
+use std::io::Cursor;
+
+/// A decoded frame before colour conversion and rotation.
+pub(super) struct Decoded {
+    pub image: DynamicImage,
+    pub icc: Option<Vec<u8>>,
+    pub orientation: Orientation,
+}
+
+pub(super) struct HeaderInfo {
+    /// More than 8 bits per sample.
+    pub deep: bool,
+    pub icc: Option<Vec<u8>>,
+    pub orientation: Orientation,
+}
+
+/// The marker segments of a JPEG header, in order, up to the start of scan. Skips `0xFF`
+/// fill bytes and the standalone markers (TEM, RSTn) that carry no length. Stops quietly on
+/// a truncated or malformed header, so callers see fewer segments, never a panic.
+pub(super) fn jpeg_segments(bytes: &[u8]) -> Vec<(u8, &[u8])> {
+    walk_jpeg(bytes).0
+}
+
+/// The header segments, plus the offset where entropy-coded scan data starts (after the
+/// first SOS segment), or `None` when the header never reaches a scan.
+fn walk_jpeg(bytes: &[u8]) -> (Vec<(u8, &[u8])>, Option<usize>) {
+    let mut out = Vec::new();
+    if bytes.get(..2) != Some(&[0xFF, 0xD8]) {
+        return (out, None);
+    }
+    let mut i = 2;
+    loop {
+        if bytes.get(i) != Some(&0xFF) {
+            return (out, None);
+        }
+        while bytes.get(i + 1) == Some(&0xFF) {
+            i += 1;
+        }
+        let Some(&marker) = bytes.get(i + 1) else {
+            return (out, None);
+        };
+        if marker == 0x01 || (0xD0..=0xD8).contains(&marker) {
+            i += 2;
+            continue;
+        }
+        if marker == 0xD9 {
+            return (out, None);
+        }
+        let Some(len) = bytes
+            .get(i + 2..i + 4)
+            .map(|b| u16::from_be_bytes([b[0], b[1]]) as usize)
+        else {
+            return (out, None);
+        };
+        let Some(payload) = len.checked_sub(2).and_then(|n| bytes.get(i + 4..i + 4 + n)) else {
+            return (out, None);
+        };
+        if marker == 0xDA {
+            return (out, Some(i + 2 + len));
+        }
+        out.push((marker, payload));
+        i += 2 + len;
+    }
+}
+
+/// Component count of a JPEG's first frame header (any SOFn).
+fn jpeg_components(bytes: &[u8]) -> Option<u8> {
+    jpeg_segments(bytes)
+        .into_iter()
+        .find(|(m, _)| (0xC0..=0xCF).contains(m) && !matches!(m, 0xC4 | 0xC8 | 0xCC))
+        .and_then(|(_, p)| p.get(5).copied())
+}
+
+/// True when the JPEG has an Adobe APP14 segment; such CMYK JPEGs store inverted samples.
+pub(super) fn jpeg_has_adobe_marker(bytes: &[u8]) -> bool {
+    jpeg_segments(bytes)
+        .iter()
+        .any(|(m, p)| *m == 0xEE && p.starts_with(b"Adobe"))
+}
+
+/// True for a four-component (CMYK or YCCK) JPEG. `image` would silently convert these to
+/// RGB without colour management, so they take their own path.
+pub(super) fn jpeg_is_cmyk(bytes: &[u8]) -> bool {
+    jpeg_components(bytes) == Some(4)
+}
+
+fn reader(bytes: &[u8]) -> Result<impl ImageDecoder + '_, ConvertError> {
+    ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(unreadable)?
+        .into_decoder()
+        .map_err(unreadable)
+}
+
+pub(super) fn header_info(bytes: &[u8]) -> Result<HeaderInfo, ConvertError> {
+    let mut dec = reader(bytes)?;
+    let icc = dec.icc_profile().map_err(unreadable)?;
+    let orientation = dec.orientation().map_err(unreadable)?;
+    let deep = dec.color_type().bytes_per_pixel() / dec.color_type().channel_count() > 1;
+    Ok(HeaderInfo {
+        deep,
+        icc,
+        orientation,
+    })
+}
+
+pub(super) fn tiff_frame_count(bytes: &[u8]) -> Result<u32, ConvertError> {
+    let mut dec = tiff::decoder::Decoder::new(Cursor::new(bytes)).map_err(unreadable)?;
+    let mut frames = 1;
+    while dec.more_images() {
+        dec.next_image().map_err(unreadable)?;
+        frames += 1;
+    }
+    Ok(frames)
+}
+
+/// A complete JPEG has an end-of-image marker after its scan data. The JPEG decoders fill a
+/// truncated scan with grey instead of failing, so a missing EOI is the truncation signal.
+/// The search starts at the scan: header payloads (an EXIF thumbnail with its own EOI, ICC
+/// bytes) must not count. Entropy-coded data never contains `FF D9`, because a data `FF` is
+/// stuffed as `FF 00`.
+fn jpeg_is_complete(bytes: &[u8]) -> bool {
+    walk_jpeg(bytes).1.is_some_and(|start| {
+        bytes[start.min(bytes.len())..]
+            .windows(2)
+            .any(|w| w == [0xFF, 0xD9])
+    })
+}
+
+pub(super) fn decode_frame(
+    kind: InputKind,
+    bytes: &[u8],
+    frame: u32,
+) -> Result<Decoded, ConvertError> {
+    if kind == InputKind::Jpeg && !jpeg_is_complete(bytes) {
+        return Err(unreadable("JPEG is truncated (no end-of-image marker)"));
+    }
+    match kind {
+        InputKind::Tiff => decode_tiff(bytes, frame),
+        InputKind::Jp2 => decode_jp2(bytes),
+        InputKind::Jpeg if jpeg_is_cmyk(bytes) => {
+            let orientation = reader(bytes)?.orientation().map_err(unreadable)?;
+            Ok(Decoded {
+                image: color::cmyk_jpeg_to_srgb(bytes)?,
+                icc: None,
+                orientation,
+            })
+        }
+        _ => {
+            let mut dec = reader(bytes)?;
+            let icc = dec.icc_profile().map_err(unreadable)?;
+            let orientation = dec.orientation().map_err(unreadable)?;
+            let image = DynamicImage::from_decoder(dec).map_err(unreadable)?;
+            Ok(Decoded {
+                image,
+                icc,
+                orientation,
+            })
+        }
+    }
+}
+
+const TIFF_ICC_TAG: u16 = 34675;
+
+fn decode_tiff(bytes: &[u8], frame: u32) -> Result<Decoded, ConvertError> {
+    use tiff::decoder::{Decoder, DecodingResult};
+    use tiff::tags::Tag;
+    use tiff::ColorType;
+
+    let mut dec = Decoder::new(Cursor::new(bytes)).map_err(unreadable)?;
+    dec.seek_to_image(frame as usize).map_err(unreadable)?;
+    let (w, h) = dec.dimensions().map_err(unreadable)?;
+    let color = dec.colortype().map_err(unreadable)?;
+    let orientation = dec
+        .find_tag(Tag::Orientation)
+        .map_err(unreadable)?
+        .and_then(|v| v.into_u16().ok())
+        // A value that does not fit a byte is invalid; it must not wrap into a real rotation.
+        .and_then(|v| u8::try_from(v).ok())
+        .and_then(Orientation::from_exif)
+        .unwrap_or(Orientation::NoTransforms);
+    let icc = dec
+        .find_tag(Tag::Unknown(TIFF_ICC_TAG))
+        .map_err(unreadable)?
+        .and_then(|v| v.into_u8_vec().ok());
+    let data = dec.read_image().map_err(unreadable)?;
+    let bad = || unreadable(format!("unsupported TIFF layout {color:?}"));
+    let image = match (color, data) {
+        (ColorType::RGB(8), DecodingResult::U8(v)) => {
+            DynamicImage::ImageRgb8(ImageBuffer::from_raw(w, h, v).ok_or_else(bad)?)
+        }
+        (ColorType::RGBA(8), DecodingResult::U8(v)) => {
+            DynamicImage::ImageRgba8(ImageBuffer::from_raw(w, h, v).ok_or_else(bad)?)
+        }
+        (ColorType::Gray(8), DecodingResult::U8(v)) => {
+            DynamicImage::ImageLuma8(ImageBuffer::from_raw(w, h, v).ok_or_else(bad)?)
+        }
+        (ColorType::RGB(16), DecodingResult::U16(v)) => {
+            DynamicImage::ImageRgb16(ImageBuffer::from_raw(w, h, v).ok_or_else(bad)?)
+        }
+        (ColorType::RGBA(16), DecodingResult::U16(v)) => {
+            DynamicImage::ImageRgba16(ImageBuffer::from_raw(w, h, v).ok_or_else(bad)?)
+        }
+        (ColorType::Gray(16), DecodingResult::U16(v)) => {
+            DynamicImage::ImageLuma16(ImageBuffer::from_raw(w, h, v).ok_or_else(bad)?)
+        }
+        (ColorType::CMYK(8), DecodingResult::U8(v)) => {
+            color::cmyk_pixels_to_srgb(w, h, &v, icc.as_deref(), false)?
+        }
+        _ => return Err(bad()),
+    };
+    // A CMYK frame is already sRGB after its own transform.
+    let icc = if matches!(color, ColorType::CMYK(_)) {
+        None
+    } else {
+        icc
+    };
+    Ok(Decoded {
+        image,
+        icc,
+        orientation,
+    })
+}
+
+/// Largest JPEG 2000 image ingest will decode (150 megapixels; a scanned page is ~11 MP).
+/// OpenJPEG allocates the full image itself, so the header is checked before decoding.
+pub(super) const JP2_MAX_PIXELS: u64 = 150_000_000;
+
+/// The `(type, payload)` boxes in `bytes`, walking box lengths (an 8-byte header, a 16-byte
+/// one when the length field is 1, and "to the end" when it is 0). Stops at a malformed box.
+fn jp2_boxes(bytes: &[u8]) -> Vec<([u8; 4], &[u8])> {
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i + 8 <= bytes.len() {
+        let len32 = u32::from_be_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]) as u64;
+        let kind = [bytes[i + 4], bytes[i + 5], bytes[i + 6], bytes[i + 7]];
+        let (header, len) = match len32 {
+            0 => (8u64, (bytes.len() - i) as u64),
+            1 => match bytes.get(i + 8..i + 16) {
+                Some(b) => (
+                    16,
+                    u64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]),
+                ),
+                None => break,
+            },
+            n => (8, n),
+        };
+        let Ok(end) = usize::try_from(len).map(|l| i.saturating_add(l)) else {
+            break;
+        };
+        if len < header || end > bytes.len() {
+            break;
+        }
+        out.push((kind, &bytes[i + header as usize..end]));
+        i = end;
+    }
+    out
+}
+
+/// Width and height from a JP2 file's `jp2h`/`ihdr` header box, or from a raw codestream's
+/// SIZ marker, without decoding. Only the real header counts: an `ihdr` byte pattern inside
+/// some other box is ignored.
+pub(super) fn jp2_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    let be32 = |b: &[u8], at: usize| {
+        b.get(at..at + 4)
+            .map(|v| u32::from_be_bytes([v[0], v[1], v[2], v[3]]))
+    };
+    if bytes.starts_with(&[0xFF, 0x4F, 0xFF, 0x51]) {
+        // SIZ: marker(2) Lsiz(2) Rsiz(2) Xsiz(4) Ysiz(4) XOsiz(4) YOsiz(4), after SOC.
+        let (x, y) = (be32(bytes, 8)?, be32(bytes, 12)?);
+        let (xo, yo) = (be32(bytes, 16)?, be32(bytes, 20)?);
+        return Some((x.checked_sub(xo)?, y.checked_sub(yo)?));
+    }
+    let (_, jp2h) = jp2_boxes(bytes).into_iter().find(|(k, _)| k == b"jp2h")?;
+    let (_, ihdr) = jp2_boxes(jp2h).into_iter().find(|(k, _)| k == b"ihdr")?;
+    // ihdr payload: HEIGHT(4) WIDTH(4) NC(2) BPC(1) C(1) UnkC(1) IPR(1).
+    Some((be32(ihdr, 4)?, be32(ihdr, 0)?))
+}
+
+/// Most components a JPEG 2000 page may have (grey, RGB, or RGBA).
+const JP2_MAX_COMPONENTS: u32 = 4;
+/// Most tiles a JPEG 2000 codestream may declare; the decoder allocates per tile.
+const JP2_MAX_TILES: u64 = 65_536;
+
+/// What a codestream's SIZ marker declares: image size, component count, and tile count.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Siz {
+    pub width: u32,
+    pub height: u32,
+    pub components: u32,
+    pub tiles: u64,
+}
+
+/// Parse the SIZ marker at the start of a raw codestream. JPEG 2000 Part 1 puts SIZ directly
+/// after SOC; Part 15 (HTJ2K) inserts a CAP segment first, which OpenJPEG cannot decode
+/// anyway, so such files are refused here as having no valid SIZ.
+pub(super) fn parse_siz(cs: &[u8]) -> Option<Siz> {
+    if !cs.starts_with(&[0xFF, 0x4F, 0xFF, 0x51]) {
+        return None;
+    }
+    let be32 = |at: usize| {
+        cs.get(at..at + 4)
+            .map(|v| u32::from_be_bytes([v[0], v[1], v[2], v[3]]))
+    };
+    let be16 = |at: usize| cs.get(at..at + 2).map(|v| u16::from_be_bytes([v[0], v[1]]));
+    // SOC(2) SIZ(2) Lsiz(2) Rsiz(2) Xsiz Ysiz XOsiz YOsiz XTsiz YTsiz XTOsiz YTOsiz Csiz(2)
+    let (x, y, xo, yo) = (be32(8)?, be32(12)?, be32(16)?, be32(20)?);
+    let (xt, yt, xto, yto) = (be32(24)?, be32(28)?, be32(32)?, be32(36)?);
+    let components = u32::from(be16(40)?);
+    if xt == 0 || yt == 0 || xto > xo || yto > yo {
+        return None;
+    }
+    let across = u64::from(x.checked_sub(xto)?).div_ceil(u64::from(xt));
+    let down = u64::from(y.checked_sub(yto)?).div_ceil(u64::from(yt));
+    Some(Siz {
+        width: x.checked_sub(xo)?,
+        height: y.checked_sub(yo)?,
+        components,
+        tiles: across.saturating_mul(down),
+    })
+}
+
+/// The codestream of a JPEG 2000 file: the file itself when it is a raw codestream, or the
+/// payload of its top-level `jp2c` box.
+fn jp2_codestream(bytes: &[u8]) -> Option<&[u8]> {
+    if bytes.starts_with(&[0xFF, 0x4F]) {
+        return Some(bytes);
+    }
+    jp2_boxes(bytes)
+        .into_iter()
+        .find(|(k, _)| k == b"jp2c")
+        .map(|(_, p)| p)
+}
+
+/// Refuse a codestream whose declared components, tiles, or samples exceed the limits,
+/// before OpenJPEG allocates for it.
+fn check_siz(bytes: &[u8]) -> Result<(), ConvertError> {
+    let siz = jp2_codestream(bytes)
+        .and_then(parse_siz)
+        .ok_or_else(|| unreadable("JPEG 2000 codestream has no valid SIZ header"))?;
+    if siz.components == 0 || siz.components > JP2_MAX_COMPONENTS {
+        return Err(unreadable(format!(
+            "JPEG 2000 with {} components is not supported",
+            siz.components
+        )));
+    }
+    if siz.tiles > JP2_MAX_TILES {
+        return Err(unreadable(format!(
+            "JPEG 2000 declares {} tiles, over the {JP2_MAX_TILES} limit",
+            siz.tiles
+        )));
+    }
+    if over_limit(siz.width, siz.height) {
+        return Err(unreadable(format!(
+            "JPEG 2000 codestream is {}×{}, over the {JP2_MAX_PIXELS}-pixel limit",
+            siz.width, siz.height
+        )));
+    }
+    Ok(())
+}
+
+fn over_limit(w: u32, h: u32) -> bool {
+    u64::from(w) * u64::from(h) > JP2_MAX_PIXELS
+}
+
+/// Read and bound the image size from the header, before OpenJPEG allocates anything.
+fn check_jp2_header(bytes: &[u8]) -> Result<(u32, u32), ConvertError> {
+    let (hw, hh) =
+        jp2_dimensions(bytes).ok_or_else(|| unreadable("JPEG 2000 header has no image size"))?;
+    if hw == 0 || hh == 0 {
+        return Err(unreadable("JPEG 2000 image has zero width or height"));
+    }
+    if over_limit(hw, hh) {
+        return Err(unreadable(format!(
+            "JPEG 2000 image is {hw}×{hh}, over the {JP2_MAX_PIXELS}-pixel limit"
+        )));
+    }
+    check_siz(bytes)?;
+    Ok((hw, hh))
+}
+
+/// The decoded image must match its header and have full-size, unsigned, 1–16-bit components.
+fn check_jp2_image(img: &jpeg2k::Image, (hw, hh): (u32, u32)) -> Result<(), ConvertError> {
+    let comps = img.components();
+    let (w, h) = (img.width(), img.height());
+    // The decoder's own size must agree with the header; a lying header is refused here.
+    if (w, h) != (hw, hh) || over_limit(w, h) {
+        return Err(unreadable(format!(
+            "JPEG 2000 header says {hw}×{hh} but the image is {w}×{h}"
+        )));
+    }
+    if comps.is_empty() || comps.iter().any(|c| c.width() != w || c.height() != h) {
+        return Err(unreadable(
+            "JPEG 2000 with subsampled or missing components",
+        ));
+    }
+    if comps
+        .iter()
+        .any(|c| c.is_signed() || c.precision() == 0 || c.precision() > 16)
+    {
+        return Err(unreadable(
+            "JPEG 2000 with signed or unusual-precision samples",
+        ));
+    }
+    Ok(())
+}
+
+fn decode_jp2(bytes: &[u8]) -> Result<Decoded, ConvertError> {
+    use jpeg2k::ColorSpace;
+    let header = check_jp2_header(bytes)?;
+    let img = jpeg2k::Image::from_bytes(bytes).map_err(unreadable)?;
+    check_jp2_image(&img, header)?;
+    let comps = img.components();
+    let (w, h) = (img.width(), img.height());
+    // Only RGB and grey are drawn; YCC and CMYK colour spaces are rejected, and a 4-component
+    // image is taken as RGBA only when the file says sRGB.
+    let space = img.color_space();
+    let rgb_like = matches!(
+        space,
+        ColorSpace::SRGB | ColorSpace::Unspecified | ColorSpace::Unknown
+    );
+    let grey_like = matches!(
+        space,
+        ColorSpace::Gray | ColorSpace::Unspecified | ColorSpace::Unknown
+    );
+    let n = usize::try_from(u64::from(w) * u64::from(h)).map_err(unreadable)?;
+    // A damaged file can report fewer samples than its size; never index past them.
+    if w == 0 || h == 0 || comps.iter().any(|c| c.data().len() < n) {
+        return Err(unreadable(
+            "JPEG 2000 sample data is shorter than the image size",
+        ));
+    }
+    // Scale every sample to 8 bits from the component's own precision.
+    let to8 = |c: &jpeg2k::ImageComponent| -> Vec<u8> {
+        let max = ((1u32 << c.precision()) - 1) as f32;
+        c.data()
+            .iter()
+            .map(|&s| ((s.max(0) as f32) * 255.0 / max).round().clamp(0.0, 255.0) as u8)
+            .collect()
+    };
+    let planes: Vec<Vec<u8>> = comps.iter().map(to8).collect();
+    let interleave = |k: usize| -> Vec<u8> {
+        let mut out = Vec::with_capacity(n * k);
+        for i in 0..n {
+            for p in planes.iter().take(k) {
+                out.push(p[i]);
+            }
+        }
+        out
+    };
+    let bad = || unreadable("JPEG 2000 sample buffer has the wrong size");
+    let image = match planes.len() {
+        1 if grey_like => {
+            DynamicImage::ImageLuma8(ImageBuffer::from_raw(w, h, interleave(1)).ok_or_else(bad)?)
+        }
+        3 if rgb_like => {
+            DynamicImage::ImageRgb8(ImageBuffer::from_raw(w, h, interleave(3)).ok_or_else(bad)?)
+        }
+        // Grey or RGB plus transparency. A JPEG 2000 page becomes a JPEG, which has no
+        // alpha, so refuse rather than silently drop it. Other 4-component files (CMYK) fall
+        // through to the arm below, which names their colour space.
+        2 => {
+            return Err(unreadable(
+                "JPEG 2000 with transparency (an alpha channel) is not supported yet",
+            ))
+        }
+        4 if matches!(space, ColorSpace::SRGB) => {
+            return Err(unreadable(
+                "JPEG 2000 with transparency (an alpha channel) is not supported yet",
+            ))
+        }
+        k => {
+            return Err(unreadable(format!(
+                "JPEG 2000 with {k} components in colour space {space:?}"
+            )))
+        }
+    };
+    Ok(Decoded {
+        image,
+        icc: None,
+        orientation: Orientation::NoTransforms,
+    })
+}

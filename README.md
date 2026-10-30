@@ -15,7 +15,7 @@ Local agent profile (gitignored): `.context/project-profile.md`.
 **Roadmap:** [`plans/2026-08-23-product-roadmap.md`](plans/2026-08-23-product-roadmap.md) · **Backlog:** [`to_do.md`](to_do.md).
 **CI & hooks:** [`docs/ci-and-hooks.md`](docs/ci-and-hooks.md).
 **Domain menu:** [`inventory/virtual-books-flipbook.md`](inventory/virtual-books-flipbook.md).
-**Book format:** [`docs/book-format.md`](docs/book-format.md) · schema [`docs/book-format.schema.json`](docs/book-format.schema.json).
+**Book format:** [`docs/book-format.md`](docs/book-format.md) · schema [`docs/book-format.v2.schema.json`](docs/book-format.v2.schema.json).
 
 ---
 
@@ -59,7 +59,7 @@ Spec: [`docs/book-format.md`](docs/book-format.md).
 |---|---|
 | [`src-tauri/`](src-tauri/) | Tauri 2 Rust host + `book_format` types |
 | [`src/`](src/) | Vite + React + TypeScript UI shell |
-| [`docs/book-format.md`](docs/book-format.md) | Book package format (formatVersion 1) |
+| [`docs/book-format.md`](docs/book-format.md) | Book package format (formatVersion 2; reads 1) |
 | [`scripts/generate-fixture-book.py`](scripts/generate-fixture-book.py) | Deterministic fixture generator |
 | [`prompts/`](prompts/) | Reusable agent prompts: bootstrap, session-start, maintenance, reviews, audits |
 | [`templates/`](templates/) | Fill-in artifacts: briefs, plans, designs, ADRs, runbooks, release checklists, reviews, assessments |

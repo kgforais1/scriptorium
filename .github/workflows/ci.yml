@@ -222,6 +222,43 @@ jobs:
       - name: cargo check
         run: cargo check
 
+  rust-cross:
+    # Windows and macOS run the crate's tests too. Windows catches path and case-folding
+    # behaviour; macOS runs the sips-based ingest fixtures (CMYK with a profile, JPEG 2000)
+    # that skip on Linux. The repo is public, so standard runners cost no minutes.
+    name: Rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        run: |
+          rustup show
+          rustup component add clippy
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/index
+            ~/.cargo/git/db
+            src-tauri/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test
+
   typecheck-ts:
     name: Type check (TypeScript)
     runs-on: ubuntu-latest

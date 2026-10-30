@@ -76,6 +76,12 @@ Start with `tmp/sonar-latest-issues.md`, or open the project in the web UI. Tria
 bugs and vulnerabilities first. Compare issue identities between dumps, not only
 totals, because one fix can hide one new bug. Do not paste raw dumps into a PR.
 
+After each scan, `sonar_issues.py` compares the issues with the previous scan. It
+matches an issue by its server key, or by rule, file, and message when it has no key.
+When it finds new issues or a higher count, it prints `ACTION REQUIRED` and lists them.
+Agents must fix those issues before pushing, then scan again. An agent may ask the user
+to accept an issue instead only when the issue is truly trivial.
+
 ## Enable the freshness gate
 
 Two pre-commit hooks call

@@ -98,12 +98,30 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 
 **Target:** app is “aware” of text while still showing scans; search, select, copy.
 
-- [ ] OCR pipeline (evaluate: Tesseract via Rust sidecar vs batch CLI vs tesseract.js)
-- [ ] Store per-page OCR: plain text + word/line `bbox` JSON
+- [ ] Bundled OCR: ship an OCR engine with the app (lead candidate: Tesseract as a Tauri
+      sidecar, with language data for the corpora's languages), so OCR works offline with no
+      separate install. Evaluate quality on the test corpora before choosing; keep the engine
+      behind one interface so PaddleOCR or a cloud engine can be swapped in later
+- [ ] Transcription pipeline: ingest → OCR every page (any format: JPEG, PNG, TIFF, JPEG 2000,
+      PDF) → word/line boxes → curator correction → published page text. Re-running OCR never
+      overwrites curator corrections
+- [ ] Store per-page OCR: plain text + word/line `bbox` JSON (one JSON per page under `ocr/`,
+      per the layout M1 reserves in `docs/book-format.md`)
 - [ ] Full-text search UI; jump to page/highlight hit
-- [ ] Transparent text layer aligned to scan (select + copy)
+- [ ] Hidden text layer aligned to every scan, whatever its image format (select + copy +
+      search), not only PDFs with an embedded text layer. The book is a WebGL canvas, so the layer
+      is a DOM overlay placed from the engine's projected page geometry; boxes are stored in
+      normalized page coordinates (0–1)
+- [ ] Embed the page text in exported files: XMP metadata in exported JPEG and PNG pages, and a
+      hidden text layer in exported PDFs, so the text travels with the file. M2 owns this export
+      path. TIFF export waits until a TIFF encoder is added
+- [ ] Curator correction editor: side-by-side scan and text, edit words and line breaks,
+      mark a page reviewed; keep the OCR original and the correction history
 - [ ] Background OCR job with progress (re-run when pages change)
-- [ ] Book metadata: `ocrStatus`, `ocrEngine`, `ocrGeneratedAt`
+- [ ] OCR status per page plus a book-level rollup (`status`, `engine`, `generatedAt`), kept in
+      `ocr/index.json`, not `meta.json`, so M2 needs no `formatVersion` bump (decided 2026-10-29)
+- [ ] Curator-supplied page text (transcription or translation, typed or imported) stored beside
+      OCR with a `source` of `ocr`, `pdf`, or `curator`; curator text wins in search and the text layer
 
 ### M3 — Rendered text mode
 
@@ -122,24 +140,48 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 
 ### M5 — Library & multi-book
 
-- [ ] Library home: grid/list of books (cover thumbnail, title, progress)
-- [ ] Create / import / remove books
-- [ ] Standalone book bundles (portable folder or `.scriptorium` archive)
-- [ ] Optional shelves/collections tags in `meta.json`
+- [ ] Bookshelf (library home): an inventory of every book built on this machine, as a grid or
+      list with cover thumbnail, title, page count, and reading progress. It scans the library
+      root (`<app-data>/books/`) and reads each `meta.json`; a cached index speeds startup but the
+      folders stay the source of truth, so a book copied in by hand still appears. Full
+      `load_book` re-hashes every file, so the shelf reads and validates `meta.json` only. A
+      book whose `meta.json` is missing or invalid is listed as damaged with its `BookError`
+      message, never hidden; checksum drift is caught when the book is opened. The cache key is
+      `meta.json`'s size and mtime plus the book directory's mtime (files added or removed)
+- [ ] Create / import / remove books; remove asks first and moves the package to the OS trash
+- [ ] Export a built book as a single `.scriptorium` file: a zip of the package folder, stored
+      uncompressed because pages are already compressed. Spec the bundle in
+      `docs/book-format.md` (layout, a manifest with `formatVersion` and the app version, no
+      absolute paths) before building it
+- [ ] Import a `.scriptorium` file or a package folder: verify it with `load_book` (checksums,
+      paths inside the package, schema by version) before it joins the library; an `id` that is
+      already taken asks to keep both (new id) or cancel, never overwrite. Reject zip entries
+      with absolute paths, `..`, or symlinks, and cap the unpacked size
+- [ ] Document export and import for curators in the user docs (how to back up a book, move it
+      to another machine, and share it)
+- [ ] Optional shelves/collections tags in `meta.json` (a new field, so it needs a `formatVersion` bump)
 
 ### M6 — Authoring & hotspots
 
 **Audience:** librarians and gallery directors.
 
-- [ ] Author mode: draw region on page (`xywh` or polygon)
+- [ ] Author mode: draw region on page (`xywh` or polygon, in normalized page coordinates)
 - [ ] Attach lore popup content (markdown/HTML, images, links)
 - [ ] Long-press on touch / click on desktop → popup
+- [ ] Expandable annotations: a marker opens a short note, which expands into the full notes
+      panel (long text, images, links); keyboard and screen-reader operable per `design/DESIGN.md`
+- [ ] Curator detail views: the curator marks a region as a detail; readers click or tap it to
+      open a zoomed view of that region at full scan resolution, with a caption. Until M7's
+      deep-zoom panel lands, the detail opens as a scaled crop in the notes panel
 - [ ] Import/export annotations JSON (interchange with IIIF-style bodies later)
 
 ### M7 — Polish & extraction
 
 - [ ] Figure/image extraction from page regions (crop to assets)
-- [ ] Deep-zoom inspect on a page or region (OpenSeadragon-style panel), with pinch-to-zoom on touch
+- [ ] Deep-zoom inspect on a page or region (OpenSeadragon-style panel), with pinch-to-zoom on touch;
+      also renders M6 curator detail views
+- [ ] Fullscreen page view: open one page alone, fitted to the screen at full scan resolution,
+      with keyboard, swipe, and Escape to return to the book
 - [ ] Book polish beyond the M1 engine: page thickness, cover open/close, richer paper detail
 - [ ] Second skin **Gallery Daylight** (mockup B) + skin picker; remember choice per user
 - [ ] Performance: lazy load pages, virtualized thumbnail scrubber (basic scrubber ships in M1), large book handling
@@ -152,9 +194,22 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 - [ ] Optional vector semantic search over OCR (separate from page-image fidelity)
 - [ ] OCR engine upgrade path (e.g. PaddleOCR) if Tesseract quality insufficient
 
+## Documentation and help (cross-cutting)
+
+User-facing docs grow with each milestone instead of landing at the end.
+
+- [ ] M1: getting-started guide and a short tutorial in `docs/user/` (see the M1 plan, Phase 4)
+- [ ] Each later milestone updates the guide for its feature (PDF import, OCR and corrections,
+      library, export and import, authoring, skins) in the same change that ships it
+- [ ] Onboarding: a first-run screen that offers the sample book and the tutorial, skippable
+      and never shown again once dismissed
+- [ ] In-app help (M7): a Help panel that renders the `docs/user/` pages offline, a keyboard
+      shortcut sheet, and context links from error dialogs to the page that explains the fix
+- [ ] A docs check in CI so user docs keep working links and current screenshots
+
 ## Book package schema (evolving)
 
-**Source of truth:** authored in M0 as `docs/book-format.md` + `docs/book-format.schema.json`
+**Source of truth:** authored in M0 as `docs/book-format.md` + `docs/book-format.schema.json` (split into `v1` and `v2` schemas in M1)
 (see [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md)). Do not treat this
 roadmap as schema authority.
 
@@ -199,7 +254,7 @@ Illustrative shape (field names match M0 — not the superseded `image` / `defau
 ## Open questions (roadmap)
 
 - [x] React vs Svelte for Vite UI — React (scaffolded in M0)
-- [ ] OCR runtime: in-app Rust/Tesseract vs external batch vs WASM
+- [ ] OCR runtime: bundled in-app engine is the direction (2026-10-29); pick the engine and its packaging in M2
 - [ ] Fixed-layout text vs reflow for M3 (likely fixed-layout first for scanned books)
 
 ## Related docs

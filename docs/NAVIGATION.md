@@ -40,8 +40,8 @@ Quick navigation guide for this template's documentation. Use this to find what 
 - [`inventory/README.md`](../inventory/README.md) - Tool/skill menu (not a checklist)
 
 ### Domain
-- [`docs/book-format.md`](../docs/book-format.md) — book package format spec (formatVersion 1); schema + ingest rules
-- [`docs/book-format.schema.json`](../docs/book-format.schema.json) — JSON Schema for `meta.json`
+- [`docs/book-format.md`](../docs/book-format.md) — book package format spec (formatVersion 2, reads 1); schema + ingest rules
+- [`docs/book-format.v2.schema.json`](../docs/book-format.v2.schema.json) / [`v1`](../docs/book-format.v1.schema.json) — JSON Schemas for `meta.json`
 - [`tests/fixtures/README.md`](../tests/fixtures/README.md) — regenerate fixtures via `scripts/generate-fixture-book.py`
 - [`src-tauri/`](../src-tauri/) — Tauri 2 Rust host (`book_format` types)
 
