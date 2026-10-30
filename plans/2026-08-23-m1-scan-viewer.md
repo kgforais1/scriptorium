@@ -370,6 +370,14 @@ and the progress debounce.
 
 **Chunks.** Each chunk gets its own commit and a qoder review.
 
+0. Quality gates, before any app code. ESLint (flat config) with typescript-eslint,
+   `eslint-plugin-react-hooks`, `complexity: 15`, and `jsdoc/require-jsdoc` on exported
+   functions, run by a pre-commit hook and a CI job. Add `tsc --noEmit` to pre-commit. Add
+   Vitest with v8 coverage: CI fails below 80% lines on `src/lib/**` (UI components and the
+   dev-only spike are excluded). Add `src-tauri/clippy.toml` with
+   `cognitive-complexity-threshold = 15` and turn on `clippy::cognitive_complexity`, plus
+   `missing_docs` for public items. Add a docstring rule to `AGENTS.md` conventions. Rust
+   coverage and a higher Python gate stay in M0.5.
 1. CSP, `devCsp`, asset scope, dialog plugin, and capability (A13).
 2. Library progress callback, slug helper, `inspect_folder` core, and `CommandError`, with
    Rust tests.
@@ -378,6 +386,7 @@ and the progress debounce.
 5. Home, confirm, progress, error dialogs, book view, and close-flush.
 6. Docs: `docs/manual-test-m1.md` (Phase 2 steps), changelog, plan ticks.
 
+- [ ] Chunk 0: quality gates (ESLint, tsc hook, Vitest coverage, clippy complexity, docs)
 - [ ] Chunk 1: CSP and capabilities (A13)
 - [ ] Chunk 2: library hooks and `inspect_folder` core
 - [ ] Chunk 3: commands and app state
