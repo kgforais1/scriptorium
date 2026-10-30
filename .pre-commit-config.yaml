@@ -99,7 +99,7 @@ repos:
         files: '\.(ts|tsx)$'
         exclude: '^src-tauri/'
         pass_filenames: false
-        description: "TypeScript type check (tsconfig.json). Also runs in CI."
+        description: "TypeScript type check (tsconfig.json and tsconfig.node.json via pnpm typecheck). Also runs in CI."
 
       # Optional: uncomment if your team uses gitignored backups/ before edits
       # - id: prune-backups
