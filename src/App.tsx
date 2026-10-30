@@ -62,7 +62,6 @@ function Reader() {
           key={screen.book.root}
           book={screen.book}
           onClose={() => setScreen({ name: "home" })}
-          onError={setError}
         />
       )}
       {error && <ErrorDialog error={error} onClose={() => setError(null)} />}

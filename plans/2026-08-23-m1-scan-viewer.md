@@ -308,7 +308,7 @@ Spec fleshed out 2026-10-30 on branch `m1/phase2-commands-ui`. Phase 2 ends with
 runs `sweep_orphans(lib, sweep::ORPHAN_AGE)` there once, off the main thread. Never use a zero
 age at startup: another instance may be between creating its temp dir and locking it.
 
-**Commands** (`src-tauri/src/commands.rs`). Each runs its file work in
+**Commands** (`src-tauri/src/commands/`). Each runs its file work in
 `tauri::async_runtime::spawn_blocking`, so the UI never freezes. Each returns
 `Result<T, CommandError>`, where `CommandError` serializes as
 `{ kind: "<BookError variant>", message: "<Display text>" }`. `message` is the A3 user text.
@@ -421,11 +421,19 @@ build opens a book and shows its pages.
 - [x] Chunk 2: library hooks and `inspect_folder` core
 - [x] Chunk 3: commands and app state
 - [x] Chunk 4: TS API and Vitest
-- [x] Chunk 5: UI
+- [x] Chunk 5: UI (code done; the release-build gate is pending, below)
 - [x] Chunk 6: docs
 
 Manual verification (release build opens a book, A5–A7, A13) is pending: see
-[`docs/manual-test-m1.md`](../docs/manual-test-m1.md).
+[`docs/manual-test-m1.md`](../docs/manual-test-m1.md). It needs one run on Windows too,
+because only a real webview shows whether page paths load there.
+
+Known limits after Phase 2:
+
+- Opened books stay in the session and the asset scope until the app quits. **Close book**
+  revokes nothing. Revisit when the bookshelf (M5) opens many books in one run.
+- A book whose progress cannot be saved (for example, on a read-only volume) shows one note
+  in the page bar and stops writing on each turn. The close flush still tries once more.
 
 ### Phase 3 — Reader
 

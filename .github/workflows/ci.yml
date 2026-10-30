@@ -312,6 +312,9 @@ jobs:
       - name: Vitest + coverage gate
         run: pnpm test:coverage
 
+      - name: Production bundle (the build the CSP gate uses)
+        run: pnpm build
+
   audit:
     # Real gate (not advisory). Informational cargo-audit warnings do not fail.
     # A vulnerability fails the job, and so does an audit that did not complete.

@@ -108,17 +108,18 @@ where
 
 /// The one way a book becomes open: canonicalize, load and verify, admit its `pages/` to the
 /// asset protocol (never `originals/`), track it in the session, and remember it as the last
-/// book. A book already open is flushed first, so its saved page is not stale.
+/// book. A book already open is flushed first, so its saved page is not stale. If that flush
+/// fails, the session keeps the unsaved page and the view opens on it.
 fn open_and_register(app: &AppHandle, root: &Path) -> Result<BookView, CommandError> {
     let root = canonical_key(root)?;
     flush_session(app, Some(&root));
     let book = load_book(&root)?;
-    let view = book_view(&book)?;
+    let mut view = book_view(&book)?;
     app.asset_protocol_scope()
         .allow_directory(book.root.join("pages"), true)
         .map_err(|e| CommandError::internal(format!("could not admit the book's pages: {e}")))?;
     let page_count = u32::try_from(book.meta.pages.len()).unwrap_or(u32::MAX);
-    lock(&app.state::<Mutex<Session>>()).register(
+    view.last_read_page = lock(&app.state::<Mutex<Session>>()).register(
         book.root.clone(),
         book.meta.last_read_page,
         page_count,

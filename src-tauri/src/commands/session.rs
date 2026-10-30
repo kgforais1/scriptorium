@@ -29,6 +29,9 @@ struct Entry {
     dirty: bool,
     /// When this book's `meta.json` was last written (or the book was opened).
     last_write: Instant,
+    /// True after a write failed, such as on a read-only volume. Page turns then stop asking
+    /// for a write; the close flush still tries once more.
+    write_failed: bool,
 }
 
 /// Why [`Session::record`] refused a page.
@@ -57,16 +60,10 @@ impl std::fmt::Display for RecordError {
 }
 
 impl From<RecordError> for CommandError {
-    /// A page past the end is a real bound on the book. A book that was never opened is a
-    /// slip by our own webview, so it is `Internal`, not a fault in the book.
+    /// Only our own webview can send a page for a book it never opened, or past the end of
+    /// one, so both are `Internal`, not a fault in the book.
     fn from(err: RecordError) -> Self {
-        match err {
-            RecordError::NotOpen => CommandError::internal(err.to_string()),
-            RecordError::PageOutOfRange { .. } => BookError::InvalidPackage {
-                reason: err.to_string(),
-            }
-            .into(),
-        }
+        CommandError::internal(err.to_string())
     }
 }
 
@@ -86,9 +83,16 @@ impl Session {
         }
     }
 
-    /// Start tracking the book at canonical `root`, at `page`, with nothing unsaved.
-    /// A book that is already tracked is reset to the state just read from disk.
-    pub fn register(&mut self, root: PathBuf, page: u32, page_count: u32, now: Instant) {
+    /// Start tracking the book at canonical `root` at `page`, the page read from disk, and
+    /// return the page to open on. A book already tracked with an unsaved page keeps that
+    /// page, so a write that failed is retried on close rather than lost.
+    pub fn register(&mut self, root: PathBuf, page: u32, page_count: u32, now: Instant) -> u32 {
+        if let Some(entry) = self.books.get_mut(&root) {
+            if entry.dirty && entry.page < page_count {
+                entry.page_count = page_count;
+                return entry.page;
+            }
+        }
         self.books.insert(
             root,
             Entry {
@@ -96,8 +100,10 @@ impl Session {
                 page_count,
                 dirty: false,
                 last_write: now,
+                write_failed: false,
             },
         );
+        page
     }
 
     /// Remember that the reader is on `page` and mark the book dirty. Returns true when at
@@ -112,7 +118,7 @@ impl Session {
         }
         entry.page = page;
         entry.dirty = true;
-        Ok(now.saturating_duration_since(entry.last_write) >= self.interval)
+        Ok(!entry.write_failed && now.saturating_duration_since(entry.last_write) >= self.interval)
     }
 
     /// Write every dirty book (or only `only`, if given) with `write(root, page)`. A book
@@ -132,9 +138,13 @@ impl Session {
             match write(root, entry.page) {
                 Ok(()) => {
                     entry.dirty = false;
+                    entry.write_failed = false;
                     entry.last_write = now;
                 }
-                Err(e) => failures.push((root.clone(), e)),
+                Err(e) => {
+                    entry.write_failed = true;
+                    failures.push((root.clone(), e));
+                }
             }
         }
         failures
@@ -190,6 +200,49 @@ mod tests {
         let mut again = Vec::new();
         s.flush(None, t0, ok_writer(&mut again));
         assert!(again.is_empty(), "a second flush has nothing to write");
+    }
+
+    #[test]
+    fn after_a_failed_write_turns_stop_asking_but_close_retries() {
+        let t0 = Instant::now();
+        let mut s = session_with(&["/a"], t0);
+        let a = Path::new("/a");
+        assert_eq!(s.record(a, 1, t0 + SEC), Ok(true));
+        assert_eq!(s.flush(Some(a), t0 + SEC, |_, _| Err("read-only")).len(), 1);
+        assert_eq!(s.record(a, 2, t0 + SEC * 5), Ok(false), "no write per turn");
+        let mut log = Vec::new();
+        assert!(s.flush(None, t0 + SEC * 5, ok_writer(&mut log)).is_empty());
+        assert_eq!(
+            log,
+            [(PathBuf::from("/a"), 2)],
+            "the close flush still tries"
+        );
+        assert_eq!(
+            s.record(a, 3, t0 + SEC * 7),
+            Ok(true),
+            "a success clears the flag"
+        );
+    }
+
+    #[test]
+    fn reopening_keeps_an_unsaved_page() {
+        let t0 = Instant::now();
+        let mut s = session_with(&["/a"], t0);
+        s.record(Path::new("/a"), 9, t0).unwrap();
+        assert_eq!(
+            s.register(PathBuf::from("/a"), 4, 10, t0),
+            9,
+            "dirty page wins"
+        );
+        let mut log = Vec::new();
+        s.flush(None, t0, ok_writer(&mut log));
+        assert_eq!(log, [(PathBuf::from("/a"), 9)]);
+        assert_eq!(
+            s.register(PathBuf::from("/a"), 9, 10, t0),
+            9,
+            "clean: disk page"
+        );
+        assert_eq!(s.register(PathBuf::from("/a"), 2, 10, t0), 2);
     }
 
     #[test]

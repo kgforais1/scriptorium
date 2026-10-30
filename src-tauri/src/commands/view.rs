@@ -40,8 +40,9 @@ fn invalid(reason: impl Into<String>) -> BookError {
 /// Build the view of `book`. Each page path is the verified canonical path from
 /// `LoadedBook::page_path`, never a fresh join of `meta.pages[i].file`.
 pub fn book_view(book: &LoadedBook) -> Result<BookView, BookError> {
-    let root = book
-        .root
+    // `dunce::simplified` drops Windows' `\\?\` prefix where that is safe, so the webview
+    // gets ordinary `C:\...` paths. It changes nothing on macOS and Linux.
+    let root = dunce::simplified(&book.root)
         .to_str()
         .ok_or_else(|| invalid("the book path is not valid UTF-8"))?
         .to_owned();
@@ -49,7 +50,7 @@ pub fn book_view(book: &LoadedBook) -> Result<BookView, BookError> {
     for (i, page) in book.meta.pages.iter().enumerate() {
         let path = book
             .page_path(i)
-            .and_then(|p| p.to_str())
+            .and_then(|p| dunce::simplified(p).to_str())
             .ok_or_else(|| invalid(format!("page {i} has no usable path")))?;
         pages.push(PageView {
             path: path.to_owned(),

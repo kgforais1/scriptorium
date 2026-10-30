@@ -42,3 +42,8 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+.save-error {
+  font-size: 0.9rem;
+  color: #8a3b12;
+}

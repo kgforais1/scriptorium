@@ -132,6 +132,9 @@ Escape to dismiss it.
   `printf '\x00' | dd of="<library>/<id>/pages/000.png" bs=1 seek=100 conv=notrunc`.
   Relaunch, click **Open…**, and choose that library folder. Expected: heading "Book is
   damaged".
+- [ ] Open a book from a read-only folder (for example, `chmod -R a-w` a copy of a package)
+  and turn pages. Expected: the page bar shows "Your place could not be saved" once, and
+  no dialog appears on each turn.
 - [ ] With the damaged book as the last opened one, relaunch. Expected: the home screen shows
   with no error dialog. Delete the damaged folder afterwards.
 
@@ -163,7 +166,9 @@ enforces it. This section is the only check that the policy in
   app. Expected: the build finishes and prints the path of the app bundle.
 - [ ] Run the built app. Do not use `pnpm tauri dev`.
 - [ ] Open a book (create one from scans, or open the fixture package). Expected: the pages
-  show as images.
+  show as images. A blocked page shows "This page could not be loaded." with a **Try again**
+  button instead.
+- [ ] Repeat this section once on Windows. Expected: pages show there too.
 - [ ] Open the devtools console. In a `--debug` build, right-click the window and choose
   Inspect Element. Expected: no message that mentions "Content Security Policy" or "Refused
   to".

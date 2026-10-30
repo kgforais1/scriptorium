@@ -63,8 +63,8 @@ Lamplit ships in M1; Gallery Daylight (mockup B) follows in M7. Detail:
 
 Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 
-- [ ] Extend CI + pre-push for **TypeScript** lint (tsc already in M0)
-- [ ] Frontend Vitest coverage gates; raise `fail_under` for app code
+- [x] Extend CI + pre-push for **TypeScript** lint (tsc already in M0). Done 2026-10-30 in M1 Phase 2 chunk 0 (ESLint, `pnpm typecheck`)
+- [x] Frontend Vitest coverage gates (80% lines on `src/lib`, M1 Phase 2 chunk 0). Raising Python `fail_under` stays open below
 - [ ] Rust coverage (`cargo llvm-cov` / tarpaulin) when useful
 - [ ] Tighten Python harness coverage gate when in-process tests exist
 - [x] CodeQL via GitHub default setup (ruleset code scanning; not a workflow file)
