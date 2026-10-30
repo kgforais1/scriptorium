@@ -115,8 +115,9 @@ fn open_and_register(app: &AppHandle, root: &Path) -> Result<BookView, CommandEr
     flush_session(app, Some(&root));
     let book = load_book(&root)?;
     let mut view = book_view(&book)?;
+    // The same simplified form the view hands to the webview, so URL and scope agree.
     app.asset_protocol_scope()
-        .allow_directory(book.root.join("pages"), true)
+        .allow_directory(dunce::simplified(&book.root).join("pages"), true)
         .map_err(|e| CommandError::internal(format!("could not admit the book's pages: {e}")))?;
     let page_count = u32::try_from(book.meta.pages.len()).unwrap_or(u32::MAX);
     view.last_read_page = lock(&app.state::<Mutex<Session>>()).register(
@@ -181,10 +182,25 @@ pub async fn open_book(app: AppHandle, path: String) -> Result<BookView, Command
     blocking(move || open_and_register(&app, Path::new(&path))).await
 }
 
+/// What `save_progress` did with the page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SaveOutcome {
+    /// The page was written to `meta.json`.
+    Saved,
+    /// The page is held in memory; it is written on a later turn or on close.
+    Pending,
+}
+
 /// Record the page the reader is on. The session remembers it at once, and `meta.json` is
-/// written at most once a second per book. The rest is written on close.
+/// written at most once a second per book (every ten seconds after a failure). The rest is
+/// written on close. A failed write is an error; the UI clears its warning only on `Saved`.
 #[tauri::command]
-pub async fn save_progress(app: AppHandle, root: String, page: u32) -> Result<(), CommandError> {
+pub async fn save_progress(
+    app: AppHandle,
+    root: String,
+    page: u32,
+) -> Result<SaveOutcome, CommandError> {
     blocking(move || {
         let root = canonical_key(Path::new(&root))?;
         // The guard must drop before `flush_session` locks the same mutex again.
@@ -194,9 +210,12 @@ pub async fn save_progress(app: AppHandle, root: String, page: u32) -> Result<()
             session.record(&root, page, Instant::now())
         }
         .map_err(CommandError::from)?;
-        match due.then(|| flush_session(&app, Some(&root))).flatten() {
+        if !due {
+            return Ok(SaveOutcome::Pending);
+        }
+        match flush_session(&app, Some(&root)) {
             Some(err) => Err(err),
-            None => Ok(()),
+            None => Ok(SaveOutcome::Saved),
         }
     })
     .await

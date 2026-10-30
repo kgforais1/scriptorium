@@ -119,3 +119,14 @@ fn an_out_of_range_page_is_refused_before_it_can_be_written() {
     assert!(session.record(&key, 3, t0).is_err());
     assert!(session.flush(None, t0, |_, _| Err::<(), ()>(())).is_empty());
 }
+
+#[test]
+fn save_outcome_matches_the_ts_type() {
+    use super::SaveOutcome;
+    // `SaveOutcome` in src/lib/bookTypes.ts is "saved" | "pending".
+    assert_eq!(serde_json::to_value(SaveOutcome::Saved).unwrap(), "saved");
+    assert_eq!(
+        serde_json::to_value(SaveOutcome::Pending).unwrap(),
+        "pending"
+    );
+}

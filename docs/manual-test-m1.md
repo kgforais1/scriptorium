@@ -133,8 +133,9 @@ Escape to dismiss it.
   Relaunch, click **Open…**, and choose that library folder. Expected: heading "Book is
   damaged".
 - [ ] Open a book from a read-only folder (for example, `chmod -R a-w` a copy of a package)
-  and turn pages. Expected: the page bar shows "Your place could not be saved" once, and
-  no dialog appears on each turn.
+  and turn pages. Expected: the page bar shows "Your place could not be saved", and no
+  dialog appears on each turn. The note stays until a save succeeds. Saving retries about
+  every ten seconds of page turning, and once more on close.
 - [ ] With the damaged book as the last opened one, relaunch. Expected: the home screen shows
   with no error dialog. Delete the damaged folder afterwards.
 

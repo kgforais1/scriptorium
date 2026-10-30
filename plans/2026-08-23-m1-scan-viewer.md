@@ -432,8 +432,9 @@ Known limits after Phase 2:
 
 - Opened books stay in the session and the asset scope until the app quits. **Close book**
   revokes nothing. Revisit when the bookshelf (M5) opens many books in one run.
-- A book whose progress cannot be saved (for example, on a read-only volume) shows one note
-  in the page bar and stops writing on each turn. The close flush still tries once more.
+- A book whose progress cannot be saved (for example, on a read-only volume) shows a note in
+  the page bar until a save succeeds. Turns then retry about every ten seconds instead of
+  every second, and the close flush always tries.
 
 ### Phase 3 — Reader
 

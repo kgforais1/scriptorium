@@ -38,7 +38,8 @@ fn invalid(reason: impl Into<String>) -> BookError {
 }
 
 /// Build the view of `book`. Each page path is the verified canonical path from
-/// `LoadedBook::page_path`, never a fresh join of `meta.pages[i].file`.
+/// `LoadedBook::page_path`, simplified by `dunce` (no Windows verbatim prefix), and never a
+/// fresh join of `meta.pages[i].file`.
 pub fn book_view(book: &LoadedBook) -> Result<BookView, BookError> {
     // `dunce::simplified` drops Windows' `\\?\` prefix where that is safe, so the webview
     // gets ordinary `C:\...` paths. It changes nothing on macOS and Linux.

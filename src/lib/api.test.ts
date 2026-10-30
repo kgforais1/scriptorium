@@ -49,8 +49,8 @@ describe("commands", () => {
   });
 
   it("saveProgress sends { root, page }", async () => {
-    invoke.mockResolvedValue(undefined);
-    await expect(saveProgress("/r", 4)).resolves.toBeUndefined();
+    invoke.mockResolvedValue("saved");
+    await expect(saveProgress("/r", 4)).resolves.toBe("saved");
     expect(invoke).toHaveBeenCalledWith("save_progress", { root: "/r", page: 4 });
   });
 

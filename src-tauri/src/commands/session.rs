@@ -29,8 +29,8 @@ struct Entry {
     dirty: bool,
     /// When this book's `meta.json` was last written (or the book was opened).
     last_write: Instant,
-    /// True after a write failed, such as on a read-only volume. Page turns then stop asking
-    /// for a write; the close flush still tries once more.
+    /// True after a write failed, such as on a read-only volume. Page turns then retry only
+    /// every [`RETRY_FACTOR`] intervals; the close flush always tries.
     write_failed: bool,
 }
 
@@ -66,6 +66,10 @@ impl From<RecordError> for CommandError {
         CommandError::internal(err.to_string())
     }
 }
+
+/// After a failed write, page turns retry at this many times the normal interval, so a
+/// read-only book is not hammered but a brief failure still heals.
+pub const RETRY_FACTOR: u32 = 10;
 
 /// The open books of this run and their unsaved reading positions.
 #[derive(Debug)]
@@ -118,7 +122,12 @@ impl Session {
         }
         entry.page = page;
         entry.dirty = true;
-        Ok(!entry.write_failed && now.saturating_duration_since(entry.last_write) >= self.interval)
+        let wait = if entry.write_failed {
+            self.interval * RETRY_FACTOR
+        } else {
+            self.interval
+        };
+        Ok(now.saturating_duration_since(entry.last_write) >= wait)
     }
 
     /// Write every dirty book (or only `only`, if given) with `write(root, page)`. A book
@@ -143,6 +152,8 @@ impl Session {
                 }
                 Err(e) => {
                     entry.write_failed = true;
+                    // The retry backoff counts from this attempt.
+                    entry.last_write = now;
                     failures.push((root.clone(), e));
                 }
             }
@@ -203,22 +214,24 @@ mod tests {
     }
 
     #[test]
-    fn after_a_failed_write_turns_stop_asking_but_close_retries() {
+    fn after_a_failed_write_turns_back_off_and_close_retries() {
         let t0 = Instant::now();
         let mut s = session_with(&["/a"], t0);
         let a = Path::new("/a");
         assert_eq!(s.record(a, 1, t0 + SEC), Ok(true));
         assert_eq!(s.flush(Some(a), t0 + SEC, |_, _| Err("read-only")).len(), 1);
         assert_eq!(s.record(a, 2, t0 + SEC * 5), Ok(false), "no write per turn");
+        let retry = t0 + SEC * (1 + RETRY_FACTOR);
+        assert_eq!(s.record(a, 3, retry), Ok(true), "a retry after the backoff");
         let mut log = Vec::new();
-        assert!(s.flush(None, t0 + SEC * 5, ok_writer(&mut log)).is_empty());
+        assert!(s.flush(None, retry, ok_writer(&mut log)).is_empty());
         assert_eq!(
             log,
-            [(PathBuf::from("/a"), 2)],
+            [(PathBuf::from("/a"), 3)],
             "the close flush still tries"
         );
         assert_eq!(
-            s.record(a, 3, t0 + SEC * 7),
+            s.record(a, 4, retry + SEC),
             Ok(true),
             "a success clears the flag"
         );

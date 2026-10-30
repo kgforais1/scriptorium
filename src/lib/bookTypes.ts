@@ -66,3 +66,6 @@ export interface CreateBookArgs {
   rights: string;
   attribution: string;
 }
+
+/** What `save_progress` did: wrote the page, or held it for a later write. */
+export type SaveOutcome = "saved" | "pending";

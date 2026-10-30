@@ -6,6 +6,7 @@ import type {
   CreateBookArgs,
   FolderInfo,
   IngestProgress,
+  SaveOutcome,
 } from "./bookTypes";
 import { toCommandError } from "./errors";
 
@@ -60,8 +61,8 @@ export function openBook(path: string): Promise<BookView> {
  * @param page - The zero-based page.
  * @returns Nothing. Rejects with a `CommandError`.
  */
-export function saveProgress(root: string, page: number): Promise<void> {
-  return call<void>("save_progress", { root, page });
+export function saveProgress(root: string, page: number): Promise<SaveOutcome> {
+  return call<SaveOutcome>("save_progress", { root, page });
 }
 
 /**

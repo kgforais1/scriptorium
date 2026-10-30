@@ -38,8 +38,13 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
       return;
     }
     setPage(next);
+    // Only a real write clears the warning; a held page says nothing about the disk.
     saveProgress(book.root, next).then(
-      () => setSaveError(null),
+      (outcome) => {
+        if (outcome === "saved") {
+          setSaveError(null);
+        }
+      },
       (err: unknown) => setSaveError(toCommandError(err).message),
     );
   }
@@ -78,8 +83,8 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
         </button>
       </header>
       <main className="book-stage">
-        {current && failedPath === current.path && (
-          <div className="status">
+        {failedPath !== null && failedPath === current?.path && (
+          <div className="status" role="alert">
             <p>This page could not be loaded.</p>
             <button
               type="button"
