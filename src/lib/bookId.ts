@@ -35,3 +35,16 @@ export function isValidBookId(id: string): boolean {
   }
   return [...id].every((ch) => isLowerAlnum(ch) || ch === "." || ch === "_" || ch === "-");
 }
+
+/**
+ * Explains why a book id is not acceptable, in a short hint for the form.
+ *
+ * @param id - The candidate id.
+ * @returns A hint, or null when `isValidBookId(id)` is true.
+ */
+export function bookIdHint(id: string): string | null {
+  if (isValidBookId(id)) {
+    return null;
+  }
+  return "Use 1 to 64 lowercase letters, digits, dots, underscores, or hyphens. Start with a letter or digit, don't end with a dot, and avoid names like con or nul.";
+}

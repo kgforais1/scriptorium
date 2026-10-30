@@ -1,0 +1,73 @@
+.app {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, sans-serif;
+  color: #1c1c1e;
+  background: #f4f4f2;
+}
+
+.button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 1rem;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  border: 1px solid #8a8a8e;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.button.primary {
+  color: #fff;
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button:focus-visible,
+.field input:focus-visible {
+  outline: 3px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+.status {
+  margin: auto;
+  font-size: 1.1rem;
+}
+
+.modal {
+  width: min(32rem, calc(100vw - 2rem));
+  padding: 1.25rem;
+  color: inherit;
+  background: #fff;
+  border: 1px solid #8a8a8e;
+  border-radius: 10px;
+}
+
+.modal::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+.modal-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.25rem;
+}
+
+.modal-message {
+  margin: 0 0 1rem;
+  overflow-wrap: anywhere;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

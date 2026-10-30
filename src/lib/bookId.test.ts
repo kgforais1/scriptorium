@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidBookId } from "./bookId";
+import { bookIdHint, isValidBookId } from "./bookId";
 
 // Rejected cases from src-tauri/src/book_format/tests.rs and library/slug.rs.
 const REJECTED = [
@@ -56,5 +56,15 @@ describe("isValidBookId", () => {
 
   it.each(ACCEPTED)("accepts %j", (id) => {
     expect(isValidBookId(id)).toBe(true);
+  });
+});
+
+describe("bookIdHint", () => {
+  it("is null for a valid id", () => {
+    expect(bookIdHint("my-book")).toBeNull();
+  });
+  it("gives a hint for an invalid id", () => {
+    expect(bookIdHint("Has Caps")).toMatch(/lowercase/);
+    expect(bookIdHint("")).not.toBeNull();
   });
 });
