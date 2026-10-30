@@ -63,8 +63,15 @@ describe("bookIdHint", () => {
   it("is null for a valid id", () => {
     expect(bookIdHint("my-book")).toBeNull();
   });
-  it("gives a hint for an invalid id", () => {
-    expect(bookIdHint("Has Caps")).toMatch(/lowercase/);
-    expect(bookIdHint("")).not.toBeNull();
+  it.each([
+    ["", "Enter a book id."],
+    ["a".repeat(65), "Use at most 64 characters."],
+    ["book.", "Don't end the id with a dot."],
+    ["con", "That name is reserved on Windows. Add a word, such as con-book."],
+    ["-x", "Start with a lowercase letter or digit."],
+    ["Has Caps", "Start with a lowercase letter or digit."],
+    ["has caps", "Use only lowercase letters, digits, dots, underscores, and hyphens."],
+  ])("names the rule %j breaks", (id, hint) => {
+    expect(bookIdHint(id)).toBe(hint);
   });
 });

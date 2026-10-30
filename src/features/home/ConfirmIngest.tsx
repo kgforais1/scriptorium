@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createBook, onIngestProgress } from "../../lib/api";
 import { bookIdHint } from "../../lib/bookId";
 import type { BookView, CommandError, ScansFolderInfo } from "../../lib/bookTypes";
@@ -54,7 +54,16 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Co
   const [progress, setProgress] = useState<number | null>(null);
 
   const hint = bookIdHint(id);
-  const canCreate = progress === null && hint === null && title.trim() !== "";
+  const titleMissing = title.trim() === "";
+  const canCreate = progress === null && hint === null && !titleMissing;
+  const ingesting = progress !== null;
+  // Every control is disabled while the book is built, so focus moves to the progress text.
+  const progressRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (ingesting) {
+      progressRef.current?.focus();
+    }
+  }, [ingesting]);
 
   async function create() {
     setProgress(0);
@@ -76,6 +85,7 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Co
         {info.files} image files, {info.frames} pages, about {formatMegabytes(info.estimatedBytes)}.
       </p>
       <form
+        aria-busy={ingesting}
         onSubmit={(event) => {
           event.preventDefault();
           if (canCreate) {
@@ -84,7 +94,18 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Co
         }}
       >
         <fieldset className="ingest-form" disabled={progress !== null}>
-          <TextField label="Title" value={title} onChange={setTitle} />
+          <TextField
+            label="Title"
+            value={title}
+            onChange={setTitle}
+            invalid={titleMissing}
+            describedBy={titleMissing ? "title-hint" : undefined}
+          />
+          {titleMissing && (
+            <p id="title-hint" className="field-hint">
+              Enter a title.
+            </p>
+          )}
           <TextField
             label="Book id"
             value={id}
@@ -101,7 +122,7 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Co
           <TextField label="Attribution (optional)" value={attribution} onChange={setAttribution} />
         </fieldset>
         {progress !== null && (
-          <div className="ingest-progress">
+          <div className="ingest-progress" ref={progressRef} tabIndex={-1}>
             <progress max={info.frames} value={progress} aria-label="Import progress" />
             <span role="status">{progressLabel(progress, info.frames)}</span>
           </div>

@@ -46,5 +46,20 @@ export function bookIdHint(id: string): string | null {
   if (isValidBookId(id)) {
     return null;
   }
-  return "Use 1 to 64 lowercase letters, digits, dots, underscores, or hyphens. Start with a letter or digit, don't end with a dot, and avoid names like con or nul.";
+  if (id.length === 0) {
+    return "Enter a book id.";
+  }
+  if (id.length > MAX_LEN) {
+    return `Use at most ${MAX_LEN} characters.`;
+  }
+  if (id.endsWith(".")) {
+    return "Don't end the id with a dot.";
+  }
+  if (isReservedName(id)) {
+    return "That name is reserved on Windows. Add a word, such as con-book.";
+  }
+  if (!isLowerAlnum(id[0])) {
+    return "Start with a lowercase letter or digit.";
+  }
+  return "Use only lowercase letters, digits, dots, underscores, and hyphens.";
 }

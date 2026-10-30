@@ -4,8 +4,8 @@ import { formatMegabytes, pageAlt, pageLabel, progressLabel } from "./format";
 describe("formatMegabytes", () => {
   it("formats with one decimal", () => {
     expect(formatMegabytes(0)).toBe("0.0 MB");
-    expect(formatMegabytes(1024 * 1024)).toBe("1.0 MB");
-    expect(formatMegabytes(13_107_200)).toBe("12.5 MB");
+    expect(formatMegabytes(1_000_000)).toBe("1.0 MB");
+    expect(formatMegabytes(12_500_000)).toBe("12.5 MB");
   });
   it("treats bad input as zero", () => {
     expect(formatMegabytes(-5)).toBe("0.0 MB");
@@ -27,6 +27,7 @@ describe("pageLabel", () => {
 describe("pageAlt", () => {
   it("names the page", () => {
     expect(pageAlt(2, 40)).toBe("Page 3 of 40");
+    expect(pageAlt(0, 0)).toBe("No page");
   });
 });
 

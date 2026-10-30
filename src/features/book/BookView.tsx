@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pageUrl, saveProgress } from "../../lib/api";
 import type { BookView as Book, CommandError } from "../../lib/bookTypes";
 import { clampPage } from "../../lib/clamp";
@@ -51,12 +51,18 @@ export function BookView({ book, onClose, onError }: BookViewProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
+  // Focus the title when the book opens, so the change is announced and Tab starts here.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, []);
+
   const current = book.pages[page];
 
   return (
     <>
       <header className="book-header">
-        <h1 className="book-title" title={book.title}>
+        <h1 className="book-title" title={book.title} ref={titleRef} tabIndex={-1}>
           {book.title}
         </h1>
         <button type="button" className="button" onClick={onClose}>

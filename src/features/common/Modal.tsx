@@ -29,7 +29,8 @@ export function Modal({ title, onClose, children }: ModalProps) {
     }
     return () => {
       dialog.close();
-      if (previous instanceof HTMLElement) {
+      // The opener may be gone, as when a new screen replaced it.
+      if (previous instanceof HTMLElement && previous.isConnected) {
         previous.focus();
       }
     };

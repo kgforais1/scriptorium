@@ -1,4 +1,4 @@
-const BYTES_PER_MB = 1024 * 1024;
+const BYTES_PER_MB = 1_000_000;
 
 /**
  * Formats a byte count for the import confirmation.
@@ -28,10 +28,10 @@ export function pageLabel(page: number, count: number): string {
  *
  * @param page - The zero-based current page.
  * @param count - The number of pages in the book.
- * @returns Text such as "Page 3 of 40".
+ * @returns Text such as "Page 3 of 40". An empty book gives "No page".
  */
 export function pageAlt(page: number, count: number): string {
-  return `Page ${page + 1} of ${count}`;
+  return count <= 0 ? "No page" : `Page ${page + 1} of ${count}`;
 }
 
 /**
