@@ -305,7 +305,8 @@ Spec fleshed out 2026-10-30 on branch `m1/phase2-commands-ui`. Phase 2 ends with
 
 **Library root.** Books live in `app_data_dir()/books/` (macOS:
 `~/Library/Application Support/dev.scriptorium.app/books/`). The app creates it on start and
-runs `sweep_orphans` there once, off the main thread.
+runs `sweep_orphans(lib, sweep::ORPHAN_AGE)` there once, off the main thread. Never use a zero
+age at startup: another instance may be between creating its temp dir and locking it.
 
 **Commands** (`src-tauri/src/commands.rs`). Each runs its file work in
 `tauri::async_runtime::spawn_blocking`, so the UI never freezes. Each returns
@@ -314,25 +315,41 @@ runs `sweep_orphans` there once, off the main thread.
 
 | Command | Input | Output |
 |---|---|---|
-| `inspect_folder` | `path` | `{ kind: "book", id, title, pages }` when `meta.json` exists; otherwise `{ kind: "scans", files, frames, estimatedBytes, suggestedId, suggestedTitle }`. Folder errors (empty, no images, duplicate stems, unreadable file) come back as `CommandError` |
-| `create_book` | `folder`, `title`, `id`, `rights`, `attribution` | `BookView` (below). Emits `ingest-progress` `{ done, total }` once per frame |
+| `inspect_folder` | `path` | `{ kind: "book", id, title, pages }` when `meta.json` exists and `load_book` succeeds. A `meta.json` that fails to load returns its `BookError`; it never falls through to the scans branch. Otherwise `{ kind: "scans", files, frames, estimatedBytes, suggestedId, suggestedTitle }`. Folder errors (empty, no images, duplicate stems, unreadable file) come back as `CommandError` |
+| `create_book` | `folder`, `title`, `id`, `rights`, `attribution` | `BookView` (below). Emits `ingest-progress` `{ done, total }`, where `total` is the frame count, at most about 10 times a second plus a final `done == total` |
 | `open_book` | `path` | `BookView` |
-| `save_progress` | `id`, `page` | `()`. Called debounced on page change and once on window close |
+| `save_progress` | `root`, `page` | `()`. Updates the session's in-memory page, and writes `meta.json` debounced |
 | `last_book` | — | `BookView` or `null`: the last opened book, from `app_data_dir()/state.json` |
 
 `BookView` is `{ id, title, root, lastReadPage, pages: [{ path, width, height }] }`. `path`
 is the canonical absolute path from `LoadedBook::page_path`. TypeScript passes it to
 `convertFileSrc` and never builds paths itself.
 
-- `suggestedId` slugs the folder name (lowercase ASCII, `-` for runs of other characters,
-  trimmed to 64). On a collision it appends `-2`, `-3`, and so on. `suggestedTitle` is the
+- `suggestedId` must always pass `validate_book_id`. Slug the folder name (lowercase ASCII,
+  `-` for runs of other characters), trim leading and trailing separators and periods, and
+  truncate to leave room for a suffix. Fall back to `book` when nothing is left, and add a
+  suffix to Windows-reserved names (`con`, `nul`, `com1`, and so on). On a collision, append
+  `-2`, `-3`, and so on. The tests reuse the `validate_book_id` cases. `suggestedTitle` is the
   folder name.
-- `create_book` needs a progress hook in the library. Add an `on_frame(done, total)` callback
-  to `create_book_from_folder`; existing callers pass a no-op.
-- The app keeps a `Mutex<HashMap<id, PathBuf>>` of opened books. `save_progress` accepts
-  only an id that is open in this session.
-- `open_book` on a package outside the library adds its root to the asset scope at runtime
-  (`asset_protocol_scope().allow_directory(root, true)`). It never copies the package (A7).
+- Add `create_book_from_folder_with(folder, library, opts, on_frame)` to the library. The
+  existing three-argument function delegates to it with a no-op, so callers and tests stay
+  unchanged.
+- Every successful open goes through one `open_and_register(root)` helper. It canonicalizes
+  the root, calls `load_book`, adds `root/pages` to the asset scope
+  (`asset_protocol_scope().allow_directory(root.join("pages"), true)`), and records the book
+  in the session. `open_book`, `last_book`, and `create_book` all use it, so an outside package
+  reopened at startup still shows its pages. `originals/` is never exposed to the webview.
+- The session is a `Mutex<HashMap<canonical root, { page, dirty }>>`, keyed by root, not by
+  the self-declared id, so two packages with the same id never cross. `save_progress` accepts
+  only a root in the map. Never hold the lock across an `.await`.
+- The close flush runs in Rust: on `WindowEvent::CloseRequested` and
+  `RunEvent::ExitRequested`, write every dirty page synchronously. A JavaScript close handler
+  would race the window teardown.
+- `open_book` never copies the package (A7).
+- A panicked `spawn_blocking` task maps to a `CommandError` of kind `Internal`. The TS side
+  treats any rejection that is not a `CommandError` as unknown.
+- `lib.rs` has exactly one `generate_handler!` per cfg. The dev build adds `spike_pages` to
+  the real commands; a second `invoke_handler` call would replace the first.
 - `state.json` is `{ "lastBook": "<absolute package path>" }`, written with `write_atomic`.
   If that book fails to load on start, the app shows the home screen and no error.
 
@@ -340,11 +357,17 @@ is the canonical absolute path from `LoadedBook::page_path`. TypeScript passes i
 
 ```
 default-src 'self'; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:;
-style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost
+style-src 'self' 'unsafe-inline'; script-src 'self';
+connect-src 'self' asset: http://asset.localhost https://asset.localhost ipc: http://ipc.localhost
 ```
 
-`devCsp` adds `ws://localhost:1420` and `http://localhost:1420` for Vite HMR. The static
-`assetProtocol.scope` allows `$APPDATA/books/**`. Add `tauri-plugin-dialog` with only
+`connect-src` lists the asset origins because the engine `fetch`es page images. Tauri applies
+the CSP only to bundled assets, so `pnpm tauri dev` never shows it. The check is a
+`pnpm tauri build` run that opens a book. `devCsp` is the same policy plus
+`script-src 'unsafe-inline'` (the React plugin's inline preamble) and
+`connect-src ws://localhost:1420 ws://localhost:1421` (HMR). The static
+`assetProtocol.scope` allows `$APPDATA/books/*/pages/**` only. Add `tauri-plugin-dialog`
+(Rust `tauri_plugin_dialog::init()` and the `@tauri-apps/plugin-dialog` JS package) with only
 `dialog:allow-open` in the default capability. The webview gets no `fs` plugin, because all
 file access goes through the commands above.
 
@@ -362,11 +385,12 @@ CSS. No skin tokens are needed until Phase 3.
   at the ends, A5), and the current page as a padded `<img>` (`object-fit: contain`). A
   **Close book** button returns home.
 - On start, the app calls `last_book` and reopens that book at its saved page (A6).
+- Page changes call `save_progress` immediately. Rust owns the debounce and the close flush.
 
 **Tests.** Rust unit tests cover the slug helper, `inspect_folder` both ways, the
 `CommandError` JSON shape, and the progress callback count. Add Vitest with tests for the
-pure TS helpers: the error-heading map, the slug check, the page clamp and keyboard step,
-and the progress debounce.
+pure TS helpers: the error-heading map, the slug check, and the page clamp and keyboard
+step. Rust tests cover the debounced write and the flush of dirty pages.
 
 **Chunks.** Each chunk gets its own commit and a qoder review.
 
@@ -384,7 +408,11 @@ and the progress debounce.
 3. Tauri commands, app state, `state.json`, and startup sweep.
 4. TS API layer and types, Vitest setup, and helper tests.
 5. Home, confirm, progress, error dialogs, book view, and close-flush.
-6. Docs: `docs/manual-test-m1.md` (Phase 2 steps), changelog, plan ticks.
+6. Docs: `docs/manual-test-m1.md` (Phase 2 steps, including a `pnpm tauri build` run that
+   opens a book under the production CSP), changelog, plan ticks.
+
+Chunk 1's CSP has no visible effect in `tauri dev`. Chunk 5 is done only when a release
+build opens a book and shows its pages.
 
 - [ ] Chunk 0: quality gates (ESLint, tsc hook, Vitest coverage, clippy complexity, docs)
 - [ ] Chunk 1: CSP and capabilities (A13)
