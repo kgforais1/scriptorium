@@ -102,14 +102,16 @@
   transition: opacity var(--sk-motion-fade) var(--sk-motion-ease);
 }
 
-/* Chrome in use (hovered, or holding focus such as a dragged scrubber) stays put during a turn. */
-.reader[data-turning="true"] .reader__header:not(:hover, :focus-within),
-.reader[data-turning="true"] .reader__bar:not(:hover, :focus-within) {
+/* Chrome in use stays put during a turn: hovered, pressed, or a control with keyboard focus. The bar
+   also stays while the scrubber's jump runs, for touch and for a drag that leaves the bar. The
+   title takes focus on open only to be announced, so it does not count. */
+.reader[data-turning="true"] .reader__header:not(:hover, :has(button:focus-visible, input:focus-visible, :active)),
+.reader[data-turning="true"]:not([data-scrubbing="true"]) .reader__bar:not(:hover, :has(button:focus-visible, input:focus-visible, :active)) {
   opacity: 0;
 }
 
-.reader[data-turning="true"] .reader__header:not(:hover, :focus-within) > *,
-.reader[data-turning="true"] .reader__bar:not(:hover, :focus-within) {
+.reader[data-turning="true"] .reader__header:not(:hover, :has(button:focus-visible, input:focus-visible, :active)) > *,
+.reader[data-turning="true"]:not([data-scrubbing="true"]) .reader__bar:not(:hover, :has(button:focus-visible, input:focus-visible, :active)) {
   pointer-events: none;
 }
 

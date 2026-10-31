@@ -70,7 +70,7 @@ export function Reader({ book, onClose, scene }: Readonly<Props>) {
   const indicator = pageIndicator(shown, pageCount);
 
   return (
-    <div className="reader" data-turning={turning} data-notes={notesOpen}>
+    <div className="reader" data-turning={turning} data-scrubbing={scrub !== null} data-notes={notesOpen}>
       {pageCount > 0 && status !== "error" && (
         <canvas
           ref={canvasRef}

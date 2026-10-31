@@ -122,6 +122,27 @@ describe("createWorkerHandler", () => {
     expect(posted.filter((p) => p.reply.type === "page")).toHaveLength(1);
   });
 
+  it("closes the bitmap and reports a compose failure when the transfer throws", async () => {
+    const posted: WorkerReply[] = [];
+    const out = { width: 10, height: 10, close: vi.fn() };
+    const ctx = { fillStyle: "", fillRect: vi.fn(), drawImage: vi.fn(), imageSmoothingQuality: "low" } as unknown as Paint2D;
+    const handle = createWorkerHandler(
+      {
+        fetch: async () => ({ ok: true, status: 200, blob: async () => new Blob(["x"]) }),
+        createImageBitmap: async () => ({ width: 2, height: 2, close: vi.fn() }) as unknown as ImageBitmap,
+        surface: () => ({ ctx, finish: () => out as unknown as ImageBitmap }),
+      },
+      (reply) => {
+        if (reply.type === "page") throw new DOMException("cannot clone", "DataCloneError");
+        posted.push(reply);
+      },
+    );
+    handle(request());
+    await flush();
+    expect(out.close).toHaveBeenCalledTimes(1);
+    expect(posted[posted.length - 1]).toEqual({ type: "error", id: 1, message: "cannot clone", stage: "compose" });
+  });
+
   it("runs requests independently by id", async () => {
     const { handle, posted } = setup();
     handle(request({ id: 1 }));

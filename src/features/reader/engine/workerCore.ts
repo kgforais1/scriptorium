@@ -76,13 +76,25 @@ export function createWorkerHandler(deps: WorkerDeps, post: Post): (req: WorkerR
   const running = new Map<number, AbortController>();
   post({ type: "ready", ok: deps.surface(1, 1) !== null }, []);
 
+  // A transfer that fails (a DataCloneError, say) is the worker's problem, not the scan's: free the
+  // bitmap and report a compose failure, so the client retries the page on the main thread.
+  function postPage(id: number, reply: WorkerReply & { type: "page" }) {
+    try {
+      post(reply, [reply.bitmap]);
+    } catch (err) {
+      reply.bitmap.close();
+      post({ type: "error", id, message: err instanceof Error ? err.message : String(err), stage: "compose" }, []);
+    }
+  }
+
   async function run(req: DecodeRequest) {
     const ac = new AbortController();
     running.set(req.id, ac);
     try {
       const reply = await compose(req, deps, ac.signal);
       if (ac.signal.aborted && reply.type === "page") reply.bitmap.close();
-      else post(reply, reply.type === "page" ? [reply.bitmap] : []);
+      else if (reply.type === "page") postPage(req.id, reply);
+      else post(reply, []);
     } catch (err) {
       if (!ac.signal.aborted) {
         const message = err instanceof Error ? err.message : String(err);
