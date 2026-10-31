@@ -66,9 +66,9 @@
   color: var(--sk-color-ink-title);
 }
 
-.reader__title:focus-visible {
-  outline: 2px solid var(--sk-color-focus-ring);
-  outline-offset: 4px;
+/* The title takes focus on open only so screen readers announce the book. It is not a control. */
+.reader__title:focus {
+  outline: none;
 }
 
 .reader__indicator {
@@ -102,13 +102,14 @@
   transition: opacity var(--sk-motion-fade) var(--sk-motion-ease);
 }
 
-.reader[data-turning="true"] .reader__header,
-.reader[data-turning="true"] .reader__bar {
+/* Chrome in use (hovered, or holding focus such as a dragged scrubber) stays put during a turn. */
+.reader[data-turning="true"] .reader__header:not(:hover, :focus-within),
+.reader[data-turning="true"] .reader__bar:not(:hover, :focus-within) {
   opacity: 0;
 }
 
-.reader[data-turning="true"] .reader__header > *,
-.reader[data-turning="true"] .reader__bar {
+.reader[data-turning="true"] .reader__header:not(:hover, :focus-within) > *,
+.reader[data-turning="true"] .reader__bar:not(:hover, :focus-within) {
   pointer-events: none;
 }
 
