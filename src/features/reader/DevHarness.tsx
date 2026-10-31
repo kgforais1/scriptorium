@@ -19,10 +19,13 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function describe(change: EngineChange | null): string {
+type Shown = EngineChange & { texH?: number };
+
+function describe(change: Shown | null): string {
   if (!change) return "loading";
   const motion = change.turning ? "turning" : "still";
-  return `spread ${change.spread + 1}/${change.spreads} · ${motion} · ${change.loaded} loaded`;
+  const tex = change.texH ? ` · texH ${change.texH}` : "";
+  return `spread ${change.spread + 1}/${change.spreads} · ${motion} · ${change.loaded} loaded${tex}`;
 }
 
 type StageProps = { book: BookView; reduced: boolean; engineRef: React.RefObject<FlipbookController | null>; sceneId: React.RefObject<string> };
@@ -31,7 +34,7 @@ type StageProps = { book: BookView; reduced: boolean; engineRef: React.RefObject
 // disposed (or its async start aborted) before the second one takes the same canvas.
 function Stage({ book, reduced, engineRef, sceneId }: Readonly<StageProps>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [change, setChange] = useState<EngineChange | null>(null);
+  const [change, setChange] = useState<Shown | null>(null);
   const [error, setError] = useState<string | null>(null);
   const geometryRef = useRef<HTMLOutputElement>(null);
 
@@ -47,7 +50,7 @@ function Stage({ book, reduced, engineRef, sceneId }: Readonly<StageProps>) {
         scene: sceneFor(sceneId.current),
         startSpread: spreadOfPage(book.lastReadPage),
         reducedMotion: reduced,
-        onChange: setChange,
+        onChange: (c) => setChange({ ...c, texH: engine?.stats().texHeight }),
         onError: (e) => setError(e.message),
         // Written straight to the DOM: this fires every frame while a leaf moves.
         onGeometry: (g) => {

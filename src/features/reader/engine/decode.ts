@@ -1,20 +1,33 @@
-// Page decoding on the main thread, behind the `PageDecoder` seam. M1 chunk 2 swaps this for a
-// worker pipeline without touching the cache or the engine. Also the pad-to-uniform letterbox.
+// Page decoding types and the main-thread decoder. A `PageDecoder` is the seam the texture cache
+// loads through: the worker client (decoderClient.ts) returns pages already letterboxed at
+// texture size, and the main-thread decoder here returns the raw scan for the backend to
+// letterbox with `composePage`. The worker client falls back to this one where a worker cannot
+// compose.
 
-import { fitRect } from "./fit";
+import { paintPage, textureWidth } from "./compose";
 import type { Rgb } from "./scene";
 
 /** One page of the book: where to fetch it and its pixel size from the book's metadata. */
 export type PageSource = { url: string; width: number; height: number };
 
-/** A decoded scan. The consumer closes the bitmap once it has used it. */
-export type DecodedPage = { bitmap: ImageBitmap; width: number; height: number };
+/**
+ * A decoded page. With `composed` false it is the raw scan, and the backend letterboxes it. With
+ * `composed` true it is already letterboxed onto paper at texture size and is uploaded as is.
+ * The consumer closes the bitmap once it has used it.
+ */
+export type DecodedPage = { bitmap: ImageBitmap; width: number; height: number; composed: boolean };
 
-/** Fetches and decodes one page. Rejects with the abort reason when the signal fires. */
-export type PageDecoder = (page: PageSource, signal: AbortSignal) => Promise<DecodedPage>;
+/** What a decoder letterboxes onto: the page box, the texture height, and the paper colour. */
+export type ComposeTarget = { boxAspect: number; texH: number; paper: Rgb };
 
-/** The main-thread decoder: `fetch` plus `createImageBitmap`. */
-export const decodePage: PageDecoder = async (page, signal) => {
+/**
+ * Fetches and decodes one page. A decoder may return the raw scan or a page composed to `target`.
+ * It rejects with the abort reason when the signal fires.
+ */
+export type PageDecoder = (page: PageSource, target: ComposeTarget, signal: AbortSignal) => Promise<DecodedPage>;
+
+/** Fetches and decodes one scan on the main thread, with no letterbox. */
+export async function decodeRaw(page: PageSource, signal: AbortSignal): Promise<DecodedPage> {
   const res = await fetch(page.url, { signal });
   // The URL holds a local path, so the error carries only the status.
   if (!res.ok) throw new Error(`page fetch failed: HTTP ${res.status}`);
@@ -23,26 +36,22 @@ export const decodePage: PageDecoder = async (page, signal) => {
     bitmap.close();
     signal.throwIfAborted();
   }
-  return { bitmap, width: bitmap.width, height: bitmap.height };
-};
+  return { bitmap, width: bitmap.width, height: bitmap.height, composed: false };
+}
 
-const css = (c: Rgb) => `rgb(${c.map((v) => Math.round(Math.min(1, Math.max(0, v)) * 255)).join(",")})`;
+/** The main-thread `PageDecoder`: the raw scan, which the backend composes. */
+export const decodePage: PageDecoder = (page, _target, signal) => decodeRaw(page, signal);
 
 /**
- * Draws the scan letterboxed onto paper at texture resolution. texH is the texture height. With
- * no page it returns a small plain-paper canvas.
+ * Draws the scan letterboxed onto paper at texture resolution on a DOM canvas. texH is the
+ * texture height. With no page it returns a small plain-paper canvas.
  */
 export function composePage(page: DecodedPage | null, boxAspect: number, texH: number, paper: Rgb): HTMLCanvasElement {
-  const texW = Math.round(texH / boxAspect);
+  const texW = textureWidth(texH, boxAspect);
   const c = document.createElement("canvas");
   c.width = page ? texW : 4;
   c.height = page ? texH : 4;
-  const x = c.getContext("2d")!;
-  x.fillStyle = css(paper);
-  x.fillRect(0, 0, c.width, c.height);
-  if (!page) return c;
-  const r = fitRect(page.width, page.height, boxAspect);
-  x.imageSmoothingQuality = "high";
-  x.drawImage(page.bitmap, r.x * texW, r.y * texH, r.w * texW, r.h * texH);
+  const scan = page ? { image: page.bitmap, width: page.width, height: page.height } : null;
+  paintPage(c.getContext("2d")!, scan, boxAspect, c.width, c.height, paper);
   return c;
 }

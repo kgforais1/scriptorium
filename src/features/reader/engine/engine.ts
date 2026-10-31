@@ -5,16 +5,19 @@
 import {
   clearSlot, createGeometryBuffer, writeLeafSlot, writeStackSlot,
 } from "./corners";
-import { decodePage, type DecodedPage, type PageDecoder, type PageSource } from "./decode";
+import { decodeRaw, type DecodedPage, type PageDecoder, type PageSource } from "./decode";
+import { browserDecoderEnv, createPageDecoder, type PageDecoderHandle } from "./decoderClient";
 import { makeBook, type Book } from "./geometry";
 import { createGlBackend } from "./glBackend";
 import { easeOut } from "./math";
-import { PageTextures } from "./pageTextures";
+import { PageTextures, type PageTextureHost } from "./pageTextures";
 import { PointerInput } from "./pointerInput";
 import { BookRenderer, type Fade } from "./renderer";
 import type { Scene } from "./scene";
 import { pageOfSlot, spreadCount } from "./spreads";
+import { textureHeight } from "./texSize";
 import { EXTRA, TurnMachine, type TurnHost } from "./turnMachine";
+import { createBrowserWorker } from "./workerFactory";
 
 /** The discrete state the chrome follows. Fires on change only, never per frame. */
 export type EngineChange = { spread: number; spreads: number; turning: boolean; loaded: number };
@@ -38,8 +41,20 @@ export type EngineOptions = {
    * The same buffer every time; copy what you keep. Layout in `corners.ts`.
    */
   onGeometry?: (buffer: Float32Array) => void;
-  /** Page decoder. Defaults to the main-thread one; M1 chunk 2 passes the worker pipeline. */
+  /**
+   * Page decoder. Defaults to the worker decoder, which falls back to main-thread decoding where
+   * a worker cannot compose pages. Tests and tools pass their own. The caller owns a decoder it
+   * passes in.
+   */
   decoder?: PageDecoder;
+};
+
+/** What the engine reports about its textures. Read on demand, never pushed. */
+export type EngineStats = {
+  /** The texture height new page uploads use now. Uploaded textures keep the height they had. */
+  texHeight: number;
+  /** Page textures held on the GPU. */
+  textures: number;
 };
 
 /** What `create` returns. */
@@ -59,6 +74,8 @@ export interface FlipbookController {
   setScene(scene: Scene): void;
   /** Switch between the curl and the cross-fade. Applies from the next turn. */
   setReducedMotion(reduced: boolean): void;
+  /** Texture size and count, for the diagnostics line. */
+  stats(): EngineStats;
   /** Free everything. Safe to call twice. */
   dispose(): void;
 }
@@ -70,6 +87,8 @@ const FADE_SECONDS = 0.2;
 export class FlipbookEngine implements FlipbookController {
   private readonly book: Book;
   private readonly renderer: BookRenderer;
+  private readonly maxTex: number;
+  private readonly ownDecoder: PageDecoderHandle | null;
   private textures!: PageTextures<WebGLTexture>;
   private machine!: TurnMachine;
   private input!: PointerInput;
@@ -96,15 +115,14 @@ export class FlipbookEngine implements FlipbookController {
     if (!gl) throw new Error(NO_WEBGL2);
     if (!opts.pages.length) throw new Error("no pages to show");
     const sig = signal ?? new AbortController().signal;
-    const decoder = opts.decoder ?? decodePage;
-    const first = await decoder(opts.pages[0], sig);
+    const first = await decodeRaw(opts.pages[0], sig);
     if (sig.aborted) {
       first.bitmap.close();
       sig.throwIfAborted();
     }
     let engine: FlipbookEngine | null = null;
     try {
-      engine = new FlipbookEngine(gl, canvas, opts, first, decoder);
+      engine = new FlipbookEngine(gl, canvas, opts, first);
       engine.start(first);
       return engine;
     } catch (err) {
@@ -120,27 +138,31 @@ export class FlipbookEngine implements FlipbookController {
     private readonly canvas: HTMLCanvasElement,
     private readonly opts: EngineOptions,
     first: DecodedPage,
-    private readonly decoder: PageDecoder,
   ) {
     this.scene = opts.scene;
     this.nLeaf = spreadCount(opts.pages.length) - 1;
     this.book = makeBook(first.height / first.width, this.nLeaf);
     this.renderer = new BookRenderer(gl, canvas, this.book);
+    this.maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+    // A caller's decoder is the caller's to stop; the default worker decoder is ours.
+    this.ownDecoder = opts.decoder ? null : createPageDecoder(browserDecoderEnv(createBrowserWorker));
   }
 
   private start(first: DecodedPage) {
     const boxAspect = this.book.H / this.book.W;
     this.renderer.build();
-    this.textures = new PageTextures(createGlBackend(this.gl, boxAspect), this.decoder, this.textureHost(), this.scene.material.paper);
+    const decode = this.opts.decoder ?? this.ownDecoder!.decode;
+    this.textures = new PageTextures(createGlBackend(this.gl, boxAspect), decode, this.textureHost(boxAspect), this.scene.material.paper);
     this.machine = new TurnMachine(this.book, this.nLeaf, this.turnHost(), this.opts.reducedMotion, this.opts.startSpread);
     this.input = new PointerInput(
       this.canvas, this.book, this.machine,
       { inverse: () => this.renderer.inverse, size: () => this.renderer.size },
       this.opts.reducedMotion,
     );
+    // Laid out first: the texture height follows the drawing buffer, which layout sizes.
+    this.renderer.layout(this.scene);
     this.textures.accept(1, first);
     this.listen();
-    this.renderer.layout(this.scene);
     this.restStacks(this.machine.spread);
     this.prefetch();
     this.raf = requestAnimationFrame(this.frame);
@@ -193,6 +215,11 @@ export class FlipbookEngine implements FlipbookController {
     this.input.setReducedMotion(reduced);
   }
 
+  /** Texture size and count. */
+  stats(): EngineStats {
+    return { texHeight: this.texHeight(this.book.H / this.book.W), textures: this.textures.size };
+  }
+
   /** Frees everything. Safe to call twice, and after a start that threw part way. */
   dispose() {
     if (this.disposed) return;
@@ -201,6 +228,7 @@ export class FlipbookEngine implements FlipbookController {
     for (const off of this.cleanup) off();
     this.input?.detach();
     this.textures?.dispose();
+    this.ownDecoder?.dispose();
     this.renderer.release();
     // Do not call WEBGL_lose_context here: a StrictMode remount gets the same context back
     // from getContext, and a lost context would leave the remounted book blank.
@@ -227,8 +255,15 @@ export class FlipbookEngine implements FlipbookController {
     this.opts.onError?.({ page, message, cause });
   }
 
-  private textureHost() {
+  // The texture height for new uploads, from the drawing buffer as it is now.
+  private texHeight(boxAspect: number): number {
+    return textureHeight({ boxAspect, maxTex: this.maxTex, devicePixelHeight: this.renderer.bufferSize[1] });
+  }
+
+  private textureHost(boxAspect: number): PageTextureHost {
     return {
+      boxAspect,
+      texHeight: () => this.texHeight(boxAspect),
       sourceOf: (slot: number) => {
         const p = pageOfSlot(slot, this.opts.pages.length);
         return p === null ? null : this.opts.pages[p];

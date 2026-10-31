@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { composePage, decodePage } from "./decode";
+import { composePage, decodePage, decodeRaw } from "./decode";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -11,17 +11,17 @@ function stubImage(width: number, height: number) {
   return bitmap;
 }
 
-describe("decodePage", () => {
+describe("decodeRaw", () => {
   it("fetches, decodes, and reports the size", async () => {
     const bitmap = stubImage(100, 140);
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, blob: async () => new Blob(["x"]) })));
-    const page = await decodePage(src, new AbortController().signal);
-    expect(page).toEqual({ bitmap, width: 100, height: 140 });
+    const page = await decodeRaw(src, new AbortController().signal);
+    expect(page).toEqual({ bitmap, width: 100, height: 140, composed: false });
   });
 
   it("rejects on a bad status without leaking the path", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404 })));
-    const err = await decodePage(src, new AbortController().signal).catch((e: Error) => e);
+    const err = await decodeRaw(src, new AbortController().signal).catch((e: Error) => e);
     expect((err as Error).message).toBe("page fetch failed: HTTP 404");
   });
 
@@ -33,7 +33,7 @@ describe("decodePage", () => {
       ac.abort();
       return bitmap;
     }));
-    await expect(decodePage(src, ac.signal)).rejects.toBeTruthy();
+    await expect(decodeRaw(src, ac.signal)).rejects.toBeTruthy();
     expect(bitmap.close).toHaveBeenCalled();
   });
 });
@@ -44,6 +44,15 @@ function stubCanvas() {
   vi.stubGlobal("document", { createElement: () => canvas });
   return { ctx, canvas };
 }
+
+describe("decodePage", () => {
+  it("is the main-thread decoder: it returns the raw scan and ignores the compose target", async () => {
+    const bitmap = stubImage(100, 140);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, blob: async () => new Blob(["x"]) })));
+    const page = await decodePage(src, { boxAspect: 1.4, texH: 512, paper: [1, 1, 1] }, new AbortController().signal);
+    expect(page).toEqual({ bitmap, width: 100, height: 140, composed: false });
+  });
+});
 
 describe("composePage", () => {
   it("makes a 4 px paper square when there is no page", () => {
@@ -64,7 +73,7 @@ describe("composePage", () => {
     const { ctx, canvas } = stubCanvas();
     const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
     // A wide scan (200 x 100) in a 1.0-aspect box is centred with bands above and below.
-    composePage({ bitmap, width: 200, height: 100 }, 1, 1000, [1, 1, 1]);
+    composePage({ bitmap, width: 200, height: 100, composed: false }, 1, 1000, [1, 1, 1]);
     expect([canvas.width, canvas.height]).toEqual([1000, 1000]);
     expect(ctx.drawImage).toHaveBeenCalledWith(bitmap, 0, 250, 1000, 500);
   });

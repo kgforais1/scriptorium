@@ -1,19 +1,24 @@
-// The WebGL texture backend for `PageTextures`: letterbox on a 2D canvas, upload with an error
-// check. Excluded from coverage because it needs a GPU.
+// The WebGL texture backend for `PageTextures`: upload with an error check, after letterboxing a
+// raw scan on a 2D canvas. A page the worker already composed is uploaded as is.
 
 import { composePage, type DecodedPage } from "./decode";
 import { uploadTexture } from "./gl";
 import type { TextureBackend } from "./pageTextures";
 import type { Rgb } from "./scene";
-import { textureHeight } from "./texSize";
+
+/**
+ * The image to upload for a page: the bitmap itself when it is composed already, otherwise the
+ * scan letterboxed onto paper at height texH.
+ */
+export function imageForUpload(page: DecodedPage, boxAspect: number, texH: number, paper: Rgb): TexImageSource {
+  return page.composed ? page.bitmap : composePage(page, boxAspect, texH, paper);
+}
 
 /** Textures for a book whose page box has the given aspect (height over width). */
 export function createGlBackend(gl: WebGL2RenderingContext, boxAspect: number): TextureBackend<WebGLTexture> {
-  const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
   return {
     paper: (paper: Rgb) => uploadTexture(gl, composePage(null, boxAspect, 4, paper)),
-    page: (page: DecodedPage, paper: Rgb) =>
-      uploadTexture(gl, composePage(page, boxAspect, textureHeight(boxAspect, maxTex), paper)),
+    page: (page: DecodedPage, paper: Rgb, texH: number) => uploadTexture(gl, imageForUpload(page, boxAspect, texH, paper)),
     free: (tex) => gl.deleteTexture(tex),
   };
 }

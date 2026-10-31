@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import type { DecodedPage, PageDecoder, PageSource } from "./decode";
+import type { ComposeTarget, DecodedPage, PageDecoder, PageSource } from "./decode";
 import { PageTextures, type TextureBackend } from "./pageTextures";
 import type { Rgb } from "./scene";
 
-type Tex = { id: number; paper: Rgb | null; kind: "paper" | "page" };
+type Tex = { id: number; paper: Rgb | null; kind: "paper" | "page"; texH: number | null; composed: boolean };
+// A composed page remembers the paper colour the "worker" used, so tests can see a stale one.
+type Stamped = { paper?: Rgb; close(): void };
+
+const BOX = 1.4;
 
 const PAPER_A: Rgb = [0.9, 0.9, 0.8];
 const PAPER_B: Rgb = [0.2, 0.2, 0.3];
@@ -15,13 +19,14 @@ function fakeBackend() {
   let failPages = false;
   const backend: TextureBackend<Tex> = {
     paper: (paper) => {
-      const t: Tex = { id: made.length, paper, kind: "paper" };
+      const t: Tex = { id: made.length, paper, kind: "paper", texH: null, composed: false };
       made.push(t);
       return t;
     },
-    page: (_page, paper) => {
+    page: (p, paper, texH) => {
       if (failPages) throw new Error("texture upload failed: GL error 0x502");
-      const t: Tex = { id: made.length, paper, kind: "page" };
+      const stamp = (p.bitmap as unknown as Stamped).paper;
+      const t: Tex = { id: made.length, paper: p.composed ? (stamp ?? null) : paper, kind: "page", texH: p.composed ? p.height : texH, composed: p.composed };
       made.push(t);
       return t;
     },
@@ -30,25 +35,36 @@ function fakeBackend() {
   return { backend, made, freed, failPages: (v: boolean) => (failPages = v) };
 }
 
-const page = (): DecodedPage => ({ bitmap: { close: vi.fn() } as unknown as ImageBitmap, width: 100, height: 140 });
+// A raw scan, which the backend letterboxes.
+const page = (): DecodedPage => ({ bitmap: { close: vi.fn() } as unknown as ImageBitmap, width: 100, height: 140, composed: false });
+// A page the worker already composed to the target.
+const composed = (t: ComposeTarget): DecodedPage => ({
+  bitmap: { close: vi.fn(), paper: t.paper } as unknown as ImageBitmap,
+  width: Math.round(t.texH / t.boxAspect),
+  height: t.texH,
+  composed: true,
+});
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 function setup(opts: { capacity?: number; decode?: PageDecoder; pinned?: number[]; sources?: number } = {}) {
   const fb = fakeBackend();
-  const decode: PageDecoder = opts.decode ?? (async () => page());
+  const size = { texH: 1024 };
+  const decode: PageDecoder = opts.decode ?? (async (_source, target) => composed(target));
   const decodeSpy = vi.fn(decode);
   const onLoad = vi.fn();
   const onError = vi.fn();
   const pinned = opts.pinned ?? [];
   const n = opts.sources ?? 20;
   const host = {
+    boxAspect: BOX,
+    texHeight: () => size.texH,
     sourceOf: (slot: number): PageSource | null => (slot >= 1 && slot <= n ? { url: `p${slot - 1}`, width: 100, height: 140 } : null),
     pinned: () => pinned,
     onLoad,
     onError,
   };
   const tex = new PageTextures(fb.backend, decodeSpy, host, PAPER_A, opts.capacity ?? 12);
-  return { tex, fb, decodeSpy, onLoad, onError, pinned };
+  return { tex, fb, decodeSpy, onLoad, onError, pinned, size };
 }
 
 describe("PageTextures", () => {
@@ -179,12 +195,83 @@ describe("PageTextures", () => {
       expect(tex.get(1).paper).toEqual(PAPER_B);
     });
 
-    it("keeps an in-flight load and finishes it with the new colour", async () => {
-      const { tex } = setup();
+    it("aborts an in-flight load and drops its page, which carries the old colour", async () => {
+      const resolvers: ((p: DecodedPage) => void)[] = [];
+      const signals: AbortSignal[] = [];
+      const decode: PageDecoder = (...args) =>
+        new Promise<DecodedPage>((resolve) => {
+          signals.push(args[2]);
+          resolvers.push((p) => resolve(p));
+        });
+      const { tex, onLoad } = setup({ decode });
+      tex.load(4);
+      tex.setPaper(PAPER_B);
+      expect(signals[0].aborted).toBe(true);
+      const stale = composed({ boxAspect: BOX, texH: 1024, paper: PAPER_A });
+      resolvers[0](stale);
+      await flush();
+      expect(stale.bitmap.close).toHaveBeenCalled();
+      expect(tex.has(4)).toBe(false);
+      expect(onLoad).not.toHaveBeenCalled();
+    });
+
+    it("reloads a dropped page with the new colour on demand", async () => {
+      const { tex, decodeSpy } = setup();
       tex.load(4);
       tex.setPaper(PAPER_B);
       await flush();
+      expect(tex.has(4)).toBe(false);
+      tex.get(4);
+      await flush();
+      expect(decodeSpy).toHaveBeenCalledTimes(2);
+      expect(decodeSpy.mock.calls[1][1].paper).toEqual(PAPER_B);
       expect(tex.get(4).paper).toEqual(PAPER_B);
+    });
+
+    it("does not start a third decode while the restarted one is in flight", async () => {
+      const resolvers: (() => void)[] = [];
+      const decode: PageDecoder = (_s, target) => new Promise<DecodedPage>((resolve) => resolvers.push(() => resolve(composed(target))));
+      const { tex, decodeSpy } = setup({ decode });
+      tex.load(4);
+      tex.setPaper(PAPER_B);
+      tex.load(4);
+      resolvers[0]();
+      await flush();
+      tex.load(4);
+      expect(decodeSpy).toHaveBeenCalledTimes(2);
+      resolvers[1]();
+      await flush();
+      expect(tex.has(4)).toBe(true);
+    });
+  });
+
+  describe("texture size and composed pages", () => {
+    it("hands the decoder the page box, the current texture height, and the paper colour", () => {
+      const { tex, decodeSpy, size } = setup();
+      size.texH = 777;
+      tex.load(2);
+      expect(decodeSpy.mock.calls[0][1]).toEqual({ boxAspect: BOX, texH: 777, paper: PAPER_A });
+    });
+
+    it("keeps uploaded textures at their size and uses the new size for new uploads", async () => {
+      const { tex, size } = setup();
+      size.texH = 2048;
+      tex.load(1);
+      await flush();
+      size.texH = 512;
+      tex.load(2);
+      await flush();
+      expect(tex.get(1).texH).toBe(2048);
+      expect(tex.get(2).texH).toBe(512);
+    });
+
+    it("uploads a composed page as it came and passes the current height for a raw scan", () => {
+      const { tex, size } = setup();
+      size.texH = 640;
+      tex.upload(1, composed({ boxAspect: BOX, texH: 300, paper: PAPER_A }));
+      tex.upload(2, page());
+      expect(tex.get(1)).toMatchObject({ composed: true, texH: 300 });
+      expect(tex.get(2)).toMatchObject({ composed: false, texH: 640, paper: PAPER_A });
     });
   });
 
@@ -226,7 +313,7 @@ describe("PageTextures", () => {
       fb.backend.paper = () => {
         throw new Error("texture upload failed: GL error 0x505");
       };
-      const host = { sourceOf: () => null, pinned: () => [], onLoad: vi.fn(), onError: vi.fn() };
+      const host = { boxAspect: BOX, texHeight: () => 512, sourceOf: () => null, pinned: () => [], onLoad: vi.fn(), onError: vi.fn() };
       expect(() => new PageTextures(fb.backend, async () => page(), host, PAPER_A)).toThrow(/GL error/);
     });
   });
@@ -257,6 +344,29 @@ describe("PageTextures", () => {
       expect(late.bitmap.close).toHaveBeenCalled();
       expect(tex.size).toBe(0);
       expect(onLoad).not.toHaveBeenCalled();
+    });
+
+    it("aborts the decodes in flight and closes what they return", async () => {
+      let signal!: AbortSignal;
+      let finish!: (p: DecodedPage) => void;
+      const decode: PageDecoder = (_s, _t, sig) =>
+        new Promise<DecodedPage>((resolve) => {
+          signal = sig;
+          finish = resolve;
+        });
+      const { tex, onLoad, onError } = setup({ decode });
+      tex.load(2);
+      tex.suspend();
+      expect(signal.aborted).toBe(true);
+      const late = composed({ boxAspect: BOX, texH: 512, paper: PAPER_A });
+      finish(late);
+      await flush();
+      expect(late.bitmap.close).toHaveBeenCalled();
+      expect(onLoad).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      tex.resume();
+      tex.load(2);
+      expect(tex.has(2)).toBe(false);
     });
 
     it("retries a page that failed before the loss", async () => {
