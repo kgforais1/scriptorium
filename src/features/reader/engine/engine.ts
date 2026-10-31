@@ -104,6 +104,9 @@ export class FlipbookEngine implements FlipbookController {
   private disposed = false;
   private lost = false;
   private readonly cleanup: (() => void)[] = [];
+  // Settled when the graphics context comes back, fails to come back, or the engine is disposed.
+  // Only openingLoaded waits on it.
+  private restoreWaiters: { resolve: () => void; reject: (err: unknown) => void }[] = [];
 
   /**
    * Starts an engine on a canvas. Page 1 decodes first because its aspect fixes the book's page
@@ -184,11 +187,31 @@ export class FlipbookEngine implements FlipbookController {
     });
     try {
       await Promise.race([this.textures.whenSettled([2 * k, 2 * k + 1], signal), aborted]);
+      // A context lost during the opening suspends the textures, so whenSettled returns early.
+      // Wait for the restore, then for the opening spread again.
+      while (this.lost && !signal.aborted && !this.disposed) {
+        await Promise.race([this.whenRestored(), aborted]);
+        await Promise.race([this.textures.whenSettled([2 * k, 2 * k + 1], signal), aborted]);
+      }
     } finally {
       // The signal outlives a normal start, so drop the listener it never needed.
       if (onAbort) signal.removeEventListener("abort", onAbort);
     }
     signal.throwIfAborted();
+  }
+
+  // Resolves when the context is restored. Rejects if the restore fails or the engine is disposed.
+  private whenRestored(): Promise<void> {
+    return new Promise<void>((resolve, reject) => this.restoreWaiters.push({ resolve, reject }));
+  }
+
+  private settleRestoreWaiters(err?: unknown) {
+    const waiters = this.restoreWaiters;
+    this.restoreWaiters = [];
+    for (const w of waiters) {
+      if (err === undefined) w.resolve();
+      else w.reject(err);
+    }
   }
 
   // ---------- public API ----------
@@ -246,6 +269,7 @@ export class FlipbookEngine implements FlipbookController {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.settleRestoreWaiters(new Error("the engine was disposed"));
     cancelAnimationFrame(this.raf);
     for (const off of this.cleanup) off();
     this.input?.detach();
@@ -413,6 +437,7 @@ export class FlipbookEngine implements FlipbookController {
       this.textures.resume();
     } catch (err) {
       this.fail(null, "could not rebuild the scene after the graphics context was lost", err);
+      this.settleRestoreWaiters(err);
       return;
     }
     this.lost = false;
@@ -421,6 +446,7 @@ export class FlipbookEngine implements FlipbookController {
     this.prefetch();
     this.emit();
     this.raf = requestAnimationFrame(this.frame);
+    this.settleRestoreWaiters();
   }
 
   // ---------- main loop ----------
