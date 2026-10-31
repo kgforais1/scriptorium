@@ -64,7 +64,7 @@ describe("createWorkerHandler", () => {
     const { handle, posted } = setup({ fetch: async () => ({ ok: false, status: 404, blob: async () => new Blob() }) });
     handle(request());
     await flush();
-    expect(posted[posted.length - 1].reply).toEqual({ type: "error", id: 1, message: "page fetch failed: HTTP 404" });
+    expect(posted[posted.length - 1].reply).toEqual({ type: "error", id: 1, message: "page fetch failed: HTTP 404", stage: "fetch" });
   });
 
   it("replies with an error and closes the scan when no surface can be made", async () => {
@@ -72,7 +72,7 @@ describe("createWorkerHandler", () => {
     const { handle, posted, scan } = setup({ surface: () => (calls++ === 0 ? { ctx: {} as Paint2D, finish: () => ({}) as ImageBitmap } : null) });
     handle(request());
     await flush();
-    expect(posted[posted.length - 1].reply).toMatchObject({ type: "error", id: 1, message: expect.stringContaining("OffscreenCanvas") });
+    expect(posted[posted.length - 1].reply).toMatchObject({ type: "error", id: 1, message: expect.stringContaining("OffscreenCanvas"), stage: "compose" });
     expect(scan.close).toHaveBeenCalled();
   });
 

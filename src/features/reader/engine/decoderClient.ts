@@ -89,7 +89,8 @@ export function createPageDecoder(env: DecoderEnv): PageDecoderHandle {
       // Aborted while the reply was in flight: nobody will upload it.
       if (data.type === "page") data.bitmap.close();
     } else if (data.type === "page") p.resolve({ bitmap: data.bitmap, width: data.width, height: data.height, composed: true });
-    else p.reject(new Error(data.message));
+    // A scan that failed to compose in the worker gets one more try on the main thread.
+    else p.reject(data.stage === "compose" ? new WorkerFailed(data.message) : new Error(data.message));
   };
 
   function viaWorker(page: PageSource, target: ComposeTarget, signal: AbortSignal): Promise<DecodedPage> {

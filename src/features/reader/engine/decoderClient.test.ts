@@ -163,8 +163,18 @@ describe("worker decoding", () => {
   it("rejects with the worker's message on an error reply", async () => {
     const result = handle.decode(src, target, new AbortController().signal);
     await flush();
-    w.reply({ type: "error", id: 1, message: "page fetch failed: HTTP 404" });
+    w.reply({ type: "error", id: 1, message: "page fetch failed: HTTP 404", stage: "fetch" });
     await expect(result).rejects.toThrow("page fetch failed: HTTP 404");
+  });
+
+  it("retries a page on the main thread when the worker could not compose it, and keeps the worker", async () => {
+    stubMainThread();
+    const result = handle.decode(src, target, new AbortController().signal);
+    await flush();
+    w.reply({ type: "error", id: 1, message: "no surface", stage: "compose" });
+    expect((await result).composed).toBe(false);
+    expect(handle.mode()).toBe("worker");
+    expect(w.terminated).toBe(false);
   });
 
   it("tells the worker to cancel and rejects with the abort reason", async () => {

@@ -16,7 +16,17 @@ export type WorkerRequest = DecodeRequest | AbortRequest;
 export type WorkerReply =
   | { type: "ready"; ok: boolean }
   | { type: "page"; id: number; bitmap: ImageBitmap; width: number; height: number }
-  | { type: "error"; id: number; message: string };
+  | { type: "error"; id: number; message: string; stage: ErrorStage };
+
+/**
+ * Where a request failed. `fetch` covers the scan itself (a missing file, bad image data), which
+ * fails the same way anywhere. `compose` is the worker's own surface, which the main thread may
+ * still manage.
+ */
+export type ErrorStage = "fetch" | "compose";
+
+// A failure of the worker's drawing surface rather than of the scan.
+class ComposeFailed extends Error {}
 
 /** A drawing surface of a fixed size. `finish` hands over its pixels as a transferable bitmap. */
 export type Surface = { ctx: Paint2D; finish(): ImageBitmap };
@@ -40,10 +50,15 @@ async function compose(req: DecodeRequest, deps: WorkerDeps, signal: AbortSignal
   try {
     signal.throwIfAborted();
     const w = textureWidth(req.texH, req.boxAspect);
-    const surface = deps.surface(w, req.texH);
-    if (!surface) throw new Error("OffscreenCanvas is not available in this worker");
-    paintPage(surface.ctx, { image: scan, width: scan.width, height: scan.height }, req.boxAspect, w, req.texH, req.paper);
-    const bitmap = surface.finish();
+    let bitmap: ImageBitmap;
+    try {
+      const surface = deps.surface(w, req.texH);
+      if (!surface) throw new Error("OffscreenCanvas is not available in this worker");
+      paintPage(surface.ctx, { image: scan, width: scan.width, height: scan.height }, req.boxAspect, w, req.texH, req.paper);
+      bitmap = surface.finish();
+    } catch (err) {
+      throw new ComposeFailed(err instanceof Error ? err.message : String(err));
+    }
     return { type: "page", id: req.id, bitmap, width: bitmap.width, height: bitmap.height };
   } finally {
     scan.close();
@@ -66,7 +81,10 @@ export function createWorkerHandler(deps: WorkerDeps, post: Post): (req: WorkerR
       if (ac.signal.aborted && reply.type === "page") reply.bitmap.close();
       else post(reply, reply.type === "page" ? [reply.bitmap] : []);
     } catch (err) {
-      if (!ac.signal.aborted) post({ type: "error", id: req.id, message: err instanceof Error ? err.message : String(err) }, []);
+      if (!ac.signal.aborted) {
+        const message = err instanceof Error ? err.message : String(err);
+        post({ type: "error", id: req.id, message, stage: err instanceof ComposeFailed ? "compose" : "fetch" }, []);
+      }
     } finally {
       running.delete(req.id);
     }
