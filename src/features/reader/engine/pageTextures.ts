@@ -42,8 +42,9 @@ export interface PageTextureHost {
 
 // A cached texture and the height it was built at, so a bigger target can replace it later.
 type Cached<T> = { tex: T; texH: number };
-// A decode in flight: its generation's signal, and the height it will compose to.
-type Loading = { signal: AbortSignal; texH: number };
+// A decode in flight: its generation's signal, the height it will compose to, and a promise that
+// settles when the attempt is over, however it ended.
+type Loading = { signal: AbortSignal; texH: number; done: Promise<void> };
 
 /** LRU of page textures keyed by slot. */
 export class PageTextures<T> {
@@ -114,9 +115,8 @@ export class PageTextures<T> {
     if (this.suspended || !source || this.loading.has(slot)) return;
     const signal = this.abort.signal;
     const texH = this.host.texHeight();
-    this.loading.set(slot, { signal, texH });
     const target: ComposeTarget = { boxAspect: this.host.boxAspect, texH, paper: this.paperColor };
-    this.decode(source, target, signal)
+    const done = this.decode(source, target, signal)
       .then((page) => {
         if (signal.aborted || this.suspended || (replacing && !this.cache.has(slot))) return page.bitmap.close();
         if (replacing) this.replace(slot, page);
@@ -129,6 +129,22 @@ export class PageTextures<T> {
         // A restart may have begun a newer load of this slot; only clear our own entry.
         if (this.loading.get(slot)?.signal === signal) this.loading.delete(slot);
       });
+    this.loading.set(slot, { signal, texH, done });
+  }
+
+  /**
+   * Starts any of the slots not yet loaded and resolves once each one is cached, has failed
+   * (the host has been told), or has nothing to load. It never rejects, and a load that was
+   * aborted counts as over, so waiting on it cannot hang on a dropped decode.
+   */
+  async whenSettled(slots: readonly number[]): Promise<void> {
+    const waits: Promise<void>[] = [];
+    for (const slot of slots) {
+      this.load(slot);
+      const entry = this.loading.get(slot);
+      if (entry) waits.push(entry.done);
+    }
+    await Promise.allSettled(waits);
   }
 
   /**

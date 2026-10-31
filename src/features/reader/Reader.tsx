@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import lamplitRaw from "../../../design/skins/lamplit/scene.json";
 import type { BookView } from "../../lib/bookTypes";
 import { parseScene, spreadCount, spreadOfPage, type EngineChange, type Scene } from "./engine";
@@ -9,6 +9,7 @@ import { ReaderHeader } from "./ReaderHeader";
 import { ReaderStatus } from "./ReaderStatus";
 import { useBookSession } from "./useBookSession";
 import { useEngine } from "./useEngine";
+import { usePageNotes } from "./usePageNotes";
 import { useEscape, usePageKeys } from "./useReaderKeys";
 import { useReducedMotion } from "./useReducedMotion";
 import "./reader.css";
@@ -32,25 +33,21 @@ export function Reader({ book, onClose, scene }: Readonly<Props>) {
   const reduced = useReducedMotion();
   const [change, setChange] = useState<EngineChange | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
-  const [pageNote, setPageNote] = useState<string | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const session = useBookSession(book.root, openedSpread, onClose);
   const { save } = session;
-
-  const seenSpread = useRef(openedSpread);
+  const notes = usePageNotes(pageCount, openedSpread, change);
+  const { spreadChanged } = notes;
 
   const onChange = useCallback(
     (next: EngineChange) => {
       setChange(next);
       // The scrubber follows the engine again once the engine settles, wherever it landed.
       if (!next.turning) setScrub(null);
-      if (next.spread !== seenSpread.current) {
-        seenSpread.current = next.spread;
-        setPageNote(null);
-      }
+      spreadChanged(next.spread);
       save(next.spread);
     },
-    [save],
+    [save, spreadChanged],
   );
 
   const { canvasRef, controllerRef, status, error } = useEngine({
@@ -58,7 +55,7 @@ export function Reader({ book, onClose, scene }: Readonly<Props>) {
     scene: scene ?? defaultScene,
     reduced,
     onChange,
-    onPageError: (e) => setPageNote(e.page === null ? e.message : `Page ${e.page + 1} could not be loaded.`),
+    onPageError: notes.pageFailed,
   });
 
   const spreads = change?.spreads ?? spreadCount(pageCount);
@@ -93,7 +90,7 @@ export function Reader({ book, onClose, scene }: Readonly<Props>) {
         enabled={ready}
         notesOpen={notesOpen}
         saveNote={session.saveError}
-        pageNote={pageNote}
+        pageNote={notes.pageNote}
         onPrev={() => controllerRef.current?.prev()}
         onNext={() => controllerRef.current?.next()}
         onScrub={(s) => {

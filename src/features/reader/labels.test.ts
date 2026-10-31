@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canvasLabel, pageIndicator, pageRange, pageToSave } from "./labels";
+import { canvasLabel, failedPagesNote, pageIndicator, pageRange, pageToSave } from "./labels";
 
 describe("pageIndicator", () => {
   it("reads page 1 of N on spread 0", () => {
@@ -51,5 +51,30 @@ describe("pageToSave", () => {
 
   it("saves nothing when the spread did not change", () => {
     expect(pageToSave(3, 3)).toBeNull();
+  });
+});
+
+describe("failedPagesNote", () => {
+  it("names one failed page of the spread", () => {
+    expect(failedPagesNote(new Set([6]), 3, 202)).toBe("Page 7 could not be loaded.");
+  });
+
+  it("names both pages of a spread", () => {
+    expect(failedPagesNote(new Set([5, 6]), 3, 202)).toBe("Pages 6 and 7 could not be loaded.");
+  });
+
+  it("ignores failures on other spreads, and has no note when none failed", () => {
+    expect(failedPagesNote(new Set([20]), 3, 202)).toBeNull();
+    expect(failedPagesNote(new Set(), 3, 202)).toBeNull();
+  });
+
+  it("keeps the note when the reader turns back to a failed page", () => {
+    const failed = new Set([6]);
+    expect(failedPagesNote(failed, 4, 202)).toBeNull();
+    expect(failedPagesNote(failed, 3, 202)).toBe("Page 7 could not be loaded.");
+  });
+
+  it("names the lone first page", () => {
+    expect(failedPagesNote(new Set([0]), 0, 202)).toBe("Page 1 could not be loaded.");
   });
 });

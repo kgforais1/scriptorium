@@ -139,6 +139,10 @@ describe("peekStays", () => {
     expect(peekStays(1, 1, { side: 1 })).toBe(false);
     expect(peekStays(-2, 1, { side: 1 })).toBe(false);
   });
+
+  it("settles while a jump is pending, even on its own corner", () => {
+    expect(peekStays(0, 1, { side: 1 }, true)).toBe(false);
+  });
 });
 
 describe("trackDrag", () => {

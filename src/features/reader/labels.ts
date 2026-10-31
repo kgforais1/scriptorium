@@ -51,3 +51,19 @@ export function canvasLabel(spread: number, pageCount: number): string {
 export function pageToSave(savedSpread: number, spread: number): number | null {
   return spread === savedSpread ? null : firstPageOfSpread(spread);
 }
+
+/**
+ * The note for pages of the open spread that failed to load.
+ *
+ * @param failed - The zero-based scan indexes that failed, over the whole book.
+ * @param spread - The zero-based spread on show.
+ * @param pageCount - The number of scans in the book.
+ * @returns "Page 7 could not be loaded." or "Pages 6 and 7 could not be loaded.", or null when
+ * no page of the spread failed.
+ */
+export function failedPagesNote(failed: ReadonlySet<number>, spread: number, pageCount: number): string | null {
+  const bad = pagesOfSpread(spread, pageCount).filter((p) => failed.has(p));
+  if (bad.length === 0) return null;
+  if (bad.length === 1) return `Page ${bad[0] + 1} could not be loaded.`;
+  return `Pages ${bad.map((p) => p + 1).join(" and ")} could not be loaded.`;
+}

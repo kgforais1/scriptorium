@@ -66,11 +66,12 @@ export function gripAt(book: Book, y: number): { vn: number; A0: number } {
 }
 
 /**
- * Whether a hovering peek should stay open. Once navigation has queued a step the peek must
- * settle; hovering cannot re-arm it. Otherwise it stays while the mouse is on its own corner.
+ * Whether a hovering peek should stay open. Once navigation has queued a step, or a jump to a
+ * distant spread is pending, the peek must settle; hovering cannot re-arm it. Otherwise it stays
+ * while the mouse is on its own corner.
  */
-export function peekStays(queued: number, peekDir: number, corner: { side: number } | null): boolean {
-  return queued === 0 && peekDir === corner?.side;
+export function peekStays(queued: number, peekDir: number, corner: { side: number } | null, jumpPending = false): boolean {
+  return queued === 0 && !jumpPending && peekDir === corner?.side;
 }
 
 /** Updates a drag's smoothed horizontal velocity (book units per second) and position. */

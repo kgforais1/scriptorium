@@ -104,7 +104,7 @@ export class PointerInput {
       const T = m.beginTurn(c.side > 0 ? 1 : -1, "peek", c.cv);
       if (T) T.pkT = 1;
     } else if (m.turn?.kind === "peek") {
-      m.turn.pkT = peekStays(m.queued, m.turn.dir, c) ? 1 : 0;
+      m.turn.pkT = peekStays(m.queued, m.turn.dir, c, m.jumpPending) ? 1 : 0;
     }
   }
 

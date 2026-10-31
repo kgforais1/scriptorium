@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { closeBook, onProgressSaved, saveProgress } from "../../lib/api";
+import { closeBook, latestSaveSeq, onProgressSaved, saveProgress } from "../../lib/api";
 import { toCommandError } from "../../lib/errors";
 import { saveResultGate } from "../../lib/saveResult";
 import { pageToSave } from "./labels";
@@ -7,7 +7,7 @@ import { pageToSave } from "./labels";
 /**
  * The save side of an open book, carried over from Phase 2's `BookView`. `save(spread)` writes
  * the first scan of the spread, and a failed save sets a note instead of a dialog. A `saved`
- * outcome or a `progress-saved` event for this book clears the note. `close()` awaits
+ * outcome clears the note. So does a `progress-saved` event for this book whose write covers the newest save issued. `close()` awaits
  * `closeBook`, stays disabled while it runs, and on failure leaves the book open with the note.
  *
  * @param root - The `root` of the open book.
@@ -24,16 +24,15 @@ export function useBookSession(root: string, openedSpread: number, onClosed: () 
   // Set at once, so a double click before the button disables starts one close, not two.
   const closingNow = useRef(false);
 
-  // A background write puts the latest page on disk, so the note no longer applies. Saves still
-  // in flight are older than that write, so the gate drops their results.
+  // A background write puts its page on disk. If that is the latest page, the note no longer
+  // applies. Saves it covers are older than the write, so the gate drops their results.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let stopped = false;
     onProgressSaved((event) => {
-      if (event.root === root) {
-        gate.settle();
-        setSaveError(null);
-      }
+      // Only a write that reaches the newest save issued proves the page on disk is current.
+      // An older write settles the saves it covers but leaves a newer save's result to speak.
+      if (event.root === root && gate.settle(event.seq, latestSaveSeq(root))) setSaveError(null);
     }).then(
       (stop) => {
         if (stopped) stop();
@@ -54,9 +53,11 @@ export function useBookSession(root: string, openedSpread: number, onClosed: () 
       if (page === null) return;
       savedSpread.current = spread;
       // Each save is numbered, so Rust drops one that arrives after a newer page. Results can
-      // overlap, so only one newer than the last shown may change the note.
-      const call = gate.next();
-      saveProgress(root, page).then(
+      // overlap, so only one at least as new as the last shown may change the note.
+      const pending = saveProgress(root, page);
+      // The call numbered itself synchronously, so this is its own number.
+      const call = latestSaveSeq(root);
+      pending.then(
         (outcome) => {
           // Only a real write clears the note. A held page says nothing about the disk.
           if (outcome === "saved" && gate.accept(call)) setSaveError(null);

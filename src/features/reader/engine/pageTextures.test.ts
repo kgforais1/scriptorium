@@ -572,3 +572,51 @@ describe("PageTextures", () => {
     expect(fb.freed.filter((t) => t.kind === "page")).toHaveLength(1);
   });
 });
+
+describe("PageTextures.whenSettled", () => {
+  it("resolves after the slots have loaded", async () => {
+    const { tex } = setup();
+    await tex.whenSettled([2, 3]);
+    expect(tex.has(2)).toBe(true);
+    expect(tex.has(3)).toBe(true);
+  });
+
+  it("resolves at once for cached slots and pastedowns", async () => {
+    const { tex, decodeSpy } = setup({ sources: 3 });
+    tex.upload(1, page());
+    await tex.whenSettled([0, 1, 4]);
+    expect(decodeSpy).not.toHaveBeenCalled();
+  });
+
+  it("waits for a slow decode", async () => {
+    let finish!: (p: DecodedPage) => void;
+    const decode: PageDecoder = () => new Promise<DecodedPage>((r) => (finish = r));
+    const { tex } = setup({ decode });
+    let settled = false;
+    const wait = tex.whenSettled([2]).then(() => (settled = true));
+    await flush();
+    expect(settled).toBe(false);
+    finish(page());
+    await wait;
+    expect(tex.has(2)).toBe(true);
+  });
+
+  it("counts a failed page as settled, after reporting it", async () => {
+    const decode: PageDecoder = async () => {
+      throw new Error("bad scan");
+    };
+    const { tex, onError } = setup({ decode });
+    await tex.whenSettled([2, 3]);
+    expect(onError).toHaveBeenCalledTimes(2);
+    expect(tex.has(2)).toBe(false);
+  });
+
+  it("does not hang when the loads are aborted", async () => {
+    const decode: PageDecoder = (_s, _t, signal) =>
+      new Promise<DecodedPage>((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+    const { tex } = setup({ decode });
+    const wait = tex.whenSettled([2]);
+    tex.dispose();
+    await wait;
+  });
+});

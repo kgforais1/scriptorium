@@ -28,6 +28,8 @@ export class BookRenderer {
   private lit: Program | null = null;
   private bakeProg: Program | null = null;
   private M: Statics | null = null;
+  // Static GL objects made so far. Filled one by one by `build`, so `release` frees a partial build.
+  private alloc: Partial<Statics> = {};
   private readonly leafV = new Float32Array(LEAF_FLOATS);
   private readonly foot = new Float32Array(NV * 4);
   private bakeTex: WebGLTexture | null = null;
@@ -69,16 +71,15 @@ export class BookRenderer {
     try {
       this.lit = program(gl, VS_LIT, fsLit({ W: b.W, H: b.H, MRG: b.MRG, NV }));
       this.bakeProg = program(gl, VS_FULL, FS_BAKE);
-      const [fsTri, fsBuf] = fullscreenTriangle(gl);
-      this.M = {
-        board: meshFrom(gl, boardMesh(b)),
-        table: meshFrom(gl, tableMesh()),
-        ribbon: meshFrom(gl, ribbonMesh(b, 0.026)),
-        ribbonSh: meshFrom(gl, ribbonMesh(b, 0.05)),
-        leaf: mesh(gl, { V: this.leafV, I: leafIndices() }, true),
-        fsTri,
-        fsBuf,
-      };
+      // Each object is recorded as it is made, so a later failure still frees the earlier ones.
+      const A = this.alloc;
+      A.board = meshFrom(gl, boardMesh(b));
+      A.table = meshFrom(gl, tableMesh());
+      A.ribbon = meshFrom(gl, ribbonMesh(b, 0.026));
+      A.ribbonSh = meshFrom(gl, ribbonMesh(b, 0.05));
+      A.leaf = mesh(gl, { V: this.leafV, I: leafIndices() }, true);
+      [A.fsTri, A.fsBuf] = fullscreenTriangle(gl);
+      this.M = A as Statics;
     } catch (err) {
       this.release();
       throw err;
@@ -87,17 +88,16 @@ export class BookRenderer {
 
   /** Frees every GL object. Safe after a partial `build` and on a lost context. */
   release(): void {
-    const gl = this.gl, M = this.M;
+    const gl = this.gl, M = this.alloc;
     gl.deleteTexture(this.bakeTex);
     gl.deleteFramebuffer(this.bakeFB);
     this.bakeTex = null;
     this.bakeFB = null;
     this.freeStacks();
-    if (M) {
-      for (const m of [M.board, M.table, M.ribbon, M.ribbonSh, M.leaf]) freeMesh(gl, m);
-      gl.deleteVertexArray(M.fsTri);
-      gl.deleteBuffer(M.fsBuf);
-    }
+    for (const m of [M.board, M.table, M.ribbon, M.ribbonSh, M.leaf]) freeMesh(gl, m);
+    gl.deleteVertexArray(M.fsTri ?? null);
+    gl.deleteBuffer(M.fsBuf ?? null);
+    this.alloc = {};
     gl.deleteProgram(this.lit?.p ?? null);
     gl.deleteProgram(this.bakeProg?.p ?? null);
     this.M = null;
