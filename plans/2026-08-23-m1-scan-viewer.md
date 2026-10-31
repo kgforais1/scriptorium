@@ -400,7 +400,7 @@ pure TS helpers: the error-heading map, the slug check, and the page clamp and k
 step, and the length limits (`limits.ts`). Rust tests cover the debounced write, the flush of
 dirty pages, stale-save ordering, and the `save_progress` path end to end.
 
-**Chunks.** Each chunk gets its own commit and a qoder review.
+**Chunks.** Each chunk gets its own commit and a review. Reviews were qoder for chunk 1 and switched to Gemini 3.8 Flash from chunk 2 on. Phase 3 shipped as two stacked PRs, #68 (chunks 0–3) and #67 (chunks 4–6), to stay under CodeRabbit's 100-file limit.
 
 0. Quality gates, before any app code. ESLint (flat config) with typescript-eslint,
    `eslint-plugin-react-hooks`, `complexity: 15`, and `jsdoc/require-jsdoc` on exported
@@ -617,9 +617,9 @@ tests and the dev harness; chunk 4 is the first a user would see.
 - [x] Chunk 1: engine port and controller API
 - [x] Chunk 2: worker textures
 - [x] Chunk 3: skin plumbing
-- [ ] Chunk 4: reader chrome
-- [ ] Chunk 5: wire-up and spike removal
-- [ ] Chunk 6: docs
+- [x] Chunk 4: reader chrome
+- [x] Chunk 5: wire-up and spike removal
+- [x] Chunk 6: docs
 
 ### Phase 4 — Docs & release
 
