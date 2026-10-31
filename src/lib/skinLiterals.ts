@@ -10,19 +10,32 @@ const NAMED_COLORS = [
   "aqua", "black", "blue", "brown", "cyan", "fuchsia", "gold", "gray", "green", "grey", "lime",
   "magenta", "maroon", "navy", "olive", "orange", "pink", "purple", "red", "silver", "teal",
   "white", "yellow",
+  // CSS system colours. They follow the OS, not the skin, so a skin must not lean on them.
+  "Canvas", "CanvasText", "ButtonFace", "ButtonText", "ButtonBorder", "Field", "FieldText",
+  "Highlight", "HighlightText", "LinkText", "VisitedText", "ActiveText", "GrayText", "Mark",
+  "MarkText", "AccentColor", "AccentColorText", "SelectedItem", "SelectedItemText",
 ].join("|");
 
-const COLOR_PROPS =
-  "color|background|background-color|border|border-(?:top|right|bottom|left)(?:-color)?|border-color|outline|outline-color|fill|stroke|box-shadow|text-shadow|caret-color|accent-color|text-decoration-color";
+const COLOR_PROP_NAMES = new Set([
+  "color", "background", "background-color", "background-image", "outline", "outline-color", "fill",
+  "stroke", "stop-color", "flood-color", "lighting-color", "box-shadow", "text-shadow", "caret-color",
+  "accent-color", "text-decoration-color",
+]);
+const BORDER_COLOR_PROP = /^border(?:-(?:top|right|bottom|left))?(?:-color)?$/;
 
 /** Matches #rgb, #rgba, #rrggbb, #rrggbbaa. Exported for tests. */
 export const HEX_COLOR = /#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![0-9a-z_-])/i;
 /** Matches a CSS colour function call. Exported for tests. */
 export const COLOR_FUNCTION = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/i;
 const NAMED_COLOR_WORD = new RegExp(String.raw`(?<![\w-])(?:${NAMED_COLORS})(?![\w-])`, "i");
-const CSS_DECL = /(?<![\w-])([a-z-]+)\s*:\s*([^;{}]+)/gi;
-// A JS style-object entry: a camelCase key and a colon. The literal after it is read by hand.
-const JS_KEY = /\b([a-z][A-Za-z]*)\s*:\s*/g;
+const CSS_DECL = /(?<![\w-])([\w-]+)\s*:\s*([^;{}]+)/g;
+// A JS style-object entry: a camelCase or PascalCase (vendor-prefixed) key and a colon. The
+// literal after it is read by hand.
+const JS_KEY = /\b([A-Za-z]\w*)\s*:\s*/g;
+// A JSX or SVG presentation attribute that carries a colour.
+const COLOR_ATTR = /(?<![\w-])(fill|stroke|color|stop-?[cC]olor|flood-?[cC]olor)\s*=\s*["']([^"'\n]*)["']/g;
+const HEX_GLOBAL = new RegExp(HEX_COLOR.source, "gi");
+const COLOR_FUNCTION_GLOBAL = new RegExp(COLOR_FUNCTION.source, "gi");
 const JS_NUMBER = /-?[\d.]+/y;
 
 // Reads a string or number literal that starts at `pos`, or returns null for anything else.
@@ -42,13 +55,33 @@ function stripVars(value: string): string {
   return value.replace(/var\([^)]*\)/g, "");
 }
 
+// Custom properties may hold any colour, so they are checked like a colour property.
+function carriesColor(prop: string): boolean {
+  return prop.startsWith("--") || COLOR_PROP_NAMES.has(prop) || BORDER_COLOR_PROP.test(prop);
+}
+
 function usesNamedColor(prop: string, value: string): boolean {
-  return new RegExp(`^(?:${COLOR_PROPS})$`).test(prop) && NAMED_COLOR_WORD.test(stripVars(value));
+  return carriesColor(prop) && NAMED_COLOR_WORD.test(stripVars(value).replace(/url\([^)]*\)/g, ""));
 }
 
 function badFontFamily(value: string): boolean {
   const v = value.trim();
   return !/^(?:var\(--sk-[\w-]+\)|inherit|initial|unset)$/.test(v);
+}
+
+const FONT_SHORTHAND_WORDS = new Set([
+  "normal", "italic", "oblique", "bold", "bolder", "lighter", "small-caps", "condensed", "expanded",
+  "xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "larger", "smaller",
+]);
+
+// The font shorthand names a family, so its family part must come from a --sk-* variable. What is
+// left after removing var() calls may only be a style, weight, size, or line height.
+function badFontShorthand(value: string): boolean {
+  const v = value.trim();
+  if (/^(?:inherit|initial|unset)$/.test(v)) return false;
+  if (!v.includes("var(--sk-")) return true;
+  const rest = stripVars(v).split(/[\s/,]+/).filter((t) => t !== "");
+  return rest.some((t) => !FONT_SHORTHAND_WORDS.has(t.toLowerCase()) && !/^-?[\d.]+[a-z%]*$/i.test(t));
 }
 
 function badRadius(value: string): boolean {
@@ -78,17 +111,23 @@ function badFilter(value: string): boolean {
   return topLevelCalls(v).some((call) => !call.includes("var(--sk-"));
 }
 
-// A declaration is checked by its normalised (kebab-case) property name.
-function checkDeclaration(prop: string, value: string): string | null {
-  if (/^(?:-webkit-)?(?:backdrop-)?filter$/.test(prop) && badFilter(value)) return "filter-literal";
+// A declaration is checked by its normalised (kebab-case) property name, without a vendor prefix.
+function checkDeclaration(name: string, value: string): string | null {
+  const prop = name.replace(/^-(?:webkit|moz|ms)-/, "");
+  if (/^(?:backdrop-)?filter$/.test(prop) && badFilter(value)) return "filter-literal";
   if (prop === "font-family" && badFontFamily(value)) return "font-family-literal";
+  if (prop === "font" && badFontShorthand(value)) return "font-literal";
   if (/^border(?:-[a-z]+){0,2}-radius$/.test(prop) && badRadius(value)) return "radius-literal";
   if (usesNamedColor(prop, value)) return "named-color";
   return null;
 }
 
+// `WebkitBackdropFilter` becomes `-webkit-backdrop-filter`, `borderRadius` becomes `border-radius`.
 function kebab(name: string): string {
-  return name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+  const vendor = /^(Webkit|Moz|ms)(?=[A-Z])/.exec(name);
+  const rest = vendor ? name.slice(vendor[0].length) : name;
+  const dashed = rest.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`).replace(/^-/, "");
+  return vendor ? `-${vendor[0].toLowerCase()}-${dashed}` : dashed;
 }
 
 function lineOf(text: string, index: number): number {
@@ -97,30 +136,50 @@ function lineOf(text: string, index: number): number {
   return n;
 }
 
-// Declarations are matched over the whole text, so a value that wraps onto the next line is seen.
-function declarationHits(text: string, isCss: boolean): { index: number; rule: string }[] {
-  const hits: { index: number; rule: string }[] = [];
-  if (isCss) {
-    for (const m of text.matchAll(CSS_DECL)) {
-      const rule = checkDeclaration(m[1].toLowerCase(), m[2]);
-      if (rule) hits.push({ index: m.index, rule });
-    }
-    return hits;
+type Hit = { index: number; rule: string };
+
+// Colour literals in a stretch of text. `url(#abc)` and a selector such as `#fade {` are not colours.
+function colorLiteralHits(segment: string, base: number): Hit[] {
+  const text = segment.replace(/url\([^)]*\)/g, (u) => " ".repeat(u.length));
+  const hits: Hit[] = [];
+  for (const m of text.matchAll(HEX_GLOBAL)) {
+    if (!/^\s*\{/.test(text.slice(m.index + m[0].length))) hits.push({ index: base + m.index, rule: "hex-color" });
   }
+  for (const m of text.matchAll(COLOR_FUNCTION_GLOBAL)) hits.push({ index: base + m.index, rule: "color-function" });
+  return hits;
+}
+
+function cssHits(text: string): Hit[] {
+  const hits: Hit[] = [];
+  for (const m of text.matchAll(CSS_DECL)) {
+    const rule = checkDeclaration(m[1].toLowerCase(), m[2]);
+    if (rule) hits.push({ index: m.index, rule });
+    // Colour literals count only in a declaration value, never in a selector.
+    hits.push(...colorLiteralHits(m[2], m.index + m[0].length - m[2].length));
+  }
+  return hits;
+}
+
+function scriptHits(text: string): Hit[] {
+  const hits = colorLiteralHits(text, 0);
   for (const m of text.matchAll(JS_KEY)) {
     const value = literalAt(text, m.index + m[0].length);
     const rule = value === null ? null : checkDeclaration(kebab(m[1]), value);
     if (rule) hits.push({ index: m.index, rule });
   }
+  for (const m of text.matchAll(COLOR_ATTR)) {
+    if (usesNamedColor(kebab(m[1]), m[2])) hits.push({ index: m.index, rule: "named-color" });
+  }
   return hits;
 }
 
 // Blank out comments but keep newlines, so reported line numbers stay right.
-function stripComments(text: string, isCss: boolean): string {
-  const blank = (s: string) => s.replace(/[^\n]/g, " ");
-  let out = text.replace(/\/\*[\s\S]*?\*\//g, blank);
-  if (!isCss) out = out.replace(/(^|[\s;,{(])\/\/.*$/gm, (_m, lead: string) => lead);
-  return out;
+function stripBlockComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " "));
+}
+
+function stripLineComments(text: string): string {
+  return text.replace(/(^|[\s;,{(])\/\/.*$/gm, (_m, lead: string) => lead);
 }
 
 /** Whether a path is subject to the skin-literal check. Engine code and tests are exempt. */
@@ -134,16 +193,13 @@ export function isCheckedFile(path: string): boolean {
 /** Returns every skin literal in one file's text, with 1-based line numbers. */
 export function findSkinViolations(path: string, text: string): SkinViolation[] {
   const isCss = path.endsWith(".css");
-  const clean = stripComments(text, isCss);
+  const noBlocks = stripBlockComments(text);
+  const clean = isCss ? noBlocks : stripLineComments(noBlocks);
   const lines = clean.split("\n");
   const found = new Map<string, SkinViolation>();
   const add = (line: number, rule: string) => {
     found.set(`${line}:${rule}`, { line, rule, text: lines[line - 1].trim() });
   };
-  lines.forEach((line, i) => {
-    if (HEX_COLOR.test(line)) add(i + 1, "hex-color");
-    if (COLOR_FUNCTION.test(line)) add(i + 1, "color-function");
-  });
-  for (const hit of declarationHits(clean, isCss)) add(lineOf(clean, hit.index), hit.rule);
+  for (const hit of (isCss ? cssHits(clean) : scriptHits(clean))) add(lineOf(clean, hit.index), hit.rule);
   return [...found.values()].sort((a, b) => a.line - b.line);
 }

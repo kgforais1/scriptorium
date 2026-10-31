@@ -529,7 +529,7 @@ committed, and CI fails if it is stale. `$type` is inherited down the tree, and 
 | `color` | The string as written |
 | `dimension`, `duration` | `<value><unit>` |
 | `cubicBezier` | `cubic-bezier(a, b, c, d)` |
-| `fontFamily` | A comma list, each name quoted |
+| `fontFamily` | A comma list. Names are quoted, except generic families (`serif`, `sans-serif`, `system-ui`, …) and system keywords (`-apple-system`, `BlinkMacSystemFont`), which stay unquoted |
 
 An unknown `$type` is a build error. The required token set lives in
 `design/skins/required-tokens.json`, and the builder checks it both ways: a missing token and
@@ -604,9 +604,9 @@ tests and the dev harness; chunk 4 is the first a user would see.
    changelog, and plan ticks.
 
 - [x] Chunk 0: progress-save follow-ups
-- [ ] Chunk 1: engine port and controller API
-- [ ] Chunk 2: worker textures
-- [ ] Chunk 3: skin plumbing
+- [x] Chunk 1: engine port and controller API
+- [x] Chunk 2: worker textures
+- [x] Chunk 3: skin plumbing
 - [ ] Chunk 4: reader chrome
 - [ ] Chunk 5: wire-up and spike removal
 - [ ] Chunk 6: docs

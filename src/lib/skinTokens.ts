@@ -87,9 +87,15 @@ export function tokenToCss(path: string, type: string, value: unknown): string {
   }
 }
 
+function typeOf(node: Record<string, unknown>, path: string, inherited: string | undefined): string | undefined {
+  if (!("$type" in node)) return inherited;
+  if (typeof node.$type !== "string") throw new Error(`${path || "tokens file"}: $type must be a string`);
+  return node.$type;
+}
+
 function walk(node: Record<string, unknown>, trail: string[], inherited: string | undefined, out: SkinToken[]): void {
   const path = trail.join(".");
-  const type = typeof node.$type === "string" ? node.$type : inherited;
+  const type = typeOf(node, path, inherited);
   if ("$value" in node) {
     if (!type) throw new Error(`${path}: token has no $type, own or inherited`);
     out.push({ path, type, value: node.$value });
@@ -106,10 +112,11 @@ function walk(node: Record<string, unknown>, trail: string[], inherited: string 
 export function flattenTokens(tree: unknown): SkinToken[] {
   if (!isRecord(tree)) throw new Error("tokens file: expected a JSON object");
   const out: SkinToken[] = [];
+  const rootType = typeOf(tree, "", undefined);
   for (const [key, child] of Object.entries(tree)) {
     if (key.startsWith("$")) continue;
     if (!isRecord(child)) throw new Error(`${key}: expected a token or a group`);
-    walk(child, [key], undefined, out);
+    walk(child, [key], rootType, out);
   }
   return out;
 }

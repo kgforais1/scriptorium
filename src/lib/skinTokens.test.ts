@@ -82,6 +82,16 @@ describe("flattenTokens", () => {
     expect(() => flattenTokens({ g: { t: { $value: "1" } } })).toThrow("g.t: token has no $type");
   });
 
+  it("rejects a $type that is not a string, at any level", () => {
+    expect(() => flattenTokens({ g: { $type: 5, t: { $value: "1" } } })).toThrow("g: $type must be a string");
+    expect(() => flattenTokens({ g: { t: { $type: ["color"], $value: "1" } } })).toThrow("g.t: $type must be a string");
+    expect(() => flattenTokens({ $type: null, g: { t: { $value: "1" } } })).toThrow("tokens file: $type must be a string");
+  });
+
+  it("inherits a root-level $type", () => {
+    expect(flattenTokens({ $type: "color", g: { t: { $value: "#fff" } } })[0].type).toBe("color");
+  });
+
   it("rejects non-object nodes", () => {
     expect(() => flattenTokens([])).toThrow("expected a JSON object");
     expect(() => flattenTokens({ g: 3 })).toThrow("g: expected a token or a group");

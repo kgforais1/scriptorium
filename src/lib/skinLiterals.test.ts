@@ -121,6 +121,64 @@ describe("findSkinViolations in TS and TSX", () => {
   });
 });
 
+describe("review follow-ups", () => {
+  it("flags named colours in background-image gradients and svg colour properties", () => {
+    expect(rules("a.css", ".a { background-image: linear-gradient(red, var(--sk-color-ink)); }")).toEqual(["1:named-color"]);
+    expect(rules("a.css", ".a { background-image: url(red.png); }")).toEqual([]);
+    expect(rules("a.css", ".a { stop-color: blue; flood-color: black; }")).toEqual(["1:named-color"]);
+  });
+
+  it("flags named colours in JSX and SVG attributes", () => {
+    expect(rules("a.tsx", '<path fill="red" stroke=\'blue\' />')).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", '<stop stopColor="gold" floodColor="navy" />')).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", '<Icon color="white" />')).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", '<path fill="currentColor" stroke="none" color="var(--sk-color-ink)" />')).toEqual([]);
+  });
+
+  it("checks vendor-prefixed style keys", () => {
+    expect(rules("a.tsx", 'const s = { WebkitBackdropFilter: "blur(8px)" };')).toEqual(["1:filter-literal"]);
+    expect(rules("a.tsx", 'const s = { WebkitBackdropFilter: "blur(var(--sk-blur-bar))" };')).toEqual([]);
+    expect(rules("a.tsx", "const s = { MozBorderRadius: 4 };")).toEqual(["1:radius-literal"]);
+    expect(rules("a.tsx", 'const s = { msFilter: "blur(2px)" };')).toEqual(["1:filter-literal"]);
+    expect(rules("a.css", ".a { -webkit-border-radius: 4px; -moz-border-radius: 0; }")).toEqual(["1:radius-literal"]);
+  });
+
+  it("flags CSS system colours", () => {
+    for (const word of ["Canvas", "CanvasText", "ButtonFace", "ButtonText", "Field", "FieldText", "Highlight", "HighlightText", "LinkText", "GrayText"]) {
+      expect(rules("a.css", `.a { color: ${word}; }`)).toEqual(["1:named-color"]);
+    }
+    expect(rules("a.css", ".a { border: 1px solid canvastext; }")).toEqual(["1:named-color"]);
+  });
+
+  it("ignores hex-looking fragments that are not colours", () => {
+    expect(rules("a.css", "#fade {\n  margin: 0;\n}")).toEqual([]);
+    expect(rules("a.css", "#abc, #def { margin: 0; }")).toEqual([]);
+    expect(rules("a.css", ".a { mask: url(#abc); fill: url(#fff); }")).toEqual([]);
+    expect(rules("a.tsx", "const css = `#fade { margin: 0 }`;")).toEqual([]);
+    expect(rules("a.tsx", 'const u = "url(#abc)";')).toEqual([]);
+  });
+
+  it("still flags real hex colours in a list and reports the right line in a wrapped value", () => {
+    expect(rules("a.css", ".a { box-shadow: 0 0 #fff, 0 0 #000; }")).toEqual(["1:hex-color"]);
+    expect(rules("a.css", ".a {\n  box-shadow:\n    0 0 4px var(--sk-color-ink),\n    0 0 #000;\n}")).toEqual(["4:hex-color"]);
+  });
+
+  it("checks the font shorthand", () => {
+    expect(rules("a.css", ".a { font: 12px Georgia, serif; }")).toEqual(["1:font-literal"]);
+    expect(rules("a.css", ".a { font: 12px/1.4 Georgia, var(--sk-font-serif); }")).toEqual(["1:font-literal"]);
+    expect(rules("a.css", '.a { font: italic bold 12px/1.4 "Foo"; }')).toEqual(["1:font-literal"]);
+    expect(rules("a.css", ".a { font: italic bold 0.9rem/1.4 var(--sk-font-sans); }")).toEqual([]);
+    expect(rules("a.css", ".a { font: inherit; }")).toEqual([]);
+    expect(rules("a.tsx", 'const s = { font: "12px Georgia" };')).toEqual(["1:font-literal"]);
+  });
+
+  it("treats custom properties as carrying a colour", () => {
+    expect(rules("a.css", ".a { --accent: red; }")).toEqual(["1:named-color"]);
+    expect(rules("a.css", ".a { --c2: #fff; }")).toEqual(["1:hex-color"]);
+    expect(rules("a.css", ".a { --thumb: 12px; --c: var(--sk-color-ink); }")).toEqual([]);
+  });
+});
+
 describe("isCheckedFile", () => {
   it.each([
     ["src/features/reader/Chrome.tsx", true],

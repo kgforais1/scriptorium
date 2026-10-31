@@ -35,7 +35,8 @@ function buildOne(id, required) {
   const css = render(id, required);
   if (checkOnly) {
     const current = existsSync(target) ? readFileSync(target, "utf8") : null;
-    if (current === css) return null;
+    // A Windows checkout may have turned LF into CRLF. Line endings are not a difference.
+    if (current?.replaceAll("\r\n", "\n") === css) return null;
     return `src/styles/skin-${id}.css is stale. Run \`pnpm skin:css\` and commit the result.`;
   }
   mkdirSync(outDir, { recursive: true });
@@ -44,10 +45,21 @@ function buildOne(id, required) {
   return null;
 }
 
+// Generated files whose skin no longer has a tokens.json.
+function orphans(ids) {
+  if (!existsSync(outDir)) return [];
+  return readdirSync(outDir)
+    .map((name) => /^skin-(.+)\.css$/.exec(name)?.[1])
+    .filter((id) => id !== undefined && !ids.includes(id))
+    .map((id) => `src/styles/skin-${id}.css has no design/skins/${id}/tokens.json. Delete it.`);
+}
+
 function main() {
   const required = readJson(join(skinsDir, "required-tokens.json")).required;
   const failures = [];
-  for (const id of skinIds()) {
+  const ids = skinIds();
+  if (checkOnly) failures.push(...orphans(ids));
+  for (const id of ids) {
     try {
       const stale = buildOne(id, required);
       if (stale) failures.push(stale);
