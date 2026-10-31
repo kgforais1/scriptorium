@@ -26,8 +26,10 @@ type Options = {
 export function useEngine({ book, scene, reduced, onChange, onPageError }: Readonly<Options>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const controllerRef = useRef<FlipbookController | null>(null);
-  const [status, setStatus] = useState<EngineStatus>("loading");
-  const [error, setError] = useState<string | null>(null);
+  // Keyed by book, so a new book reads as loading until its own engine starts.
+  const [started, setStarted] = useState<{ book: BookView; status: EngineStatus; error: string | null } | null>(null);
+  const status: EngineStatus = started?.book === book ? started.status : "loading";
+  const error = started?.book === book ? started.error : null;
   // Read when the engine starts. Later changes go through the two effects below.
   const latest = useRef({ scene, reduced, onChange, onPageError });
   const appliedScene = useRef(scene);
@@ -56,12 +58,11 @@ export function useEngine({ book, scene, reduced, onChange, onPageError }: Reado
       (engine) => {
         if (ac.signal.aborted) return engine.dispose();
         controllerRef.current = engine;
-        setStatus("ready");
+        setStarted({ book, status: "ready", error: null });
       },
       (err: unknown) => {
         if (ac.signal.aborted) return;
-        setError(err instanceof Error ? err.message : String(err));
-        setStatus("error");
+        setStarted({ book, status: "error", error: err instanceof Error ? err.message : String(err) });
       },
     );
     return () => {
@@ -71,11 +72,13 @@ export function useEngine({ book, scene, reduced, onChange, onPageError }: Reado
     };
   }, [book]);
 
+  // Also runs when the engine becomes ready, so a scene picked while it loaded is not lost.
   useEffect(() => {
-    if (appliedScene.current === scene) return;
+    const controller = controllerRef.current;
+    if (!controller || appliedScene.current === scene) return;
     appliedScene.current = scene;
-    controllerRef.current?.setScene(scene);
-  }, [scene]);
+    controller.setScene(scene);
+  }, [scene, status]);
 
   useEffect(() => {
     controllerRef.current?.setReducedMotion(reduced);

@@ -21,6 +21,8 @@ export function useBookSession(root: string, openedSpread: number, onClosed: () 
   // Results of pending saves never go through the gate, so they cannot hide an earlier failure.
   const [gate] = useState(saveResultGate);
   const savedSpread = useRef(openedSpread);
+  // Set at once, so a double click before the button disables starts one close, not two.
+  const closingNow = useRef(false);
 
   // A background write puts the latest page on disk, so the note no longer applies. Saves still
   // in flight are older than that write, so the gate drops their results.
@@ -68,10 +70,13 @@ export function useBookSession(root: string, openedSpread: number, onClosed: () 
   );
 
   const close = useCallback(async () => {
+    if (closingNow.current) return;
+    closingNow.current = true;
     setClosing(true);
     try {
       await closeBook(root);
     } catch (err) {
+      closingNow.current = false;
       setSaveError(toCommandError(err).message);
       setClosing(false);
       return;
