@@ -58,7 +58,8 @@ const NAMED_COLOR_WORD = new RegExp(String.raw`(?<![\w-])(?:${NAMED_COLORS})(?![
 const CSS_DECL = /(?<![\w-])([\w-]+)\s*:\s*([^;{}]+)/g;
 // A JS style-object entry: a camelCase or PascalCase (vendor-prefixed) key, bare or in matching
 // quotes, and a colon. Group 2 is the key. The literal after it is read by hand.
-const JS_KEY = /(?<![\w-])(["']?)([A-Za-z]\w*)\1\s*:\s*/g;
+// A quoted key may be kebab-case ("border-color"); a bare key cannot hold a hyphen.
+const JS_KEY = /(?<![\w-])(?:(["'])([A-Za-z][\w-]*)\1|([A-Za-z]\w*))\s*:\s*/g;
 // A JSX or SVG presentation attribute that carries a colour.
 // The string may sit in braces, as in fill={"red"}.
 const COLOR_ATTR = /(?<![\w-])(fill|stroke|color|(?:stop|flood)-?[cC]olor)\s*=\s*(?:\{\s*)?["']([^"'\n]*)["']/g;
@@ -192,7 +193,7 @@ function scriptHits(text: string): Hit[] {
   const hits = colorLiteralHits(text, 0);
   for (const m of text.matchAll(JS_KEY)) {
     const value = literalAt(text, m.index + m[0].length);
-    const rule = value === null ? null : checkDeclaration(kebab(m[2]), value);
+    const rule = value === null ? null : checkDeclaration(kebab(m[2] ?? m[3]), value);
     if (rule) hits.push({ index: m.index, rule });
   }
   for (const m of text.matchAll(COLOR_ATTR)) {

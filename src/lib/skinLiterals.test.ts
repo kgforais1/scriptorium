@@ -160,6 +160,8 @@ describe("review follow-ups", () => {
     expect(rules("a.tsx", 'const s = { "borderColor": "red" };')).toEqual(["1:named-color"]);
     expect(rules("a.tsx", "const s = { 'color': 'red' };")).toEqual(["1:named-color"]);
     expect(rules("a.tsx", 'const s = { "color": "var(--sk-color-ink)" };')).toEqual([]);
+    expect(rules("a.tsx", 'const s = { "border-color": "red" };')).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", "const s = { 'background-color': 'red' };")).toEqual(["1:named-color"]);
   });
 
   it("flags colour attributes given as a braced string", () => {
