@@ -6,6 +6,7 @@ import type {
   CreateBookArgs,
   FolderInfo,
   IngestProgress,
+  ProgressSaved,
   SaveOutcome,
 } from "./bookTypes";
 import { toCommandError } from "./errors";
@@ -36,12 +37,20 @@ export function inspectFolder(path: string): Promise<FolderInfo> {
 /**
  * Builds a book from a folder of scans and opens it.
  *
- * @param args - The source folder and the book's id, title, rights, and attribution.
+ * @param args - The source folder, the book's id, title, rights, and attribution, and the
+ * import id that tags this import's progress ticks (see `newImportId`).
  * @returns The open book. Rejects with a `CommandError`.
  */
 export function createBook(args: CreateBookArgs): Promise<BookView> {
-  const { folder, title, id, rights, attribution } = args;
-  return call<BookView>("create_book", { folder, title, id, rights, attribution }).then(seeded);
+  const { folder, title, id, rights, attribution, importId } = args;
+  return call<BookView>("create_book", {
+    folder,
+    title,
+    id,
+    rights,
+    attribution,
+    importId,
+  }).then(seeded);
 }
 
 /**
@@ -97,17 +106,50 @@ export function lastBook(): Promise<BookView | null> {
   return call<BookView | null>("last_book").then((book) => (book ? seeded(book) : null));
 }
 
+let importCount = 0;
+
 /**
- * Listens for ingest progress while `createBook` runs.
+ * Makes an id for one import, to pass to `createBook` and `onIngestProgress`. Ids differ
+ * within a run and across reloads of the webview.
  *
- * @param cb - Called with each progress tick.
+ * @returns A fresh id.
+ */
+export function newImportId(): string {
+  importCount += 1;
+  return `${Date.now().toString(36)}-${importCount}`;
+}
+
+/**
+ * Listens for the progress of one import while `createBook` runs. Ticks of other imports are
+ * ignored.
+ *
+ * @param importId - The id passed to `createBook`.
+ * @param cb - Called with each progress tick of that import.
  * @returns A function that stops listening.
  */
 export function onIngestProgress(
+  importId: string,
   cb: (progress: IngestProgress) => void,
 ): Promise<() => void> {
   return guarded(() =>
     listen<IngestProgress>("ingest-progress", (event) => {
+      if (event.payload.importId === importId) {
+        cb(event.payload);
+      }
+    }),
+  );
+}
+
+/**
+ * Listens for background saves of the reading position. Rust emits one when a held page
+ * reaches `meta.json` without another page turn.
+ *
+ * @param cb - Called with the `root` of the book that was saved.
+ * @returns A function that stops listening.
+ */
+export function onProgressSaved(cb: (saved: ProgressSaved) => void): Promise<() => void> {
+  return guarded(() =>
+    listen<ProgressSaved>("progress-saved", (event) => {
       cb(event.payload);
     }),
   );

@@ -1,0 +1,2 @@
+# Generated skin CSS is committed with LF so `pnpm skin:check` is stable on Windows.
+src/styles/skin-*.css text eol=lf

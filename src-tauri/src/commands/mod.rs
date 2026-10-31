@@ -1,7 +1,7 @@
 //! Tauri commands: the only way the webview touches books.
 //!
 //! This file is thin glue. The logic that can be tested without a Tauri runtime lives in
-//! [`session`] (debounce and close flush), [`state_file`] (`state.json`), [`throttle`]
+//! [`session`] (debounce, background-write claims and close flush), [`state_file`] (`state.json`), [`throttle`]
 //! (progress events) and [`view`] (what the webview receives). Each command runs its file
 //! work in `spawn_blocking`, and the session lock is never held across an `.await`.
 
@@ -16,15 +16,16 @@ mod tests;
 use crate::library::command_error::CommandError;
 use crate::library::create::{create_book_from_folder_with, CreateOptions};
 use crate::library::inspect::{self, FolderInfo};
-use crate::library::load::load_book;
+use crate::library::load::{load_book, LoadedBook};
 use crate::library::progress::save_last_read_page;
 use crate::library::sweep::{sweep_orphans, ORPHAN_AGE};
+use crate::library::BookError;
 use serde::Serialize;
-use session::{canonical_key, Session, SAVE_INTERVAL};
+use session::{canonical_key, Session, WorkerStep, SAVE_INTERVAL};
 use state_file::{read_last_book, write_last_book};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 use throttle::{EmitThrottle, EMIT_INTERVAL};
 use view::{book_view, BookView};
@@ -39,9 +40,19 @@ struct Paths {
 
 /// Payload of the `ingest-progress` event.
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct IngestProgress {
+    /// The id the webview gave `create_book`, so it can ignore another import's ticks.
+    import_id: String,
     done: u32,
     total: u32,
+}
+
+/// Payload of the `progress-saved` event: a background write put `root`'s page on disk.
+#[derive(Debug, Clone, Serialize)]
+struct ProgressSaved {
+    /// The book's root as the view spells it (`BookView.root`).
+    root: String,
 }
 
 /// Resolve the library folder, create it, register the app state, and sweep stale ingest
@@ -124,23 +135,32 @@ fn open_and_register(app: &AppHandle, root: &Path) -> Result<BookView, CommandEr
             .allow_file(&page.path)
             .map_err(|e| CommandError::internal(format!("could not admit a page: {e}")))?;
     }
-    let page_count = u32::try_from(book.meta.pages.len()).unwrap_or(u32::MAX);
-    {
-        let state = app.state::<Mutex<Session>>();
-        let mut session = lock(&state);
-        view.last_read_page = session.register(
-            book.root.clone(),
-            book.meta.last_read_page,
-            page_count,
-            Instant::now(),
-        );
-        view.save_seq = session.last_seq(&book.root);
-    }
+    register_in_session(
+        &mut lock(&app.state::<Mutex<Session>>()),
+        &book,
+        &mut view,
+        Instant::now(),
+    );
     // Failing to remember the book must not fail the open.
     if let Err(e) = write_last_book(&app.state::<Paths>().state_file, &book.root) {
         eprintln!("could not write state.json: {e}");
     }
     Ok(view)
+}
+
+/// Track `book` in `session` and fill in the parts of `view` that depend on it: the page to
+/// open on (an unsaved page from an earlier view wins over the one on disk) and the highest
+/// save number so far, so a reopened view numbers its saves above it.
+fn register_in_session(
+    session: &mut Session,
+    book: &LoadedBook,
+    view: &mut BookView,
+    now: Instant,
+) {
+    let page_count = u32::try_from(book.meta.pages.len()).unwrap_or(u32::MAX);
+    view.last_read_page =
+        session.register(book.root.clone(), book.meta.last_read_page, page_count, now);
+    view.save_seq = session.last_seq(&book.root);
 }
 
 /// Say what is in a folder: a Scriptorium book, or scans that could become one.
@@ -154,7 +174,8 @@ pub async fn inspect_folder(app: AppHandle, path: String) -> Result<FolderInfo, 
 }
 
 /// Build a book from a folder of scans and open it. Emits `ingest-progress`
-/// `{ done, total }` at most about ten times a second, and always once at `done == total`.
+/// `{ importId, done, total }` at most about ten times a second, and always once at
+/// `done == total`. `import_id` is the webview's own id for this import, echoed in every tick.
 #[tauri::command]
 pub async fn create_book(
     app: AppHandle,
@@ -163,6 +184,7 @@ pub async fn create_book(
     id: String,
     rights: String,
     attribution: String,
+    import_id: String,
 ) -> Result<BookView, CommandError> {
     let opts = CreateOptions {
         id,
@@ -170,7 +192,7 @@ pub async fn create_book(
         rights,
         attribution,
     };
-    blocking(move || create_and_open(&app, Path::new(&folder), &opts)).await
+    blocking(move || create_and_open(&app, Path::new(&folder), &opts, &import_id)).await
 }
 
 /// The blocking body of `create_book`: build the package, then open it. Runs on the blocking
@@ -179,13 +201,19 @@ fn create_and_open(
     app: &AppHandle,
     folder: &Path,
     opts: &CreateOptions,
+    import_id: &str,
 ) -> Result<BookView, CommandError> {
     let mut throttle = EmitThrottle::new(EMIT_INTERVAL);
     let library = app.state::<Paths>().library.clone();
     let dest = create_book_from_folder_with(folder, &library, opts, |done, total| {
         if throttle.should_emit(done, total, Instant::now()) {
             // A webview that went away is not an ingest failure.
-            let _ = app.emit("ingest-progress", IngestProgress { done, total });
+            let tick = IngestProgress {
+                import_id: import_id.to_owned(),
+                done,
+                total,
+            };
+            let _ = app.emit("ingest-progress", tick);
         }
     })?;
     // A book that was built but cannot be opened would block a retry with the same id, so
@@ -209,14 +237,16 @@ pub async fn open_book(app: AppHandle, path: String) -> Result<BookView, Command
 pub enum SaveOutcome {
     /// The page was written to `meta.json`.
     Saved,
-    /// The page is held in memory; it is written on a later turn or on close.
+    /// The page is held in memory; a background worker writes it once it is due, or close does.
     Pending,
 }
 
 /// Record the page the reader is on. The session remembers it at once, and `meta.json` is
-/// written at most once a second per book (every ten seconds after a failure). The rest is
-/// written on close. A failed write is an error, and so is a page held after an earlier
-/// failure (`SaveHeld`). The UI clears its warning only on `Saved`.
+/// written at most once a second per book (every ten seconds after a failure). A page that is
+/// not written yet is written by one background worker per book, which emits `progress-saved`
+/// when it succeeds; close writes whatever is left. A failed write is an error, and so is a
+/// page held after an earlier failure (`SaveHeld`). The UI clears its warning on `Saved` and
+/// on `progress-saved`.
 #[tauri::command]
 pub async fn save_progress(
     app: AppHandle,
@@ -234,29 +264,81 @@ pub async fn save_progress(
             Instant::now(),
             |r, p| save_last_read_page(r, p).map(|_| ()),
         );
-        // Anything not yet on disk gets a delayed flush (no-op if the book is clean).
-        if result != Ok(SaveOutcome::Saved) {
-            schedule_flush(&app, &root);
+        // Anything not yet on disk gets one background worker (no-op if one runs).
+        if let Some((key, token)) = claim_after_save(&state, Path::new(&root), &result) {
+            spawn_worker(&app, key, token);
         }
         result
     })
     .await
 }
 
-/// Write a held page once the debounce interval has passed, so a reader who stops on a page
-/// does not depend on the close flush. At most one is scheduled per book at a time.
-fn schedule_flush(app: &AppHandle, root: &str) {
-    let Ok(root) = canonical_key(Path::new(root)) else {
-        return;
-    };
-    let Some(wait) = lock(&app.state::<Mutex<Session>>()).claim_delayed_flush(&root) else {
-        return;
-    };
+/// After a save that did not reach disk (held, or failed), claim the book's background write.
+/// Returns the book's key and the worker's token, or `None` when the page was written, the
+/// book is clean or unknown, or a worker already owns the write. Callers start exactly one
+/// worker per `Some`.
+fn claim_after_save(
+    session: &Mutex<Session>,
+    root: &Path,
+    result: &Result<SaveOutcome, CommandError>,
+) -> Option<(PathBuf, u64)> {
+    if *result == Ok(SaveOutcome::Saved) {
+        return None;
+    }
+    let key = canonical_key(root).ok()?;
+    let token = lock(session).claim_worker(&key)?;
+    Some((key, token))
+}
+
+/// Start the thread that owns one book's background write. It sleeps until the write is due,
+/// writes it, and on success tells the webview with `progress-saved`.
+fn spawn_worker(app: &AppHandle, root: PathBuf, token: u64) {
     let app = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(wait);
-        flush_session(&app, Some(&root));
+        let Some(state) = app.try_state::<Mutex<Session>>() else {
+            return;
+        };
+        let announce = || {
+            let root = dunce::simplified(&root).to_string_lossy().into_owned();
+            // A webview that went away is not a save failure.
+            let _ = app.emit("progress-saved", ProgressSaved { root });
+        };
+        run_worker(
+            &state,
+            &root,
+            token,
+            |r, p| save_last_read_page(r, p).map(|_| ()),
+            std::thread::sleep,
+            announce,
+        );
     });
+}
+
+/// The loop of a background worker: wait until the book's write is due, write it under the
+/// session lock, and stop once the book is saved, clean, gone, or claimed by another worker.
+/// A failed write keeps the worker looping at the retry backoff. `on_saved` runs once, after
+/// the lock is released, when this worker's write succeeded. The writer and the sleep are
+/// passed in so the loop is testable without a Tauri runtime.
+fn run_worker(
+    session: &Mutex<Session>,
+    root: &Path,
+    token: u64,
+    mut write: impl FnMut(&Path, u32) -> Result<(), BookError>,
+    sleep: impl Fn(Duration),
+    on_saved: impl FnOnce(),
+) {
+    loop {
+        let step = lock(session).worker_step(root, token, Instant::now(), &mut write);
+        match step {
+            WorkerStep::Wait(due) => sleep(due.saturating_duration_since(Instant::now())),
+            WorkerStep::Failed(err) => eprintln!(
+                "could not save reading position for {}: {err}",
+                root.display()
+            ),
+            WorkerStep::Saved => return on_saved(),
+            WorkerStep::Done => return,
+        }
+    }
 }
 
 /// Write the book's held page now. Called when the reader closes the book.

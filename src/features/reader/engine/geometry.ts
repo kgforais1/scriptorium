@@ -19,6 +19,7 @@ export type Book = {
   PT: number; // per-leaf thickness, scaled so long books stay a sane height
 };
 
+/** Book dimensions for a page box of the given aspect (height over width) and leaf count. */
 export function makeBook(aspect: number, leaves: number): Book {
   const BT = 0.034;
   return { W: 1, H: aspect, MRG: 0.048, BT, ZG: BT + 0.004, PT: Math.min(0.0042, 0.16 / Math.max(1, leaves)) };
@@ -26,14 +27,15 @@ export function makeBook(aspect: number, leaves: number): Book {
 
 export type MeshData = { V: number[]; I: number[] };
 
+/** Collects vertices and indices for one mesh. */
 export function builder() {
   const V: number[] = [];
   const I: number[] = [];
   return {
     V,
     I,
-    v(x: number, y: number, z: number, nx: number, ny: number, nz: number, u: number, w: number) {
-      V.push(x, y, z, nx, ny, nz, u, w);
+    v(p: Vec3, n: Vec3, u: number, w: number) {
+      V.push(p[0], p[1], p[2], n[0], n[1], n[2], u, w);
       return V.length / 8 - 1;
     },
     quad(pts: number[][], n: Vec3) {
@@ -47,7 +49,7 @@ export function builder() {
   };
 }
 
-// Leather board with chamfered top edges.
+/** Leather board with chamfered top edges. */
 export function boardMesh(b: Book): MeshData {
   const m = builder();
   const hx = b.W + b.MRG, hy = b.H / 2 + b.MRG, zt = b.BT, bv = 0.007, zb = zt - bv, ix = hx - bv, iy = hy - bv, s = Math.SQRT1_2;
@@ -63,6 +65,7 @@ export function boardMesh(b: Book): MeshData {
   return m.data();
 }
 
+/** Desk plane under the book. */
 export function tableMesh(): MeshData {
   const m = builder();
   m.quad([[-9, -7, 0], [9, -7, 0], [9, 7, 0], [-9, 7, 0]], [0, 0, 1]);
@@ -70,11 +73,12 @@ export function tableMesh(): MeshData {
 }
 
 const stackT = (b: Book, n: number) => 0.006 + n * b.PT;
+/** Gutter lift angle for a stack of n leaves. */
 export const gutterLift = (b: Book, n: number) => Math.min(1.25, (stackT(b, n) + R0) / LG);
 
 export type Profile = { X: Float32Array; Z: Float32Array };
 
-// Resting profile of the top leaf of a stack of n leaves (the gutter curve).
+/** Resting profile of the top leaf of a stack of n leaves (the gutter curve). */
 export function restProfile(b: Book, n: number): Profile {
   const g = gutterLift(b, n), X = new Float32Array(NU), Z = new Float32Array(NU), ds = b.W / (NU - 1);
   X[0] = 0;
@@ -87,15 +91,17 @@ export function restProfile(b: Book, n: number): Profile {
   return { X, Z };
 }
 
-// Top surface and edges of one side's page block. sig is -1 for left, +1 for right.
-export function stackMeshes(b: Book, sig: number, n: number) {
-  const P = restProfile(b, n), top = builder(), ed = builder(), rows = 10, layers = n * 5;
+type Builder = ReturnType<typeof builder>;
+
+// The page block's top surface: a rows x NU grid following the gutter profile.
+function stackTop(b: Book, sig: number, P: Profile, top: Builder) {
+  const rows = 10;
   for (let j = 0; j < rows; j++) {
     const vn = j / (rows - 1), y = b.H / 2 - vn * b.H;
     for (let i = 0; i < NU; i++) {
       const i0 = Math.max(0, i - 1), i1 = Math.min(NU - 1, i + 1);
       const dx = P.X[i1] - P.X[i0], dz = P.Z[i1] - P.Z[i0], l = Math.hypot(dx, dz), s01 = i / (NU - 1);
-      top.v(sig * P.X[i], y, P.Z[i], (-sig * dz) / l, 0, dx / l, sig > 0 ? s01 : 1 - s01, vn);
+      top.v([sig * P.X[i], y, P.Z[i]], [(-sig * dz) / l, 0, dx / l], sig > 0 ? s01 : 1 - s01, vn);
     }
   }
   for (let j = 0; j < rows - 1; j++)
@@ -103,19 +109,30 @@ export function stackMeshes(b: Book, sig: number, n: number) {
       const a = j * NU + i, c = a + NU;
       top.I.push(a, c, a + 1, a + 1, c, c + 1);
     }
+}
+
+// The page block's outer edge and its head and tail faces.
+function stackEdges(b: Book, sig: number, P: Profile, layers: number, ed: Builder) {
   const xe = sig * P.X[NU - 1], ze = P.Z[NU - 1];
   ed.quad([[xe, -b.H / 2, b.BT, 0, 0], [xe, b.H / 2, b.BT, 1, 0], [xe, b.H / 2, ze, 1, layers], [xe, -b.H / 2, ze, 0, layers]], [sig, 0, 0]);
   for (const yy of [-b.H / 2, b.H / 2]) {
     const base = ed.V.length / 8, ny = yy < 0 ? -1 : 1;
     for (let i = 0; i < NU; i++) {
-      ed.v(sig * P.X[i], yy, P.Z[i], 0, ny, 0, i / (NU - 1), layers);
-      ed.v(sig * P.X[i], yy, b.BT, 0, ny, 0, i / (NU - 1), 0);
+      ed.v([sig * P.X[i], yy, P.Z[i]], [0, ny, 0], i / (NU - 1), layers);
+      ed.v([sig * P.X[i], yy, b.BT], [0, ny, 0], i / (NU - 1), 0);
     }
     for (let i = 0; i < NU - 1; i++) {
       const a = base + i * 2;
       ed.I.push(a, a + 1, a + 2, a + 2, a + 1, a + 3);
     }
   }
+}
+
+/** Top surface and edges of one side's page block. sig is -1 for left, +1 for right. */
+export function stackMeshes(b: Book, sig: number, n: number) {
+  const P = restProfile(b, n), top = builder(), ed = builder();
+  stackTop(b, sig, P, top);
+  stackEdges(b, sig, P, n * 5, ed);
   return { top: top.data(), edge: ed.data(), prof: P };
 }
 
@@ -171,6 +188,7 @@ function curlOf(b: Book, T: Turn, tp: number) {
 
 export const LEAF_FLOATS = NU * NV * 8;
 
+/** Triangle indices for the turning leaf grid. */
 export function leafIndices(): number[] {
   const out: number[] = [];
   for (let j = 0; j < NV - 1; j++)
@@ -183,11 +201,9 @@ export function leafIndices(): number[] {
 
 const prX = new Float32Array(NU), prZ = new Float32Array(NU), prA = new Float32Array(NU);
 
-// The turning leaf. One bend profile is shared by every row, so the base is a developable
-// surface. A corner lift then wraps round a diagonal cylinder in the leaf's own coordinates.
-// Writes vertices into leafV and the per-row footprint (for the cast shadow) into foot.
-export function updateLeaf(b: Book, T: Turn, leafV: Float32Array, foot: Float32Array) {
-  const ds = b.W / (NU - 1), tp = T.dir > 0 ? T.t : 1 - T.t, fwd = T.dir > 0;
+// Fills the shared bend profile (position and angle per column) for the leaf at progress tp.
+function leafProfile(b: Book, T: Turn, tp: number) {
+  const ds = b.W / (NU - 1), fwd = T.dir > 0;
   let x = 0, z = b.ZG + EPS;
   prX[0] = 0;
   prZ[0] = z;
@@ -201,31 +217,40 @@ export function updateLeaf(b: Book, T: Turn, leafV: Float32Array, foot: Float32A
     prZ[i] = z;
   }
   prA[0] = prA[1];
-  const C = curlOf(b, T, tp), curl = C.Dq > 1e-4 && C.phi > 1e-3 ? C : null;
-  for (let j = 0; j < NV; j++) {
-    const vn = j / (NV - 1), y = b.H / 2 - vn * b.H;
-    let mn = 1e9, mx = -1e9, hz = 0;
-    for (let i = 0; i < NU; i++) {
-      const { sp, yp, h } = curlPoint(curl, b.W, i * ds, y);
-      const fi = clamp(sp / ds, 0, NU - 1), i0 = Math.min(NU - 2, Math.floor(fi)), f = fi - i0;
-      const X = lerp(prX[i0], prX[i0 + 1], f), Z = lerp(prZ[i0], prZ[i0 + 1], f), th = lerp(prA[i0], prA[i0 + 1], f);
-      const nx = fwd ? -Math.sin(th) : Math.sin(th), nz = fwd ? Math.cos(th) : -Math.cos(th);
-      const px = X + nx * h, pz = Z + nz * h;
-      const o = (j * NU + i) * 8;
-      leafV[o] = px;
-      leafV[o + 1] = yp;
-      leafV[o + 2] = pz;
-      leafV[o + 6] = i / (NU - 1);
-      leafV[o + 7] = vn;
-      if (px < mn) mn = px;
-      if (px > mx) mx = px;
-      if (pz > hz) hz = pz;
-    }
-    foot[j * 4] = mn;
-    foot[j * 4 + 1] = mx;
-    foot[j * 4 + 2] = Math.max(0, hz - b.ZG - 0.055);
-    foot[j * 4 + 3] = 0;
+}
+
+// Writes one vertex row of the leaf and the row's footprint (min x, max x, peak height) into foot.
+function leafRow(b: Book, fwd: boolean, curl: Curl | null, j: number, leafV: Float32Array, foot: Float32Array) {
+  const ds = b.W / (NU - 1), vn = j / (NV - 1), y = b.H / 2 - vn * b.H;
+  let mn = 1e9, mx = -1e9, hz = 0;
+  for (let i = 0; i < NU; i++) {
+    const { sp, yp, h } = curlPoint(curl, b.W, i * ds, y);
+    const fi = clamp(sp / ds, 0, NU - 1), i0 = Math.min(NU - 2, Math.floor(fi)), f = fi - i0;
+    const X = lerp(prX[i0], prX[i0 + 1], f), Z = lerp(prZ[i0], prZ[i0 + 1], f), th = lerp(prA[i0], prA[i0 + 1], f);
+    const nx = fwd ? -Math.sin(th) : Math.sin(th), nz = fwd ? Math.cos(th) : -Math.cos(th);
+    const px = X + nx * h, pz = Z + nz * h;
+    const o = (j * NU + i) * 8;
+    leafV[o] = px;
+    leafV[o + 1] = yp;
+    leafV[o + 2] = pz;
+    leafV[o + 6] = i / (NU - 1);
+    leafV[o + 7] = vn;
+    mn = Math.min(mn, px);
+    mx = Math.max(mx, px);
+    hz = Math.max(hz, pz);
   }
+  foot[j * 4] = mn;
+  foot[j * 4 + 1] = mx;
+  foot[j * 4 + 2] = Math.max(0, hz - b.ZG - 0.055);
+  foot[j * 4 + 3] = 0;
+}
+
+/** Writes the turning leaf's vertices into leafV and the per-row footprint (for the cast shadow) into foot. */
+export function updateLeaf(b: Book, T: Turn, leafV: Float32Array, foot: Float32Array) {
+  const tp = T.dir > 0 ? T.t : 1 - T.t;
+  leafProfile(b, T, tp);
+  const C = curlOf(b, T, tp), curl = C.Dq > 1e-4 && C.phi > 1e-3 ? C : null;
+  for (let j = 0; j < NV; j++) leafRow(b, T.dir > 0, curl, j, leafV, foot);
   leafNormals(leafV);
 }
 
@@ -268,7 +293,7 @@ function catmull(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: number): Vec3 {
   return [k(0), k(1), k(2)];
 }
 
-// Ribbon bookmark: runs down the gutter, out of the tail of the block, and onto the desk.
+/** Ribbon bookmark: runs down the gutter, out of the tail of the block, and onto the desk. */
 export function ribbonMesh(b: Book, width: number): MeshData & { len: number } {
   // The ribbon starts 0.19 above the tail, clamped onto the board for very short pages.
   const YB = b.H / 2 + b.MRG, top = Math.min(-b.H / 2 + 0.19, b.H / 2);
@@ -293,8 +318,8 @@ export function ribbonMesh(b: Book, width: number): MeshData & { len: number } {
     S = v3.norm(v3.add(S, v3.scale([0, 0, 1], tw * 0.3)));
     const N = v3.norm(v3.cross(S, T));
     const a = v3.add(P[i], v3.scale(S, width / 2)), c = v3.sub(P[i], v3.scale(S, width / 2));
-    m.v(a[0], a[1], a[2], N[0], N[1], N[2], len, 1);
-    m.v(c[0], c[1], c[2], N[0], N[1], N[2], len, -1);
+    m.v(a, N, len, 1);
+    m.v(c, N, len, -1);
     if (i) {
       const q = (i - 1) * 2;
       m.I.push(q, q + 1, q + 2, q + 2, q + 1, q + 3);

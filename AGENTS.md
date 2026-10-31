@@ -139,7 +139,7 @@ reusable menus and conventions here.
 - Every public Rust item and every exported TypeScript function or class gets a doc comment. It says what the item does, not how.
 - Lints enforce this: `missing_docs` for the Rust lib crate and `jsdoc/require-jsdoc` (exports only) in ESLint.
 - The complexity limit is 15: cyclomatic in ruff (`C901`) and ESLint (`complexity`), cognitive in clippy (`cognitive_complexity`).
-- Split a function that goes over the limit. Do not raise the limit or add a blanket suppression. The one existing exemption is `ci/scripts/check_gha_usage.py` in `ruff.toml`, and the dev-only flipbook spike in `eslint.config.js` until Phase 3 rewrites it.
+- Split a function that goes over the limit. Do not raise the limit or add a blanket suppression. The one existing exemption is `ci/scripts/check_gha_usage.py` in `ruff.toml`.
 
 ## Agent compatibility
 

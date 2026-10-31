@@ -309,6 +309,12 @@ jobs:
       - name: ESLint
         run: pnpm lint
 
+      - name: Skin CSS is current
+        run: pnpm skin:check
+
+      - name: Skin literals (reader CSS and TSX)
+        run: pnpm skin:lint
+
       - name: Vitest + coverage gate
         run: pnpm test:coverage
 

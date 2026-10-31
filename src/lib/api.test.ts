@@ -14,7 +14,9 @@ import {
   createBook,
   inspectFolder,
   lastBook,
+  newImportId,
   onIngestProgress,
+  onProgressSaved,
   openBook,
   pageUrl,
   pickFolder,
@@ -36,9 +38,16 @@ describe("commands", () => {
     expect(invoke).toHaveBeenCalledWith("inspect_folder", { path: "/x" });
   });
 
-  it("createBook sends folder, title, id, rights, attribution and nothing else", async () => {
+  it("createBook sends folder, title, id, rights, attribution, importId and nothing else", async () => {
     invoke.mockResolvedValue(BOOK);
-    const args = { folder: "/f", title: "T", id: "t", rights: "R", attribution: "A" };
+    const args = {
+      folder: "/f",
+      title: "T",
+      id: "t",
+      rights: "R",
+      attribution: "A",
+      importId: "i1",
+    };
     await expect(createBook({ ...args, extra: 1 } as typeof args)).resolves.toBe(BOOK);
     expect(invoke).toHaveBeenCalledWith("create_book", args);
   });
@@ -89,7 +98,10 @@ describe("error normalization", () => {
 
   it.each([
     ["inspectFolder", () => inspectFolder("/x")],
-    ["createBook", () => createBook({ folder: "", title: "", id: "", rights: "", attribution: "" })],
+    [
+      "createBook",
+      () => createBook({ folder: "", title: "", id: "", rights: "", attribution: "", importId: "" }),
+    ],
     ["openBook", () => openBook("/p")],
     ["saveProgress", () => saveProgress("/r", 0)],
     ["lastBook", () => lastBook()],
@@ -99,22 +111,58 @@ describe("error normalization", () => {
   });
 });
 
+describe("newImportId", () => {
+  it("returns a different id each time", () => {
+    const ids = new Set([newImportId(), newImportId(), newImportId()]);
+    expect(ids.size).toBe(3);
+  });
+});
+
 describe("onIngestProgress", () => {
-  it("listens on ingest-progress, unwraps the payload, and returns unlisten", async () => {
+  it("listens on ingest-progress, passes this import's ticks, and returns unlisten", async () => {
     const unlisten = vi.fn();
     listen.mockResolvedValue(unlisten);
     const cb = vi.fn();
-    await expect(onIngestProgress(cb)).resolves.toBe(unlisten);
+    await expect(onIngestProgress("i1", cb)).resolves.toBe(unlisten);
     expect(listen.mock.calls[0][0]).toBe("ingest-progress");
-    listen.mock.calls[0][1]({ payload: { done: 1, total: 5 } });
-    expect(cb).toHaveBeenCalledWith({ done: 1, total: 5 });
+    const tick = { importId: "i1", done: 1, total: 5 };
+    listen.mock.calls[0][1]({ payload: tick });
+    expect(cb).toHaveBeenCalledWith(tick);
+  });
+
+  it("ignores ticks that belong to another import", async () => {
+    listen.mockResolvedValue(vi.fn());
+    const cb = vi.fn();
+    await onIngestProgress("i1", cb);
+    listen.mock.calls[0][1]({ payload: { importId: "i0", done: 4, total: 5 } });
+    expect(cb).not.toHaveBeenCalled();
   });
 
   it("normalizes a failure to listen", async () => {
     listen.mockRejectedValue(new Error("no"));
-    await expect(onIngestProgress(vi.fn())).rejects.toEqual({
+    await expect(onIngestProgress("i1", vi.fn())).rejects.toEqual({
       kind: "Unknown",
       message: "Error: no",
+    });
+  });
+});
+
+describe("onProgressSaved", () => {
+  it("listens on progress-saved, unwraps the payload, and returns unlisten", async () => {
+    const unlisten = vi.fn();
+    listen.mockResolvedValue(unlisten);
+    const cb = vi.fn();
+    await expect(onProgressSaved(cb)).resolves.toBe(unlisten);
+    expect(listen.mock.calls[0][0]).toBe("progress-saved");
+    listen.mock.calls[0][1]({ payload: { root: "/r" } });
+    expect(cb).toHaveBeenCalledWith({ root: "/r" });
+  });
+
+  it("normalizes a failure to listen", async () => {
+    listen.mockRejectedValue("no bridge");
+    await expect(onProgressSaved(vi.fn())).rejects.toEqual({
+      kind: "Unknown",
+      message: "no bridge",
     });
   });
 });

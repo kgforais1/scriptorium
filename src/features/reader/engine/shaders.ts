@@ -27,6 +27,7 @@ layout(location=0) in vec3 aPos;layout(location=1) in vec3 aNor;layout(location=
 uniform mat4 uVP,uModel;out vec3 vW;out vec3 vL;out vec3 vN;out vec2 vUV;
 void main(){vec4 w=uModel*vec4(aPos,1.);vW=w.xyz;vL=aPos;vN=mat3(uModel)*aNor;vUV=aUV;gl_Position=uVP*w;}`;
 
+/** Fragment shader for the lit scene, with the book's size baked in as constants. */
 export function fsLit(g: ShaderGeometry): string {
   const hb = `vec2(${f(g.W + g.MRG)},${f(g.H / 2 + g.MRG)})`;
   return `#version 300 es
@@ -136,7 +137,7 @@ void main(){vec4 a=vec4(0);
  a+=wood(groundAt(gl_FragCoord.xy+vec2(-.3,-.1)));a+=wood(groundAt(gl_FragCoord.xy+vec2(.1,-.3)));
  a+=wood(groundAt(gl_FragCoord.xy+vec2(.3,.1)));a+=wood(groundAt(gl_FragCoord.xy+vec2(-.1,.3)));o=a*.25;}`;
 
-// Uploads the skin's light and material values. Every key comes from scene.json.
+/** Uploads the skin's light and material values. Every key comes from scene.json. */
 export function applySceneUniforms(gl: WebGL2RenderingContext, u: Program["u"], sc: Scene) {
   const l = sc.light, m = sc.material;
   gl.uniform1i(u.uLightType, l.type === "point" ? 0 : 1);

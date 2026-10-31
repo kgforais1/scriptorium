@@ -17,4 +17,12 @@ describe("saveResultGate", () => {
     expect(gate.accept(first)).toBe(true);
     expect(gate.accept(second)).toBe(true);
   });
+
+  it("settle makes saves started so far stale but not later ones", () => {
+    const gate = saveResultGate();
+    const inFlight = gate.next();
+    gate.settle();
+    expect(gate.accept(inFlight)).toBe(false);
+    expect(gate.accept(gate.next())).toBe(true);
+  });
 });

@@ -24,7 +24,8 @@ a page-flip library.
 
 - **Library:** none. Own code, ported from
   [`design/mockups/e-lamplit-gallery-ui.html`](../../design/mockups/e-lamplit-gallery-ui.html).
-  The spike port lives in [`src/spike/flipbook/`](../../src/spike/flipbook/).
+  The spike port was rewritten as [`src/features/reader/engine/`](../../src/features/reader/engine/)
+  in M1 Phase 3. The spike itself is in git history before that removal.
 - **Canvas vs HTML:** neither StPageFlip mode applies. The book is one WebGL2 canvas.
   Hard pages for M7 are a geometry change in the same engine (a stiff leaf with no bend), not
   a library limit.
@@ -42,7 +43,7 @@ a page-flip library.
 ### `scene.json` keys the engine reads
 
 All keys are required. A missing or malformed key is a load error
-([`scene.ts`](../../src/spike/flipbook/scene.ts)).
+([`scene.ts`](../../src/features/reader/engine/scene.ts)).
 
 | Key | Meaning |
 |---|---|
@@ -79,7 +80,7 @@ with Metal ANGLE. "WKWebView" is the Tauri dev window.
 | G3 | StrictMode | **Pass.** The dev double mount, plus a manual dispose-and-recreate button, leave a working book in both webviews. |
 | G4 | Asset load | **Pass on macOS.** Pages load from disk via `convertFileSrc` and the asset protocol. `fetch` of `asset://` URLs works from the dev origin. Windows and Linux are not tested. |
 | G5 | ADR | **Pass.** This document. |
-| G6 | Skin-ready | **Pass.** Swapping to [`daylight-placeholder.json`](../../src/spike/flipbook/scenes/daylight-placeholder.json) at runtime changes the light (to directional), background, cover, ribbon, paper, and desk with no code change. |
+| G6 | Skin-ready | **Pass.** Swapping to [`design/skins/daylight/scene.json`](../../design/skins/daylight/scene.json) at runtime changes the light (to directional), background, cover, ribbon, paper, and desk with no code change. |
 
 Interaction requirements from the plan:
 

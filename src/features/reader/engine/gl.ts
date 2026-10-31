@@ -19,6 +19,7 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string) {
   return s;
 }
 
+/** Compiles and links a program, and collects its uniform locations. */
 export function program(gl: WebGL2RenderingContext, vs: string, fs: string): Program {
   // On a compile or link failure nothing reaches the caller, so free the partial program here.
   const p = gl.createProgram()!;
@@ -46,6 +47,7 @@ export function program(gl: WebGL2RenderingContext, vs: string, fs: string): Pro
   return { p, u };
 }
 
+/** Uploads interleaved position, normal, and UV vertices plus indices. */
 export function mesh(gl: WebGL2RenderingContext, data: { V: number[] | Float32Array; I: number[] }, dynamic = false): Mesh {
   const verts = data.V instanceof Float32Array ? data.V : new Float32Array(data.V);
   const vao = gl.createVertexArray()!;
@@ -68,12 +70,14 @@ export function mesh(gl: WebGL2RenderingContext, data: { V: number[] | Float32Ar
   return { vao, vb, ib, n: idx.length, type: wide ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT };
 }
 
+/** Uploads a MeshData, keeping an optional length (the ribbon uses it). */
 export function meshFrom(gl: WebGL2RenderingContext, data: MeshData & { len?: number }): Mesh {
   const m = mesh(gl, data);
   if (data.len !== undefined) m.len = data.len;
   return m;
 }
 
+/** Deletes a mesh's GL objects. */
 export function freeMesh(gl: WebGL2RenderingContext, m: Mesh | null | undefined) {
   if (!m) return;
   gl.deleteBuffer(m.vb);
@@ -81,13 +85,25 @@ export function freeMesh(gl: WebGL2RenderingContext, m: Mesh | null | undefined)
   gl.deleteVertexArray(m.vao);
 }
 
+/** Draws a mesh's triangles. */
 export function drawMesh(gl: WebGL2RenderingContext, m: Mesh) {
   gl.bindVertexArray(m.vao);
   gl.drawElements(gl.TRIANGLES, m.n, m.type, 0);
 }
 
-export function textureFrom(gl: WebGL2RenderingContext, src: TexImageSource): WebGLTexture {
-  const t = gl.createTexture()!;
+/** Clears stale GL error flags. Bounded, in case a driver reports an error on every call. */
+function clearErrors(gl: WebGL2RenderingContext) {
+  for (let i = 0; i < 8 && gl.getError() !== gl.NO_ERROR; i++);
+}
+
+/**
+ * Uploads an image as a mipmapped texture and checks gl.getError() afterwards. On a GL error the
+ * texture is deleted and the call throws, so a refused upload is never cached.
+ */
+export function uploadTexture(gl: WebGL2RenderingContext, src: TexImageSource): WebGLTexture {
+  const t = gl.createTexture();
+  if (!t) throw new Error("texture upload failed: no texture (context lost?)");
+  clearErrors(gl);
   gl.bindTexture(gl.TEXTURE_2D, t);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -98,10 +114,19 @@ export function textureFrom(gl: WebGL2RenderingContext, src: TexImageSource): We
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   const aniso = gl.getExtension("EXT_texture_filter_anisotropic");
-  if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  if (aniso) {
+    const max = gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number;
+    gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, max));
+  }
+  const err = gl.getError();
+  if (err !== gl.NO_ERROR) {
+    gl.deleteTexture(t);
+    throw new Error(`texture upload failed: GL error 0x${err.toString(16)}`);
+  }
   return t;
 }
 
+/** A vertex array and buffer that cover the viewport with one triangle. */
 export function fullscreenTriangle(gl: WebGL2RenderingContext): [WebGLVertexArrayObject, WebGLBuffer] {
   const vao = gl.createVertexArray()!;
   gl.bindVertexArray(vao);

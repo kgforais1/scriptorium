@@ -97,7 +97,9 @@ built app.
 
 Progress is saved in the book's `meta.json`, at most once a second while you page. A turn
 made within a second of the last write is held, then written about a second later. Closing
-the book or the window writes it at once.
+the book or the window writes it at once. A held page is written by one background worker
+per book, with no further turn needed. If a write fails, the page bar shows a note, the
+worker retries about every ten seconds, and the note clears by itself once a retry succeeds.
 
 - [ ] Open a book, go to page 6, wait a few seconds, and quit the app (Cmd+Q, or close the
   window). Relaunch with `pnpm tauri dev`. Expected: the book opens by itself at page 6.
@@ -107,6 +109,13 @@ the book or the window writes it at once.
 - [ ] Open a book at page 1, turn one page, and wait 3 seconds. Look at `meta.json` in the
   book's library folder. Expected: `lastReadPage` holds the new page (zero-based), without
   quitting.
+- [ ] Make the book's `meta.json` read-only (or the book's folder, on Windows), then turn a
+  page and wait 2 seconds. Expected: the page bar shows "Your place could not be saved."
+  Make it writable again and wait up to 10 seconds, without turning a page. Expected: the
+  note disappears by itself, and `meta.json` holds the page.
+- [ ] Make `meta.json` read-only again, turn a page, and click **Close book**. Expected: the
+  book stays open, the button is enabled again, and the note shows. Make it writable and
+  click **Close book** again. Expected: the home screen returns.
 - [ ] Click **Close book**, then quit. Relaunch. Expected: the app reopens the last book
   that was opened, at its saved page.
 - [ ] Move the book's library folder away and relaunch. Expected: the home screen shows and no
@@ -187,8 +196,10 @@ The flipbook spike is throwaway code that proves the page-turn engine. It stays 
 builds until Phase 3 replaces it.
 
 - [ ] Run `pnpm tauri dev`.
-- [ ] Open the devtools console and run `location.hash = "spike"`. Expected: the spike
-  replaces the reader. Run `location.hash = ""` to return.
+- [ ] Open the devtools console and run `location.hash = "spike"`. Expected: the engine
+  harness replaces the reader. Since Phase 3 chunk 1 it shows the last opened book on the new
+  engine (`src/features/reader/engine/`), with Prev, Next, Scene, Remount, and Reduced motion
+  buttons. Run `location.hash = ""` to return.
 - [ ] For a realistic page set, build the spike pages with `scripts/make-spike-fixtures.sh`.
   It needs macOS and the Dulac and Princess corpora from
   [`tests/fixtures/README.md`](../tests/fixtures/README.md).

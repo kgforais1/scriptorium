@@ -50,6 +50,8 @@ export interface BookView {
 
 /** Payload of the `ingest-progress` event. */
 export interface IngestProgress {
+  /** The `importId` given to `create_book`. Ignore ticks for any other id. */
+  importId: string;
   done: number;
   total: number;
 }
@@ -70,6 +72,14 @@ export interface CreateBookArgs {
   id: string;
   rights: string;
   attribution: string;
+  /** This import's own id, echoed in every `ingest-progress` tick. See `newImportId`. */
+  importId: string;
+}
+
+/** Payload of the `progress-saved` event: a background write put `root`'s page on disk. */
+export interface ProgressSaved {
+  /** The `root` of the open `BookView`. */
+  root: string;
 }
 
 /** What `save_progress` did: wrote the page, or held it for a later write. */

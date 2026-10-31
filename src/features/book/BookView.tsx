@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { closeBook, pageUrl, saveProgress } from "../../lib/api";
+import { closeBook, onProgressSaved, pageUrl, saveProgress } from "../../lib/api";
 import type { BookView as Book } from "../../lib/bookTypes";
 import { clampPage } from "../../lib/clamp";
 import { isTypingTarget } from "../../lib/dom";
@@ -35,6 +35,49 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
   const [saveError, setSaveError] = useState<string | null>(null);
   // Pending results never go through the gate, so they cannot hide an earlier failure.
   const [gate] = useState(saveResultGate);
+  // True while Close book waits for its write, so a second click cannot start another.
+  const [closing, setClosing] = useState(false);
+
+  // A background write puts the latest page on disk, so the warning no longer applies. Saves
+  // still in flight are older than that write, so the gate drops their results.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let stopped = false;
+    onProgressSaved(({ root }) => {
+      if (root === book.root) {
+        gate.settle();
+        setSaveError(null);
+      }
+    }).then(
+      (stop) => {
+        if (stopped) {
+          stop();
+        } else {
+          unlisten = stop;
+        }
+      },
+      // The warning then clears on the next successful turn instead.
+      () => undefined,
+    );
+    return () => {
+      stopped = true;
+      unlisten?.();
+    };
+  }, [book.root, gate]);
+
+  // Write the held page now. The book closes only once it is saved; on a failure it stays
+  // open with the warning, and the exit flush still retries.
+  async function close() {
+    setClosing(true);
+    try {
+      await closeBook(book.root);
+    } catch (err) {
+      setSaveError(toCommandError(err).message);
+      setClosing(false);
+      return;
+    }
+    onClose();
+  }
 
   function goTo(next: number) {
     if (next === page) {
@@ -91,13 +134,8 @@ export function BookView({ book, onClose }: Readonly<BookViewProps>) {
         <button
           type="button"
           className="button"
-          onClick={() => {
-            // Write the held page now. A failure is logged; the close flush on exit retries it.
-            closeBook(book.root).catch((err: unknown) =>
-              console.error(`could not save on close: ${toCommandError(err).message}`),
-            );
-            onClose();
-          }}
+          disabled={closing}
+          onClick={() => void close()}
         >
           Close book
         </button>

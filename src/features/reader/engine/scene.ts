@@ -24,6 +24,7 @@ export type Scene = {
   };
 };
 
+/** A scene file that is missing a key or has a malformed one. */
 export class SceneError extends Error {}
 
 type Obj = Record<string, unknown>;
@@ -79,6 +80,7 @@ function parseLight(raw: unknown): Scene["light"] {
   throw new SceneError(`light.type: expected "point" or "directional", got ${JSON.stringify(l.type)}`);
 }
 
+/** Validates raw scene.json data. A missing or malformed key throws a SceneError. */
 export function parseScene(raw: unknown): Scene {
   const s = obj(raw, "scene");
   const cam = obj(s.camera, "camera");

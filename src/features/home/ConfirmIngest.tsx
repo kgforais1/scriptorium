@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createBook, onIngestProgress } from "../../lib/api";
+import { createBook, newImportId, onIngestProgress } from "../../lib/api";
 import { bookIdHint } from "../../lib/bookId";
 import type { BookView, CommandError, ScansFolderInfo } from "../../lib/bookTypes";
 import { toCommandError } from "../../lib/errors";
@@ -97,10 +97,16 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Re
     submitting.current = true;
     setProgress(0);
     let unlisten: (() => void) | undefined;
+    // Ticks carry this id, so another import's progress never moves this bar.
+    const importId = newImportId();
     try {
       // Progress is a nicety: if the listener cannot attach, the import still runs.
-      unlisten = await onIngestProgress((tick) => setProgress(tick.done)).catch(() => undefined);
-      onCreated(await createBook({ folder, title: title.trim(), id, rights, attribution }));
+      unlisten = await onIngestProgress(importId, (tick) => setProgress(tick.done)).catch(
+        () => undefined,
+      );
+      onCreated(
+        await createBook({ folder, title: title.trim(), id, rights, attribution, importId }),
+      );
     } catch (err) {
       setProgress(null);
       onError(toCommandError(err));

@@ -1,0 +1,57 @@
+/* Dev-only harness for the engine (#spike). It reads the same --sk-* tokens as the real chrome. */
+.dev-harness {
+  position: fixed;
+  inset: 0;
+  background: var(--sk-color-background);
+  color: var(--sk-color-ink);
+}
+
+.dev-harness__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.dev-harness__error {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  right: 1rem;
+  margin: 0;
+  padding: 0.5rem;
+  background: var(--sk-color-panel);
+}
+
+.dev-harness__state {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--sk-color-panel);
+  font-size: 0.8rem;
+}
+
+.dev-harness__bar {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem;
+  background: var(--sk-color-panel);
+  border: 1px solid var(--sk-color-hairline);
+}
+
+.dev-harness__bar button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.dev-harness__geometry {
+  top: 2.25rem;
+}

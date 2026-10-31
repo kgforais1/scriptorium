@@ -444,40 +444,174 @@ Known limits after Phase 2:
 - Opened books stay in the session and the asset scope until the app quits. **Close book**
   revokes nothing. Revisit when the bookshelf (M5) opens many books in one run.
 - A book whose progress cannot be saved (for example, on a read-only volume) shows a note in
-  the page bar until a save succeeds. Turns then retry about every ten seconds instead of
-  every second, and the close flush always tries.
+  the page bar until a save succeeds. One background worker per dirty book then retries about
+  every ten seconds instead of every second, with no page turn needed. When it succeeds, Rust
+  emits `progress-saved` and the note clears. **Close book** waits for its write: on a failure
+  the book stays open with the note, and the exit flush still tries.
 
 ### Phase 3 — Reader
 
-- [ ] ADR flip library bound to page list
-- [ ] Engine publishes each visible page's projected corners per frame, for M2's text overlay
-      and M6's hotspots (fold into the Phase 3 refresh from ADR-0001)
-- [ ] ←/→ + on-screen controls; edge no-ops
-- [ ] Debounced progress + **flush on close**. Follow-ups from the CodeRabbit review of PR #66
-      (none block Phase 2):
-      - Replace the per-turn delayed flush with one worker per dirty book that owns its timer.
-        It keeps the 1 s interval and the 10 s backoff, retries after a failed write without
-        waiting for a turn, and cannot have its claim cleared by another flush.
-      - Tell the view when a background write succeeds (for example, a `progress-saved`
-        event), so the save warning clears without another page turn.
-      - Decide what **Close book** does when its flush fails: stay open with the warning, or
-        close and show it on the home screen.
-      - Test the `saveSeq` copy in `open_and_register` and the flush scheduling through
-        helpers that need no `AppHandle`.
-      - Tag `ingest-progress` events with an import id. Overlap is reachable only through the
-        dev-only `#spike` route today.
-- [ ] Loading / empty states
-- [ ] Reader chrome follows mockup E layout (header, bottom bar with scrubber); notes panel
-      shell only — hotspots stay M6
-- [ ] Skin plumbing per [`design/DESIGN.md`](../design/DESIGN.md): build step turns
-      `design/skins/lamplit/tokens.json` into CSS custom properties; engine reads `scene.json`
-- [ ] No hard-coded colours, fonts, or scene values in reader components (lamplit is the only
-      skin; no picker yet)
-- [ ] Every control works by keyboard, has a visible focus state, and has an accessible name
-- [ ] Touch: one-finger drag and tap zones turn pages; controls have touch targets of at least
-      44 px; hover-only affordances (tooltips, thumbnail lift) have a tap equivalent; the
-      canvas blocks browser pinch and scroll without trapping the chrome
-- [ ] With `prefers-reduced-motion`, pulses stop and page turns shorten or cross-fade
+Spec fleshed out 2026-10-30 on branch `m1/phase3-reader`, from the
+[ADR-0001 rewrite scope](../docs/adr/0001-flipbook-engine.md#m1-rewrite-scope), and revised
+after a qoder review. Phase 3 replaces Phase 2's plain `<img>` page view with the WebGL2
+flipbook and mockup E's chrome.
+
+**Platform floor.** The worker decode path needs `OffscreenCanvas` and `createImageBitmap` in a
+worker: macOS 13.3+ (Safari 16.4 WebKit) and webkit2gtk 2.40+. Set
+`bundle.macOS.minimumSystemVersion` to `13.3`. Where the worker path is missing, decode on the
+main thread behind the same interface (below), so an older webview is slower, not broken.
+
+**Engine** (`src/features/reader/engine/`). Keep the spike's geometry, shaders, and scene
+loader. Rewrite the rest as a plain TypeScript class with no React:
+
+- `FlipbookEngine.create(canvas, { pages, scene, startSpread, reducedMotion })` returns a
+  controller with `next()`, `prev()`, `goTo(spread)`, `setScene(scene)`, `dispose()`, and an
+  `onChange(state)` listener (`spread`, `spreads`, `turning`, `loaded`). `onChange` fires on
+  discrete changes only, never per frame. Creation is abortable, so a StrictMode double mount
+  never leaves two engines on one canvas. Page 1 decodes before construction, because it fixes
+  the book's page aspect.
+- The engine owns pointer and gesture input on the canvas only. It has no keyboard listener:
+  the spike's window `keydown` handler (`engine.ts:539`) is removed, and the chrome owns keys.
+- Spread model and aspect policy as in ADR-0001. Slot 0 is a blank front pastedown, scan *p*
+  is slot *p + 1*, and a blank back pastedown pads to even. Spread *s* shows slots *2s* and
+  *2s + 1*. Pure functions with tests:
+  - `spreadOfPage(p) = floor((p + 1) / 2)`
+  - `firstPageOfSpread(s) = max(0, 2s - 1)`, the first scan visible in spread *s*
+  - `pagesOfSpread(s)`, the scans visible in spread *s* (one or two)
+  Tests cover p = 0, 1, 2 and s = 0, 1, 2, a 1-page book (one spread, Next is a no-op, the back
+  pastedown shows), a 0-page book (no engine, empty state), and a last spread holding one scan
+  plus the pastedown.
+- `setScene` rebuilds the paper texture and drops every cached page texture, because the
+  letterbox band bakes `material.paper` into each page (`pages.ts`). A test covers it. The
+  daylight placeholder scene moves to `design/skins/daylight/scene.json` before the spike goes.
+- Handle `webglcontextlost` (stop the loop, drop textures) and `webglcontextrestored` (rebuild
+  programs and reload the open spread). Check every upload for GL errors, including the blank
+  paper texture. A failed page shows the paper colour and reports through `onError`.
+- No WebGL2: the reader shows an error. There is no `<img>` fallback (ADR-0001).
+- Corner geometry for M2's text overlay and M6's hotspots: the engine writes each visible
+  page's projected corners, in canvas pixels, into a preallocated buffer while a leaf moves
+  (a turn, a drag, or a corner peek) and once on settle, and calls `onGeometry`. Phase 3 only publishes them.
+- `prefers-reduced-motion`: a turn is a short cross-fade, and nothing pulses.
+- Unit tests: `parseScene`, `fitRect`, the slot mapping, the texture size choice, the LRU, and
+  `setScene` invalidation.
+
+**Textures** (chunk 2). Pages decode in a worker (`createImageBitmap` plus `OffscreenCanvas`
+letterboxing). Without `OffscreenCanvas` in a worker, decode with `createImageBitmap` on the
+main thread and letterbox with the spike's `composePage`, behind the same `decodePage`
+interface. The worker decoder is built with the box aspect and texture height, and returns an
+already letterboxed bitmap, so `TextureBackend.page` must accept a composed bitmap instead of
+always calling `composePage`. The texture height respects both the display and a memory
+budget:
+
+```
+texH = min(devicePixelHeight, 2048,
+           floor(sqrt(TEX_BUDGET * boxAspect / 64)),
+           MAX_TEXTURE_SIZE, floor(MAX_TEXTURE_SIZE * boxAspect))
+TEX_BUDGET = 256 MB
+```
+
+A texture is `texH / boxAspect` wide (`boxAspect` is height over width), so one page costs
+`4 * texH² / boxAspect` bytes, plus a third for mipmaps. Twelve cached pages within the budget
+give `texH² <= TEX_BUDGET * boxAspect / (12 * 4 * 4/3)`, which is the `/ 64` term.
+
+`EngineStats` reports the chosen height. After a resize or a DPR change, uploaded textures keep
+their size and new uploads use the new one. Keep the LRU of 12 around the open spread; the open
+spread and the turning leaf are never evicted.
+
+**Skin plumbing** (chunk 3). `scripts/build-skin-css.mjs` turns
+`design/skins/<id>/tokens.json` (DTCG) into `src/styles/skin-<id>.css`, a `:root` block of
+`--sk-*` custom properties. `pnpm dev` and `pnpm build` run it, the generated file is
+committed, and CI fails if it is stale. `$type` is inherited down the tree, and a leaf
+`$type` overrides it:
+
+| `$type` | CSS value |
+|---|---|
+| `color` | The string as written |
+| `dimension`, `duration` | `<value><unit>` |
+| `cubicBezier` | `cubic-bezier(a, b, c, d)` |
+| `fontFamily` | A comma list. Names are quoted, except generic families (`serif`, `sans-serif`, `system-ui`, …) and system keywords (`-apple-system`, `BlinkMacSystemFont`), which stay unquoted |
+
+An unknown `$type` is a build error. The required token set lives in
+`design/skins/required-tokens.json`, and the builder checks it both ways: a missing token and
+an unexpected one are both errors. The engine reads `design/skins/<id>/scene.json` through
+`parseScene`. `scripts/check-skin-literals.mjs` runs in CI and fails on colour, font-family,
+radius, and filter literals in `src/features/reader/` CSS and TSX; pixel sizes stay legal.
+
+**Chrome** (`src/features/reader/`), following mockup E and reading only `--sk-*` properties:
+
+- Header: book title, **Close book**, and a page indicator. Spread 0 reads "page 1 of 202",
+  and a two-page spread reads "pages 4–5 of 202". The chrome is translucent glass, fades during
+  a turn, and never covers the gutter.
+- Bottom bar: Previous and Next, and a basic page scrubber (a slider over spreads with a live
+  label). A thumbnail scrubber waits for M7, as the roadmap already says; it needs a decode
+  budget that M1 does not have.
+- Save state, carried over from Phase 2's `BookView`: a status note in the bottom bar when a
+  save fails, cleared on a `saved` outcome or a `progress-saved` event for this book.
+  **Close book** is disabled while its flush runs, and on failure the reader stays open with
+  the note.
+- Notes panel: a toggle and an empty shell. Hotspots stay in M6.
+- Keyboard: a window-level handler, as in Phase 2 (`shouldIgnoreKey` skips fields and open
+  dialogs), so A5 works without focusing the canvas. ←/→ and Page Up/Down turn pages, edges are
+  no-ops, and Home and End jump to the ends. The canvas is focusable with a visible focus ring,
+  and its accessible name announces the open pages; that is an extra, not a gate. Every control
+  has an accessible name and a 44 px touch target.
+- Touch: one-finger drag and tap zones turn pages, the canvas blocks pinch and scroll without
+  trapping the chrome, and hover-only affordances have a tap equivalent.
+- Loading state while the first spread decodes, and the empty state for a book with no pages.
+
+**Progress.** `lastReadPage` stays a scan index inside the package, so it follows the book
+wherever its folder moves (A6). A spread change calls `saveProgress(root,
+firstPageOfSpread(s))`, never the spread index, and a book opens on
+`spreadOfPage(lastReadPage)`.
+
+**Dev harness.** Chunk 1 points the dev-only `#spike` route at a small harness that mounts the
+new engine on the open book's pages, so chunks 1–4 can be checked by eye. Chunk 5 deletes it.
+
+**Removal** (chunk 5): `src/spike/`, `src-tauri/src/spike.rs`, `mod spike;` and the dev-only
+`generate_handler!` block in `lib.rs` (one handler remains), `scripts/make-spike-fixtures.sh`,
+the `#spike` route and harness, the `src/spike/flipbook/**` block in `eslint.config.js`, the
+spike exemption sentence in `AGENTS.md`, Phase 2's `BookView` and `book.css`, `pageLabel` and
+`pageAlt` in `src/lib/format.ts` if the new indicator replaces them, the spike sections (8 and
+9) of `docs/manual-test-m1.md`, and the spike count in `to_do.md`'s Sonar backlog line. Update
+ADR-0001's demo section to point at the reader. Changelog history stays. `src/spike/`, its ESLint
+block, the `AGENTS.md` sentence, and the ADR's links to the spike went early, after chunk 4,
+because SonarCloud counted the unused copy as duplicated code.
+
+**Measurements** (in the PR and the manual test), on the Dulac corpus (A9):
+
+- Open to first turn, from the Open confirm, including `load_book`'s checksum pass.
+- Steady-state RSS 30 s after the first turn, with the texture height in the same row.
+- Mean fps over ten turns.
+- A4 adds a 1-page book. A6 adds moving the library folder. A WebView2 run on Windows is a
+  manual-test item, not a merge blocker.
+
+**Chunks.** Each chunk gets its own commit and a qoder review. Chunks 1–3 are checked by unit
+tests and the dev harness; chunk 4 is the first a user would see.
+
+0. Progress-save follow-ups from PR #66 (done: one save worker per book, `progress-saved`,
+   awaited **Close book**, the `saveSeq` and scheduling tests, and ingest import ids).
+1. Engine port with the controller API, spread functions, `setScene` invalidation, context
+   loss, GL error checks, reduced motion, corner publication, no keyboard listener, unit tests,
+   the dev harness, and the daylight scene move.
+2. Worker textures with the main-thread fallback, the budgeted texture height, the LRU, and
+   tests. Set the macOS floor.
+3. Skin plumbing: the token builder and its mapping, `required-tokens.json`, the generated CSS,
+   the CI staleness check, and the literal check.
+4. Reader chrome: header, bottom bar, scrubber, save state, notes shell, keyboard, focus,
+   touch, loading and empty states.
+5. Wire the reader into `App.tsx`, map progress to spreads, and do the removals above.
+6. Docs: manual-test Phase 3 section (A4 with a 1-page book, A6 with a moved library, A9 with
+   the texture height, touch, reduced motion, Windows), ADR-0001's known limits and demo,
+   `design/DESIGN.md` (the `--sk-*` prefix, the generated file, the glass and gutter rules),
+   changelog, and plan ticks.
+
+- [x] Chunk 0: progress-save follow-ups
+- [x] Chunk 1: engine port and controller API
+- [x] Chunk 2: worker textures
+- [x] Chunk 3: skin plumbing
+- [ ] Chunk 4: reader chrome
+- [ ] Chunk 5: wire-up and spike removal
+- [ ] Chunk 6: docs
 
 ### Phase 4 — Docs & release
 

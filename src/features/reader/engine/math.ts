@@ -3,35 +3,51 @@
 export type Vec3 = [number, number, number];
 export type Mat4 = Float32Array;
 
+/** Pi, shared so shader-side and CPU-side math agree. */
 export const PI = Math.PI;
-export const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
+/** Limits x to the range a to b. */
+export const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
+/** Linear blend from a to b. */
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+/** Smoothstep of x between edges a and b. */
 export const smooth = (a: number, b: number, x: number) => {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
 };
+/** Cubic ease-in-out on 0 to 1. */
 export const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(2 - 2 * x, 3) / 2);
+/** Cubic ease-out on 0 to 1. */
 export const easeOut = (x: number) => 1 - Math.pow(1 - x, 3);
 
+/** Small 3-vector helpers. */
 export const v3 = {
+  /** a - b. */
   sub: (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  /** a + b. */
   add: (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+  /** a times s. */
   scale: (a: Vec3, s: number): Vec3 => [a[0] * s, a[1] * s, a[2] * s],
+  /** Dot product. */
   dot: (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  /** Cross product. */
   cross: (a: Vec3, b: Vec3): Vec3 => [
     a[1] * b[2] - a[2] * b[1],
     a[2] * b[0] - a[0] * b[2],
     a[0] * b[1] - a[1] * b[0],
   ],
+  /** Length. */
   len: (a: Vec3) => Math.hypot(a[0], a[1], a[2]),
+  /** Unit vector (zero stays zero). */
   norm: (a: Vec3): Vec3 => {
     const l = Math.hypot(a[0], a[1], a[2]) || 1;
     return [a[0] / l, a[1] / l, a[2] / l];
   },
 };
 
+/** The 4x4 identity matrix. Treat as read-only. */
 export const IDENTITY: Mat4 = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
+/** Column-major perspective projection matrix. */
 export function perspective(fov: number, aspect: number, near: number, far: number): Mat4 {
   const t = 1 / Math.tan(fov / 2);
   return new Float32Array([
@@ -42,6 +58,7 @@ export function perspective(fov: number, aspect: number, near: number, far: numb
   ]);
 }
 
+/** Column-major view matrix looking from eye to center. */
 export function lookAt(eye: Vec3, center: Vec3, up: Vec3): Mat4 {
   const z = v3.norm(v3.sub(eye, center));
   const x = v3.norm(v3.cross(up, z));
@@ -54,6 +71,7 @@ export function lookAt(eye: Vec3, center: Vec3, up: Vec3): Mat4 {
   ]);
 }
 
+/** Product a * b of two column-major 4x4 matrices. */
 export function multiply(a: Mat4, b: Mat4): Mat4 {
   const o = new Float32Array(16);
   for (let c = 0; c < 4; c++)
@@ -65,6 +83,7 @@ export function multiply(a: Mat4, b: Mat4): Mat4 {
   return o;
 }
 
+/** Inverse of a 4x4 matrix, or all zeros when it is singular. */
 export function invert(a: Mat4): Mat4 {
   const o = new Float32Array(16);
   const [a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23, a30, a31, a32, a33] = a;
@@ -94,6 +113,7 @@ export function invert(a: Mat4): Mat4 {
   return o;
 }
 
+/** Applies a 4x4 matrix to a homogeneous vector. */
 export function transform(m: Mat4, v: [number, number, number, number]): [number, number, number, number] {
   return [
     m[0] * v[0] + m[4] * v[1] + m[8] * v[2] + m[12] * v[3],

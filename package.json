@@ -8,11 +8,14 @@
     "node": ">=24.15.0"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "node scripts/build-skin-css.mjs && vite",
+    "build": "node scripts/build-skin-css.mjs && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint .",
+    "skin:css": "node scripts/build-skin-css.mjs",
+    "skin:check": "node scripts/build-skin-css.mjs --check",
+    "skin:lint": "node scripts/check-skin-literals.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"

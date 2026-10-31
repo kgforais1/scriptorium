@@ -16,15 +16,14 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 | Plan | Status | Note |
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
-| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | in-progress | Phase 0 gate open; Phases 1–2 code done, manual verification pending; refresh Phase 3 from ADR-0001 before the reader |
+| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | in-progress | Phase 0 gate open; Phases 1–2 done (manual checks pending); Phase 3 reader in progress on `m1/phase3-reader` |
 
 ## Unplanned / small
 
 - **M1 manual smoke (non-blocking)** — run [`docs/manual-test-m1.md`](docs/manual-test-m1.md):
   release build under the production CSP (A13), A5–A7, and one Windows release run. Does not
   block merging Phase 2 PRs or starting Phase 3.
-- **Sonar backlog (33 local issues)** — 11 in the flipbook spike (`src/spike/flipbook/`) and
-  22 in template hook and CI scripts (complexity, regexes, duplicated literals). See
+- **Sonar backlog (22 local issues)** — all in template hook and CI scripts (complexity, regexes, duplicated literals). See
   `tmp/sonar-latest-issues.md` after a scan.
 - **Grey+alpha JPEG 2000 fixture** — the transparency refusal test depends on macOS `sips`
   writing two components. Generate a two-component JP2 in-test (or check in a tiny fixture)
