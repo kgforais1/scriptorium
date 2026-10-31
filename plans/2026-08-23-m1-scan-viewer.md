@@ -489,8 +489,8 @@ loader. Rewrite the rest as a plain TypeScript class with no React:
   paper texture. A failed page shows the paper colour and reports through `onError`.
 - No WebGL2: the reader shows an error. There is no `<img>` fallback (ADR-0001).
 - Corner geometry for M2's text overlay and M6's hotspots: the engine writes each visible
-  page's projected corners, in canvas pixels, into a preallocated buffer while `turning` and
-  once on settle, and calls `onGeometry`. Phase 3 only publishes them.
+  page's projected corners, in canvas pixels, into a preallocated buffer while a leaf moves
+  (a turn, a drag, or a corner peek) and once on settle, and calls `onGeometry`. Phase 3 only publishes them.
 - `prefers-reduced-motion`: a turn is a short cross-fade, and nothing pulses.
 - Unit tests: `parseScene`, `fitRect`, the slot mapping, the texture size choice, the LRU, and
   `setScene` invalidation.
@@ -498,7 +498,10 @@ loader. Rewrite the rest as a plain TypeScript class with no React:
 **Textures** (chunk 2). Pages decode in a worker (`createImageBitmap` plus `OffscreenCanvas`
 letterboxing). Without `OffscreenCanvas` in a worker, decode with `createImageBitmap` on the
 main thread and letterbox with the spike's `composePage`, behind the same `decodePage`
-interface. The texture height respects both the display and a memory budget:
+interface. The worker decoder is built with the box aspect and texture height, and returns an
+already letterboxed bitmap, so `TextureBackend.page` must accept a composed bitmap instead of
+always calling `composePage`. The texture height respects both the display and a memory
+budget:
 
 ```
 texH = min(devicePixelHeight, 2048,
