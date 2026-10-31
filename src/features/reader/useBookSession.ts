@@ -78,12 +78,15 @@ export function useBookSession(root: string, openedSpread: number, onClosed: () 
       await closeBook(root);
     } catch (err) {
       closingNow.current = false;
+      // Saves issued before the close may still resolve "saved" later. Settle the gate past all
+      // of them, so their results are dropped and cannot clear the close warning.
+      gate.settle(latestSaveSeq(root), latestSaveSeq(root));
       setSaveError(toCommandError(err).message);
       setClosing(false);
       return;
     }
     onClosed();
-  }, [root, onClosed]);
+  }, [root, onClosed, gate]);
 
   return { saveError, closing, save, close };
 }

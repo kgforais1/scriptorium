@@ -74,8 +74,10 @@ and `pnpm build` run the builder too.
 
 - Every generated property starts with `--sk-`. The path in the token tree becomes the name, so
   `color.ink-muted` becomes `--sk-color-ink-muted`. Components read only these properties.
-- `design/skins/required-tokens.json` lists the token set every skin must define. The builder
-  checks it both ways: a missing token and an unexpected token are both errors.
+- `design/skins/required-tokens.json` lists the token set every skin must define, as
+  `{ "path": "color.ink", "type": "color" }` entries. The builder checks it both ways: a missing
+  token and an unexpected token are both errors. It also rejects a path defined twice and a token
+  whose `$type` differs from the listed one.
 - `pnpm skin:check` rebuilds in memory and fails if a committed CSS file is stale. CI runs it.
 - `pnpm skin:lint` runs `scripts/check-skin-literals.mjs`. It fails on colour, font-family,
   radius, and filter literals in `src/features/reader/` CSS and TSX. Plain pixel sizes for layout

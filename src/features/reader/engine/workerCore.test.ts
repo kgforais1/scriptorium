@@ -97,10 +97,11 @@ describe("createWorkerHandler", () => {
 
   it("closes a bitmap that finished composing just as the request was cancelled", async () => {
     let finishScan!: () => void;
+    const scanClose = vi.fn();
     const { handle, posted, out } = setup({
       createImageBitmap: () =>
         new Promise<ImageBitmap>((resolve) => {
-          finishScan = () => resolve({ width: 200, height: 100, close: vi.fn() } as unknown as ImageBitmap);
+          finishScan = () => resolve({ width: 200, height: 100, close: scanClose } as unknown as ImageBitmap);
         }),
     });
     handle(request());
@@ -110,6 +111,7 @@ describe("createWorkerHandler", () => {
     await flush();
     expect(posted).toHaveLength(1);
     expect(out.close).not.toHaveBeenCalled();
+    expect(scanClose).toHaveBeenCalledTimes(1);
   });
 
   it("ignores an abort for a request that already finished", async () => {

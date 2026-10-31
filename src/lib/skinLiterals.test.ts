@@ -14,7 +14,7 @@ describe("HEX_COLOR", () => {
 });
 
 describe("COLOR_FUNCTION", () => {
-  it.each(["rgb(0 0 0)", "rgba(0,0,0,.5)", "hsl(10 10% 10%)", "HSLA(1,1%,1%,1)", "oklch(0.5 0.1 90)"])("matches %s", (s) => {
+  it.each(["rgb(0 0 0)", "rgba(0,0,0,.5)", "hsl(10 10% 10%)", "HSLA(1,1%,1%,1)", "oklch(0.5 0.1 90)", "color(display-p3 1 0 0)"])("matches %s", (s) => {
     expect(COLOR_FUNCTION.test(s)).toBe(true);
   });
 
@@ -148,6 +148,32 @@ describe("review follow-ups", () => {
       expect(rules("a.css", `.a { color: ${word}; }`)).toEqual(["1:named-color"]);
     }
     expect(rules("a.css", ".a { border: 1px solid canvastext; }")).toEqual(["1:named-color"]);
+  });
+
+  it("flags the full CSS named-colour list, but not transparent or currentcolor", () => {
+    expect(rules("a.css", ".a { color: rebeccapurple; }")).toEqual(["1:named-color"]);
+    expect(rules("a.css", ".a { background: lightgoldenrodyellow; }")).toEqual(["1:named-color"]);
+    expect(rules("a.css", ".a { color: transparent; fill: currentcolor; }")).toEqual([]);
+  });
+
+  it("flags quoted style-object keys with matching quotes", () => {
+    expect(rules("a.tsx", 'const s = { "borderColor": "red" };')).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", "const s = { 'color': 'red' };")).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", 'const s = { "color": "var(--sk-color-ink)" };')).toEqual([]);
+  });
+
+  it("flags colour attributes given as a braced string", () => {
+    expect(rules("a.tsx", '<path fill={"red"} />')).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", "<path stroke={'blue'} />")).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", '<path fill={"none"} />')).toEqual([]);
+  });
+
+  it("checks logical border colours", () => {
+    for (const prop of ["border-inline", "border-block-start", "border-inline-end-color", "border-block-color"]) {
+      expect(rules("a.css", `.a { ${prop}: 1px solid red; }`)).toEqual(["1:named-color"]);
+    }
+    expect(rules("a.tsx", 'const s = { borderInlineStartColor: "red" };')).toEqual(["1:named-color"]);
+    expect(rules("a.css", ".a { border-inline-start: 1px solid var(--sk-color-ink); }")).toEqual([]);
   });
 
   it("ignores hex-looking fragments that are not colours", () => {

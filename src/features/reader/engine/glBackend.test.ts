@@ -9,13 +9,20 @@ const raw: DecodedPage = { bitmap, width: 200, height: 100, composed: false };
 const done: DecodedPage = { bitmap, width: 1000, height: 1000, composed: true };
 
 // A stand-in GL context: constants are numbers, getError is clean, and every call is recorded.
-function fakeGl() {
+function fakeGl(errorAfterUpload = 0) {
   const calls: Record<string, unknown[][]> = {};
+  let pending = 0;
   const gl = new Proxy(
     {},
     {
       get(_t, prop: string) {
-        if (prop === "getError") return () => 0;
+        if (prop === "getError") {
+          return () => {
+            const e = pending;
+            pending = 0;
+            return e;
+          };
+        }
         if (prop === "NO_ERROR") return 0;
         if (prop === "getExtension") return () => null;
         if (prop === "getParameter") return () => 4096;
@@ -23,6 +30,7 @@ function fakeGl() {
         return (...args: unknown[]) => {
           if (!calls[prop]) calls[prop] = [];
           calls[prop].push(args);
+          if (prop === "texImage2D") pending = errorAfterUpload;
           return prop === "createTexture" ? { id: calls[prop].length } : undefined;
         };
       },
@@ -78,6 +86,13 @@ describe("createGlBackend", () => {
     createGlBackend(gl, 1.4).paper([0.9, 0.9, 0.8]);
     expect([canvas.width, canvas.height]).toEqual([4, 4]);
     expect(calls.texImage2D).toHaveLength(1);
+  });
+
+  it("throws and deletes the texture when the upload leaves a GL error", () => {
+    const { gl, calls } = fakeGl(0x501);
+    const backend = createGlBackend(gl, 1.4);
+    expect(() => backend.page(done, [1, 1, 1], 512)).toThrow(/GL error 0x501/);
+    expect(calls.deleteTexture).toHaveLength(1);
   });
 
   it("frees a texture", () => {

@@ -118,14 +118,29 @@ export class BookRenderer {
 
   /** Builds the page blocks. Ln and Rn are the leaf counts; lp and rp the slots on top. */
   setStacks(Ln: number, Rn: number, lp: number, rp: number): void {
-    this.freeStacks();
     const gl = this.gl, b = this.book, L = stackMeshes(b, -1, Ln), R = stackMeshes(b, 1, Rn);
-    this.stacks = {
-      L: { top: meshFrom(gl, L.top), edge: meshFrom(gl, L.edge), prof: L.prof },
-      R: { top: meshFrom(gl, R.top), edge: meshFrom(gl, R.edge), prof: R.prof },
-      lp,
-      rp,
+    // Build every new mesh before freeing the old stacks. If one fails, free the ones made so far
+    // and keep the old stacks on show.
+    const made: Mesh[] = [];
+    const make = (data: Parameters<typeof meshFrom>[1]): Mesh => {
+      const m = meshFrom(gl, data);
+      made.push(m);
+      return m;
     };
+    let next: Stacks;
+    try {
+      next = {
+        L: { top: make(L.top), edge: make(L.edge), prof: L.prof },
+        R: { top: make(R.top), edge: make(R.edge), prof: R.prof },
+        lp,
+        rp,
+      };
+    } catch (err) {
+      for (const m of made) freeMesh(gl, m);
+      throw err;
+    }
+    this.freeStacks();
+    this.stacks = next;
   }
 
   /** The turning leaf's vertex grid, valid after `uploadLeaf`. */

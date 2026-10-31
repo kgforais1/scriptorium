@@ -126,13 +126,17 @@ The reader saves the first scan of each spread, as a zero-based index in `meta.j
 - [ ] Open a book at page 1, turn one spread, and wait 3 seconds. Look at `meta.json` in the
   book's library folder. Expected: `lastReadPage` is 1, the first scan of pages 2–3, without
   quitting.
-- [ ] Make the book's `meta.json` read-only (or the book's folder, on Windows), then turn a
-  page and wait 2 seconds. Expected: the bottom bar shows "Your place could not be saved."
-  Make it writable again and wait up to 10 seconds, without turning a page. Expected: the
-  note disappears by itself, and `meta.json` holds the page.
-- [ ] Make `meta.json` read-only again, turn a page, and click **Close book**. Expected: the
-  book stays open, the button is enabled again, and the note shows. Make it writable and
-  click **Close book** again. Expected: the home screen returns.
+- [ ] Block writes to the book, then turn a page and wait 2 seconds. The app saves by writing
+  a temp file and renaming it over `meta.json`, so a read-only `meta.json` does not stop it on
+  macOS or Linux. Make the book's folder read-only instead, for example `chmod a-w <book>`
+  (not `-R`). On Windows, set the read-only attribute on `meta.json`. Expected: the bottom bar
+  shows "Your place could not be saved." Restore write access (`chmod u+w <book>`, or clear the
+  attribute) and wait up to 10 seconds, without turning a page. Expected: the note disappears
+  by itself, and `meta.json` holds the page.
+- [ ] Block writes again as in the previous step (`chmod a-w <book>` on macOS or Linux, the
+  read-only attribute on `meta.json` on Windows), turn a page, and click **Close book**.
+  Expected: the book stays open, the button is enabled again, and the note shows. Restore
+  write access, then click **Close book** again. Expected: the home screen returns.
 - [ ] Click **Close book**, then quit. Relaunch. Expected: the app reopens the last book
   that was opened, at its saved page.
 - [ ] Move the book's library folder away and relaunch. Expected: the home screen shows and no

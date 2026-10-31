@@ -46,7 +46,10 @@ async function compose(req: DecodeRequest, deps: WorkerDeps, signal: AbortSignal
   const res = await deps.fetch(req.url, { signal });
   // The URL holds a local path, so the error carries only the status.
   if (!res.ok) throw new Error(`page fetch failed: HTTP ${res.status}`);
-  const scan = await deps.createImageBitmap(await res.blob());
+  const blob = await res.blob();
+  // A request cancelled while the body downloaded needs no decode.
+  signal.throwIfAborted();
+  const scan = await deps.createImageBitmap(blob);
   try {
     signal.throwIfAborted();
     const w = textureWidth(req.texH, req.boxAspect);

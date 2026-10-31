@@ -129,6 +129,15 @@ describe("newImportId", () => {
     const ids = new Set([newImportId(), newImportId(), newImportId()]);
     expect(ids.size).toBe(3);
   });
+
+  it("differs after a module reload, even in the same millisecond", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const first = newImportId();
+    vi.resetModules();
+    const again = await import("./api");
+    expect(again.newImportId()).not.toBe(first);
+    vi.restoreAllMocks();
+  });
 });
 
 describe("onIngestProgress", () => {

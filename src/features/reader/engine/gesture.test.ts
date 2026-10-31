@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeCamera, INSETS } from "./camera";
 import {
   cornerAt, dragProgress, gripAt, hoverOnPage, onPageAt, pastSlop, peekStays, pickLocal, settleFor, tapDirection, TAP_SLOP,
-  trackDrag, turnCompletes, type Drag, type Tap,
+  FLICK_WINDOW_MS, releaseVelocity, trackDrag, turnCompletes, type Drag, type Tap,
 } from "./gesture";
 import { easeInOut, easeOut } from "./math";
 import { makeBook, type Turn } from "./geometry";
@@ -42,6 +42,15 @@ describe("turnCompletes", () => {
     expect(turnCompletes(turn(-1, 0.3), drag(0), true)).toBe(true);
     expect(turnCompletes(turn(-1, 0.8), drag(2), true)).toBe(true);
     expect(turnCompletes(turn(-1, 0.8), drag(0), true)).toBe(false);
+  });
+
+  it("keeps a flick from a recent sample and drops one from a stale sample", () => {
+    const d = { ...drag(-2), lt: 1000 };
+    expect(turnCompletes(turn(1, 0.2), d, true, 1000 + FLICK_WINDOW_MS)).toBe(true);
+    expect(turnCompletes(turn(1, 0.2), d, true, 1000 + FLICK_WINDOW_MS + 1)).toBe(false);
+    expect(turnCompletes(turn(-1, 0.8), { ...d, vx: 2 }, true, 1000 + FLICK_WINDOW_MS + 1)).toBe(false);
+    expect(releaseVelocity(d)).toBe(-2);
+    expect(releaseVelocity(d, 1000 + FLICK_WINDOW_MS + 1)).toBe(0);
   });
 
   it("settles a cancelled drag to the nearer side, ignoring velocity", () => {
@@ -192,6 +201,12 @@ describe("settleFor", () => {
     expect(settleFor(turn(1, 0.2), moved(-2), "pointerup").target).toBe(1);
     expect(settleFor(turn(1, 0.2), moved(-2), "pointercancel").target).toBe(0);
     expect(settleFor(turn(1, 0.2), moved(-2), "lostpointercapture").target).toBe(0);
+  });
+
+  it("ignores a flick when the pointer held still before release", () => {
+    const d = { ...moved(-2), lt: 1000 };
+    expect(settleFor(turn(1, 0.2), d, "pointerup", 1050).target).toBe(1);
+    expect(settleFor(turn(1, 0.2), d, "pointerup", 1500).target).toBe(0);
   });
 
   it("settles a cancelled moved drag to the nearer side, backward as well", () => {

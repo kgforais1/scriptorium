@@ -122,6 +122,9 @@ export function lastBook(): Promise<BookView | null> {
 }
 
 let importCount = 0;
+// Fixed per module load, so a reload that restarts the counter inside the same millisecond still
+// gets different ids.
+const loadNonce = crypto.randomUUID().slice(0, 8);
 
 /**
  * Makes an id for one import, to pass to `createBook` and `onIngestProgress`. Ids differ
@@ -131,7 +134,7 @@ let importCount = 0;
  */
 export function newImportId(): string {
   importCount += 1;
-  return `${Date.now().toString(36)}-${importCount}`;
+  return `${Date.now().toString(36)}-${loadNonce}-${importCount}`;
 }
 
 /**

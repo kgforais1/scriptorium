@@ -114,16 +114,30 @@ describe("propertyName", () => {
 });
 
 describe("checkRequired", () => {
+  const tok = (path: string, type = "color") => ({ path, type });
+
   it("passes when the sets match, in any order", () => {
-    expect(checkRequired(["a", "b"], ["b", "a"])).toEqual([]);
+    expect(checkRequired([tok("a"), tok("b")], [tok("b"), tok("a")])).toEqual([]);
   });
 
   it("names a missing required token", () => {
-    expect(checkRequired(["a"], ["a", "b"])).toEqual(["b: required token is missing"]);
+    expect(checkRequired([tok("a")], [tok("a"), tok("b")])).toEqual(["b: required token is missing"]);
   });
 
   it("names an unexpected token", () => {
-    expect(checkRequired(["a", "x"], ["a"])).toEqual(["x: unexpected token (not in required-tokens.json)"]);
+    expect(checkRequired([tok("a"), tok("x")], [tok("a")])).toEqual(["x: unexpected token (not in required-tokens.json)"]);
+  });
+
+  it("names a token of the wrong type", () => {
+    expect(checkRequired([tok("a", "number")], [tok("a", "color")])).toEqual(["a: expected $type color, got number"]);
+  });
+
+  it("reports a path defined twice, such as a dotted key next to a nested group", () => {
+    const tokens = flattenTokens({
+      "color.ink": { $type: "color", $value: "#000" },
+      color: { $type: "color", ink: { $value: "#111" } },
+    });
+    expect(checkRequired(tokens, [tok("color.ink")])).toEqual(["color.ink: defined more than once"]);
   });
 });
 

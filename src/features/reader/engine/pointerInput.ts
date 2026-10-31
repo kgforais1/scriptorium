@@ -154,7 +154,7 @@ export class PointerInput {
     this.canvas.style.cursor = "grab";
     const T = this.machine.turn;
     if (!T) return;
-    const s = settleFor(T, d, e.type);
+    const s = settleFor(T, d, e.type, performance.now());
     this.machine.animateTo(s.target, s.dur, s.ease);
   };
 

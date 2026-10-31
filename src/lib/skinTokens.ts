@@ -133,13 +133,29 @@ export function propertyName(path: string): string {
   return `--sk-${path.replace(/\./g, "-")}`;
 }
 
-/** Errors for tokens missing from `required` and for tokens the list does not name. */
-export function checkRequired(paths: readonly string[], required: readonly string[]): string[] {
-  const have = new Set(paths);
-  const want = new Set(required);
+/** A required token: its path and the `$type` it must have. */
+export type RequiredToken = { path: string; type: string };
+
+/**
+ * Errors for a skin's tokens against `required`: a token that is missing, unexpected, defined
+ * twice (a dotted key such as "color.ink" next to a nested `color { ink }` flattens to the same
+ * path), or of the wrong `$type`.
+ */
+export function checkRequired(tokens: readonly RequiredToken[], required: readonly RequiredToken[]): string[] {
+  const want = new Map(required.map((r) => [r.path, r.type]));
+  const seen = new Set<string>();
   const errors: string[] = [];
-  for (const p of required) if (!have.has(p)) errors.push(`${p}: required token is missing`);
-  for (const p of paths) if (!want.has(p)) errors.push(`${p}: unexpected token (not in required-tokens.json)`);
+  for (const t of tokens) {
+    if (seen.has(t.path)) {
+      errors.push(`${t.path}: defined more than once`);
+      continue;
+    }
+    seen.add(t.path);
+    const type = want.get(t.path);
+    if (type === undefined) errors.push(`${t.path}: unexpected token (not in required-tokens.json)`);
+    else if (type !== t.type) errors.push(`${t.path}: expected $type ${type}, got ${t.type}`);
+  }
+  for (const r of required) if (!seen.has(r.path)) errors.push(`${r.path}: required token is missing`);
   return errors;
 }
 

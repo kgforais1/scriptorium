@@ -30,12 +30,21 @@ export function dragProgress(dir: 1 | -1, x0: number, x: number): number {
   return 1 - clamp((x - x0) / (0.95 - x0), 0, 1);
 }
 
-/** Whether a released drag completes the turn. It does past the midpoint or on a flick toward the far side. A cancelled drag ignores velocity and settles to whichever side is nearer. */
-export function turnCompletes(T: Pick<Turn, "dir" | "t">, d: Drag, released: boolean): boolean {
+/** How long, in ms, a drag's last sample stays fresh. A pointer that held still longer than this has no flick velocity. */
+export const FLICK_WINDOW_MS = 100;
+
+/** The drag's release velocity: the smoothed vx, or 0 when the last sample is older than the flick window at `now`. */
+export function releaseVelocity(d: Pick<Drag, "vx" | "lt">, now?: number): number {
+  return now !== undefined && now - d.lt > FLICK_WINDOW_MS ? 0 : d.vx;
+}
+
+/** Whether a released drag completes the turn. It does past the midpoint or on a flick toward the far side. A cancelled drag ignores velocity and settles to whichever side is nearer. With `now`, a drag that held still before release has no velocity. */
+export function turnCompletes(T: Pick<Turn, "dir" | "t">, d: Drag, released: boolean, now?: number): boolean {
   const fwd = T.dir > 0;
   if (!released) return fwd ? T.t > 0.5 : T.t < 0.5;
-  if (fwd) return (T.t > 0.45 || d.vx < -1.2) && d.vx < 1;
-  return (T.t < 0.55 || d.vx > 1.2) && d.vx > -1;
+  const vx = releaseVelocity(d, now);
+  if (fwd) return (T.t > 0.45 || vx < -1.2) && vx < 1;
+  return (T.t < 0.55 || vx > 1.2) && vx > -1;
 }
 
 /** Pointer travel, in CSS pixels, below which a press still counts as a tap. */
@@ -91,14 +100,14 @@ export type Settle = { target: 0 | 1; dur: number; ease: (x: number) => number }
  * the page back. A moved drag settles by `turnCompletes`: a release may flick, the others go to
  * the nearer side.
  */
-export function settleFor(T: Pick<Turn, "dir" | "t">, d: Drag, eventType: string): Settle {
+export function settleFor(T: Pick<Turn, "dir" | "t">, d: Drag, eventType: string, now?: number): Settle {
   const released = eventType === "pointerup", fwd = T.dir > 0;
   if (!d.moved) {
     return released
       ? { target: fwd ? 1 : 0, dur: 1.05, ease: easeInOut }
       : { target: fwd ? 0 : 1, dur: 0.3, ease: easeOut };
   }
-  const target = fwd === turnCompletes(T, d, released) ? 1 : 0;
+  const target = fwd === turnCompletes(T, d, released, now) ? 1 : 0;
   return { target, dur: 0.3 + 0.55 * Math.abs(target - T.t), ease: easeOut };
 }
 

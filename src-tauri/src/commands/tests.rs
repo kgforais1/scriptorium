@@ -345,6 +345,44 @@ fn a_worker_retries_after_a_failure_then_announces_once() {
 }
 
 #[test]
+fn a_worker_announces_only_after_meta_json_holds_the_page() {
+    use super::run_worker;
+    use std::cell::Cell;
+    use std::sync::Mutex;
+    use std::time::Duration;
+    let (_fx, root) = Fixture::new("announce");
+    let key = canonical_key(&root).unwrap();
+    let tick = Duration::from_millis(5);
+    let session = Mutex::new(Session::new(tick));
+    let t0 = Instant::now();
+    {
+        let mut s = session.lock().unwrap();
+        s.register(key.clone(), 0, 3, t0);
+        s.record_seq(&key, 2, 1, t0).unwrap();
+    }
+    let token = session.lock().unwrap().claim_worker(&key).unwrap();
+    assert_eq!(view_of(&root).last_read_page, 0, "not written yet");
+    let announced = Cell::new(false);
+    run_worker(
+        &session,
+        &key,
+        token,
+        |r, p| save_last_read_page(r, p).map(|_| ()),
+        std::thread::sleep,
+        |seq| {
+            assert_eq!(seq, 1);
+            assert_eq!(
+                view_of(&root).last_read_page,
+                2,
+                "the event goes out after the write"
+            );
+            announced.set(true);
+        },
+    );
+    assert!(announced.get());
+}
+
+#[test]
 fn event_payloads_serialize_camel_case() {
     use super::{IngestProgress, ProgressSaved};
     let tick = IngestProgress {
