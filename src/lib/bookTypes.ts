@@ -80,6 +80,11 @@ export interface CreateBookArgs {
 export interface ProgressSaved {
   /** The `root` of the open `BookView`. */
   root: string;
+  /**
+   * The save sequence number (see `saveProgress`) of the page that was written. Saves numbered
+   * above it are newer than the write.
+   */
+  seq: number;
 }
 
 /** What `save_progress` did: wrote the page, or held it for a later write. */

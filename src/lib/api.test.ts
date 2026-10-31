@@ -16,6 +16,7 @@ import {
   lastBook,
   newImportId,
   onIngestProgress,
+  latestSaveSeq,
   onProgressSaved,
   openBook,
   pageUrl,
@@ -68,6 +69,18 @@ describe("commands", () => {
     expect(second.seq).toBeGreaterThan(first.seq);
   });
 
+  it("latestSaveSeq reports the latest number issued for each book", async () => {
+    invoke.mockResolvedValue("saved");
+    expect(latestSaveSeq("/never")).toBe(0);
+    await saveProgress("/a", 1);
+    const a1 = latestSaveSeq("/a");
+    await saveProgress("/b", 1);
+    expect(latestSaveSeq("/a")).toBe(a1);
+    expect(latestSaveSeq("/b")).toBeGreaterThan(a1);
+    await saveProgress("/a", 2);
+    expect(latestSaveSeq("/a")).toBeGreaterThan(latestSaveSeq("/b"));
+  });
+
   it("numbers saves above a reopened book's own save number", async () => {
     invoke.mockResolvedValue({ ...BOOK, saveSeq: 500 });
     await lastBook();
@@ -116,6 +129,15 @@ describe("newImportId", () => {
     const ids = new Set([newImportId(), newImportId(), newImportId()]);
     expect(ids.size).toBe(3);
   });
+
+  it("differs after a module reload, even in the same millisecond", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const first = newImportId();
+    vi.resetModules();
+    const again = await import("./api");
+    expect(again.newImportId()).not.toBe(first);
+    vi.restoreAllMocks();
+  });
 });
 
 describe("onIngestProgress", () => {
@@ -154,8 +176,8 @@ describe("onProgressSaved", () => {
     const cb = vi.fn();
     await expect(onProgressSaved(cb)).resolves.toBe(unlisten);
     expect(listen.mock.calls[0][0]).toBe("progress-saved");
-    listen.mock.calls[0][1]({ payload: { root: "/r" } });
-    expect(cb).toHaveBeenCalledWith({ root: "/r" });
+    listen.mock.calls[0][1]({ payload: { root: "/r", seq: 7 } });
+    expect(cb).toHaveBeenCalledWith({ root: "/r", seq: 7 });
   });
 
   it("normalizes a failure to listen", async () => {

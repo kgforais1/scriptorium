@@ -123,6 +123,7 @@ Rule lives in [`policies/agent-tooling-contract.md`](policies/agent-tooling-cont
 | Source/doc line caps (soft **600** / hard **1000**) | [`policies/file-size-and-counts.md`](policies/file-size-and-counts.md) |
 | Secret scanning + lint hooks | [`hooks/README.md`](hooks/README.md), [`policies/security-baseline.md`](policies/security-baseline.md) |
 | GitHub Actions minutes/storage (estimate before expanding CI) | [`policies/github-actions-usage.md`](policies/github-actions-usage.md), [`ci/scripts/check_gha_usage.py`](ci/scripts/check_gha_usage.py) |
+| PR size (under 90 changed files; CodeRabbit skips >100) | [`policies/commits-and-branches.md`](policies/commits-and-branches.md#pull-requests) |
 | Open PRs after push (advisory, not a hook) | [`policies/commits-and-branches.md`](policies/commits-and-branches.md), [`ci/scripts/check_open_prs.py`](ci/scripts/check_open_prs.py) |
 | GitHub rulesets, data classification, secret/path hygiene | [`policies/github-repository-hygiene.md`](policies/github-repository-hygiene.md) |
 | Setup, health check, environment validation | [`scripts/setup.sh`](scripts/setup.sh), [`scripts/health-check.sh`](scripts/health-check.sh), [`scripts/validate-env.sh`](scripts/validate-env.sh) |

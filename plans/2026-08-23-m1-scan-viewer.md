@@ -400,7 +400,7 @@ pure TS helpers: the error-heading map, the slug check, and the page clamp and k
 step, and the length limits (`limits.ts`). Rust tests cover the debounced write, the flush of
 dirty pages, stale-save ordering, and the `save_progress` path end to end.
 
-**Chunks.** Each chunk gets its own commit and a qoder review.
+**Chunks.** Each chunk gets its own commit and a review. Reviews were qoder for chunk 1 and switched to Gemini 3.8 Flash from chunk 2 on. Phase 3 shipped as two stacked PRs, #68 (chunks 0–3) and #67 (chunks 4–6), to stay under CodeRabbit's 100-file limit.
 
 0. Quality gates, before any app code. ESLint (flat config) with typescript-eslint,
    `eslint-plugin-react-hooks`, `complexity: 15`, and `jsdoc/require-jsdoc` on exported
@@ -575,7 +575,15 @@ spike exemption sentence in `AGENTS.md`, Phase 2's `BookView` and `book.css`, `p
 9) of `docs/manual-test-m1.md`, and the spike count in `to_do.md`'s Sonar backlog line. Update
 ADR-0001's demo section to point at the reader. Changelog history stays. `src/spike/`, its ESLint
 block, the `AGENTS.md` sentence, and the ADR's links to the spike went early, after chunk 4,
-because SonarCloud counted the unused copy as duplicated code.
+because SonarCloud counted the unused copy as duplicated code. `scripts/reader-shots.mjs`
+(`pnpm shots`) drives the reader at `/` with a stubbed Tauri bridge, where `last_book` opens the reader.
+
+Chunk 5 did the rest of this list: `spike.rs`, `mod spike;`, the dev `generate_handler!` block
+(one handler set remains), `make-spike-fixtures.sh`, the `#spike` route, `Harness`,
+`DevHarness.tsx`, `devHarness.css`, `BookView` and `book.css`, `pageLabel` and `pageAlt`, and
+manual-test sections 8's spike step and 9. Phase 2's `clamp` and `paging` helpers lost their last
+caller with `BookView` and went too. `protocol-asset` and the asset scope stay: the reader loads
+pages through them. Chunk 6 rewrites the manual test.
 
 **Measurements** (in the PR and the manual test), on the Dulac corpus (A9):
 
@@ -609,9 +617,9 @@ tests and the dev harness; chunk 4 is the first a user would see.
 - [x] Chunk 1: engine port and controller API
 - [x] Chunk 2: worker textures
 - [x] Chunk 3: skin plumbing
-- [ ] Chunk 4: reader chrome
-- [ ] Chunk 5: wire-up and spike removal
-- [ ] Chunk 6: docs
+- [x] Chunk 4: reader chrome
+- [x] Chunk 5: wire-up and spike removal
+- [x] Chunk 6: docs
 
 ### Phase 4 — Docs & release
 

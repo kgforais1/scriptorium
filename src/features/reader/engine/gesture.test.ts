@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { computeCamera } from "./camera";
+import { computeCamera, INSETS } from "./camera";
 import {
   cornerAt, dragProgress, gripAt, hoverOnPage, onPageAt, pastSlop, peekStays, pickLocal, settleFor, tapDirection, TAP_SLOP,
-  trackDrag, turnCompletes, type Drag, type Tap,
+  FLICK_WINDOW_MS, releaseVelocity, trackDrag, turnCompletes, type Drag, type Tap,
 } from "./gesture";
 import { easeInOut, easeOut } from "./math";
 import { makeBook, type Turn } from "./geometry";
@@ -44,6 +44,15 @@ describe("turnCompletes", () => {
     expect(turnCompletes(turn(-1, 0.8), drag(0), true)).toBe(false);
   });
 
+  it("keeps a flick from a recent sample and drops one from a stale sample", () => {
+    const d = { ...drag(-2), lt: 1000 };
+    expect(turnCompletes(turn(1, 0.2), d, true, 1000 + FLICK_WINDOW_MS)).toBe(true);
+    expect(turnCompletes(turn(1, 0.2), d, true, 1000 + FLICK_WINDOW_MS + 1)).toBe(false);
+    expect(turnCompletes(turn(-1, 0.8), { ...d, vx: 2 }, true, 1000 + FLICK_WINDOW_MS + 1)).toBe(false);
+    expect(releaseVelocity(d)).toBe(-2);
+    expect(releaseVelocity(d, 1000 + FLICK_WINDOW_MS + 1)).toBe(0);
+  });
+
   it("settles a cancelled drag to the nearer side, ignoring velocity", () => {
     expect(turnCompletes(turn(1, 0.6), drag(5), false)).toBe(true);
     expect(turnCompletes(turn(1, 0.4), drag(-5), false)).toBe(false);
@@ -69,7 +78,7 @@ describe("cornerAt", () => {
 describe("pickLocal", () => {
   it("hits the book centre at the canvas centre", () => {
     const cam = computeCamera(1000, 800, makeBook(1.4, 10), 18);
-    const [x] = pickLocal(cam.inv, 1000, 800, 500, 24 + (800 - 24 - 88) / 2);
+    const [x] = pickLocal(cam.inv, 1000, 800, 500, INSETS.top + (800 - INSETS.top - INSETS.bot) / 2);
     expect(Math.abs(x)).toBeLessThan(0.01);
   });
 });
@@ -139,6 +148,10 @@ describe("peekStays", () => {
     expect(peekStays(1, 1, { side: 1 })).toBe(false);
     expect(peekStays(-2, 1, { side: 1 })).toBe(false);
   });
+
+  it("settles while a jump is pending, even on its own corner", () => {
+    expect(peekStays(0, 1, { side: 1 }, true)).toBe(false);
+  });
 });
 
 describe("trackDrag", () => {
@@ -150,6 +163,20 @@ describe("trackDrag", () => {
     // -0.1 units in 100 ms is -1 per second; half of it blends in.
     expect(d.vx).toBeCloseTo(-0.5);
     expect([d.lx, d.lt]).toEqual([0.4, 1100]);
+  });
+
+  it("starts from rest after a pause longer than the flick window", () => {
+    const d = { ...drag(-4), lt: 1000 };
+    trackDrag(d, d.lx, 1500);
+    expect(d.vx).toBe(0);
+    expect(turnCompletes(turn(1, 0.2), d, true, 1510)).toBe(false);
+  });
+
+  it("keeps the old velocity across a short gap, so a flick still completes", () => {
+    const d = { ...drag(-4), lt: 1000 };
+    trackDrag(d, d.lx, 1000 + FLICK_WINDOW_MS);
+    expect(d.vx).toBeCloseTo(-2);
+    expect(turnCompletes(turn(1, 0.2), d, true, 1000 + FLICK_WINDOW_MS + 10)).toBe(true);
   });
 
   it("treats a zero time step as 1 ms instead of dividing by zero", () => {
@@ -188,6 +215,12 @@ describe("settleFor", () => {
     expect(settleFor(turn(1, 0.2), moved(-2), "pointerup").target).toBe(1);
     expect(settleFor(turn(1, 0.2), moved(-2), "pointercancel").target).toBe(0);
     expect(settleFor(turn(1, 0.2), moved(-2), "lostpointercapture").target).toBe(0);
+  });
+
+  it("ignores a flick when the pointer held still before release", () => {
+    const d = { ...moved(-2), lt: 1000 };
+    expect(settleFor(turn(1, 0.2), d, "pointerup", 1050).target).toBe(1);
+    expect(settleFor(turn(1, 0.2), d, "pointerup", 1500).target).toBe(0);
   });
 
   it("settles a cancelled moved drag to the nearer side, backward as well", () => {

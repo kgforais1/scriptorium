@@ -30,7 +30,7 @@ export interface PageDecoderHandle {
   readonly decode: PageDecoder;
   /** Which path is in use. `pending` until the worker's probe has answered. */
   mode(): "pending" | "worker" | "main";
-  /** Terminates the worker. Pending requests reject. */
+  /** Terminates the worker. Pending requests reject, and later decodes reject at once. */
   dispose(): void;
 }
 
@@ -43,6 +43,7 @@ type Pending = { resolve(page: DecodedPage): void; reject(err: unknown): void };
 
 // Raised for every request still waiting when the worker dies, so the caller can retry on the main thread.
 class WorkerFailed extends Error {}
+const DISPOSED = "the page decoder was disposed";
 
 /** Builds the decoder for an environment. Never throws: a worker that cannot start means the main-thread path. */
 export function createPageDecoder(env: DecoderEnv): PageDecoderHandle {
@@ -55,6 +56,7 @@ export function createPageDecoder(env: DecoderEnv): PageDecoderHandle {
   }
 
   let mode: "pending" | "worker" | "main" = "pending";
+  let disposed = false;
   let nextId = 0;
   const pending = new Map<number, Pending>();
   let settleProbe!: (ok: boolean) => void;
@@ -87,7 +89,8 @@ export function createPageDecoder(env: DecoderEnv): PageDecoderHandle {
       // Aborted while the reply was in flight: nobody will upload it.
       if (data.type === "page") data.bitmap.close();
     } else if (data.type === "page") p.resolve({ bitmap: data.bitmap, width: data.width, height: data.height, composed: true });
-    else p.reject(new Error(data.message));
+    // A scan that failed to compose in the worker gets one more try on the main thread.
+    else p.reject(data.stage === "compose" ? new WorkerFailed(data.message) : new Error(data.message));
   };
 
   function viaWorker(page: PageSource, target: ComposeTarget, signal: AbortSignal): Promise<DecodedPage> {
@@ -115,11 +118,18 @@ export function createPageDecoder(env: DecoderEnv): PageDecoderHandle {
   }
 
   const decode: PageDecoder = async (page, target, signal) => {
-    if (!(await probe) || mode !== "worker") return decodePage(page, target, signal);
+    if (disposed) throw new Error(DISPOSED);
+    const usable = await probe;
+    if (disposed) throw new Error(DISPOSED);
+    if (!usable || mode !== "worker") return decodePage(page, target, signal);
     try {
       return await viaWorker(page, target, signal);
     } catch (err) {
-      if (err instanceof WorkerFailed) return decodePage(page, target, signal);
+      if (err instanceof WorkerFailed) {
+        // Disposed between the failed reply and this catch: no retry on a stopped decoder.
+        if (disposed) throw Object.assign(new Error(DISPOSED), { cause: err });
+        return decodePage(page, target, signal);
+      }
       throw err;
     }
   };
@@ -128,7 +138,14 @@ export function createPageDecoder(env: DecoderEnv): PageDecoderHandle {
     decode,
     mode: () => mode,
     dispose() {
-      fallBack();
+      if (disposed) return;
+      disposed = true;
+      clearTimeout(timer);
+      worker.terminate();
+      settleProbe(false);
+      // A plain Error, not WorkerFailed: decode() must not retry these on the main thread.
+      for (const p of pending.values()) p.reject(new Error(DISPOSED));
+      pending.clear();
     },
   };
 }

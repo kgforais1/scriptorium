@@ -67,6 +67,13 @@ function setup(opts: { capacity?: number; decode?: PageDecoder; pinned?: number[
   return { tex, fb, decodeSpy, onLoad, onError, pinned, size };
 }
 
+// Loads slots at a tiny height, as when the canvas was laid out at 1 px.
+async function loadTiny(tex: ReturnType<typeof setup>, slots: number[], texH = 2) {
+  tex.size.texH = texH;
+  for (const s of slots) tex.tex.load(s);
+  await flush();
+}
+
 describe("PageTextures", () => {
   it("shows paper while a page loads, then the page", async () => {
     const { tex, onLoad } = setup();
@@ -275,6 +282,173 @@ describe("PageTextures", () => {
     });
   });
 
+  describe("refresh (a bigger target replaces small textures)", () => {
+    it("rebuilds textures built much smaller than the target, pinned ones included", async () => {
+      const t = setup({ pinned: [1, 2] });
+      await loadTiny(t, [1, 2, 3]);
+      expect(t.tex.get(1).texH).toBe(2);
+      t.size.texH = 800;
+      t.tex.refresh();
+      await flush();
+      for (const slot of [1, 2, 3]) expect(t.tex.get(slot).texH).toBe(800);
+      expect(t.tex.size).toBe(3);
+    });
+
+    it("keeps the old texture on screen until the new one lands, then frees it", async () => {
+      const t = setup();
+      await loadTiny(t, [1]);
+      const old = t.tex.get(1);
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(t.tex.get(1)).toBe(old);
+      expect(t.fb.freed).not.toContain(old);
+      await flush();
+      expect(t.tex.get(1)).not.toBe(old);
+      expect(t.fb.freed).toContain(old);
+      expect(t.onLoad).toHaveBeenCalledTimes(2);
+    });
+
+    it("asks the decoder for the new height and the current paper", async () => {
+      const t = setup();
+      await loadTiny(t, [1]);
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(t.decodeSpy.mock.calls[1][1]).toEqual({ boxAspect: BOX, texH: 800, paper: PAPER_A });
+    });
+
+    it("leaves textures alone for a small resize or a smaller target", async () => {
+      const t = setup();
+      await loadTiny(t, [1, 2], 800);
+      t.size.texH = 900;
+      t.tex.refresh();
+      t.size.texH = 300;
+      t.tex.refresh();
+      await flush();
+      expect(t.decodeSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not rebuild a texture twice while the rebuild is in flight", async () => {
+      const t = setup();
+      await loadTiny(t, [1]);
+      t.size.texH = 800;
+      t.tex.refresh();
+      t.tex.refresh();
+      await flush();
+      expect(t.decodeSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("rebuilds raw (main-thread fallback) textures at the new height too", async () => {
+      const t = setup({ decode: async () => page() });
+      await loadTiny(t, [1], 100);
+      expect(t.tex.get(1)).toMatchObject({ composed: false, texH: 100 });
+      t.size.texH = 800;
+      t.tex.refresh();
+      await flush();
+      expect(t.tex.get(1)).toMatchObject({ composed: false, texH: 800 });
+    });
+
+    it("keeps the old texture and reports nothing when a rebuild fails to decode", async () => {
+      let fail = false;
+      const t = setup({
+        decode: async (_s, target) => {
+          if (fail) throw new Error("HTTP 500");
+          return composed(target);
+        },
+      });
+      await loadTiny(t, [1]);
+      const old = t.tex.get(1);
+      fail = true;
+      t.size.texH = 800;
+      t.tex.refresh();
+      await flush();
+      expect(t.tex.get(1)).toBe(old);
+      expect(t.onError).not.toHaveBeenCalled();
+      // The next refresh tries again.
+      fail = false;
+      t.tex.refresh();
+      await flush();
+      expect(t.tex.get(1).texH).toBe(800);
+    });
+
+    it("keeps the old texture and reports nothing when the GPU refuses the rebuild", async () => {
+      const t = setup();
+      await loadTiny(t, [1]);
+      const old = t.tex.get(1);
+      t.fb.failPages(true);
+      t.size.texH = 800;
+      t.tex.refresh();
+      await flush();
+      expect(t.tex.get(1)).toBe(old);
+      expect(t.onError).not.toHaveBeenCalled();
+      expect(t.fb.freed).not.toContain(old);
+    });
+
+    it("drops a rebuild whose slot was evicted while it decoded", async () => {
+      let finish!: () => void;
+      let slow = false;
+      const t = setup({
+        capacity: 1,
+        decode: (_s, target) =>
+          slow ? new Promise<DecodedPage>((resolve) => (finish = () => resolve(composed(target)))) : Promise.resolve(composed(target)),
+      });
+      await loadTiny(t, [1]);
+      slow = true;
+      t.size.texH = 800;
+      t.tex.refresh();
+      slow = false;
+      t.tex.upload(2, composed({ boxAspect: BOX, texH: 800, paper: PAPER_A }));
+      expect(t.tex.has(1)).toBe(false);
+      finish();
+      await flush();
+      expect(t.tex.has(1)).toBe(false);
+      expect(t.tex.size).toBe(1);
+    });
+
+    it("aborts a decode in flight that would land too small and lets it restart on demand", async () => {
+      const signals: AbortSignal[] = [];
+      const t = setup({
+        decode: (...args) => {
+          signals.push(args[2]);
+          return new Promise<DecodedPage>(() => undefined);
+        },
+      });
+      t.size.texH = 2;
+      t.tex.load(1);
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(signals[0].aborted).toBe(true);
+      t.tex.load(1);
+      expect(signals).toHaveLength(2);
+      expect(t.decodeSpy.mock.calls[1][1].texH).toBe(800);
+    });
+
+    it("lets an in-flight decode at a fitting size finish", async () => {
+      const signals: AbortSignal[] = [];
+      const t = setup({
+        decode: (_s, target, signal) => {
+          signals.push(signal);
+          return new Promise<DecodedPage>((resolve) => setTimeout(() => resolve(composed(target)), 0));
+        },
+      });
+      t.size.texH = 780;
+      t.tex.load(1);
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(signals[0].aborted).toBe(false);
+      await flush();
+      expect(t.tex.has(1)).toBe(true);
+    });
+
+    it("does nothing while suspended", async () => {
+      const t = setup();
+      await loadTiny(t, [1]);
+      t.tex.suspend();
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(t.decodeSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("errors", () => {
     it("shows paper and reports once for a page that fails to decode", async () => {
       const { tex, onError, decodeSpy } = setup({ decode: async () => {
@@ -396,5 +570,75 @@ describe("PageTextures", () => {
     expect(onLoad).not.toHaveBeenCalled();
     expect(fb.freed.filter((t) => t.kind === "paper")).toHaveLength(1);
     expect(fb.freed.filter((t) => t.kind === "page")).toHaveLength(1);
+  });
+});
+
+describe("PageTextures.whenSettled", () => {
+  it("resolves after the slots have loaded", async () => {
+    const { tex } = setup();
+    await tex.whenSettled([2, 3]);
+    expect(tex.has(2)).toBe(true);
+    expect(tex.has(3)).toBe(true);
+  });
+
+  it("resolves at once for cached slots and pastedowns", async () => {
+    const { tex, decodeSpy } = setup({ sources: 3 });
+    tex.upload(1, page());
+    await tex.whenSettled([0, 1, 4]);
+    expect(decodeSpy).not.toHaveBeenCalled();
+  });
+
+  it("waits for a slow decode", async () => {
+    let finish!: (p: DecodedPage) => void;
+    const decode: PageDecoder = () => new Promise<DecodedPage>((r) => (finish = r));
+    const { tex } = setup({ decode });
+    let settled = false;
+    const wait = tex.whenSettled([2]).then(() => (settled = true));
+    await flush();
+    expect(settled).toBe(false);
+    finish(page());
+    await wait;
+    expect(tex.has(2)).toBe(true);
+  });
+
+  it("counts a failed page as settled, after reporting it", async () => {
+    const decode: PageDecoder = async () => {
+      throw new Error("bad scan");
+    };
+    const { tex, onError } = setup({ decode });
+    await tex.whenSettled([2, 3]);
+    expect(onError).toHaveBeenCalledTimes(2);
+    expect(tex.has(2)).toBe(false);
+  });
+
+  it("does not hang when the loads are aborted", async () => {
+    const decode: PageDecoder = (_s, _t, signal) =>
+      new Promise<DecodedPage>((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+    const { tex } = setup({ decode });
+    const wait = tex.whenSettled([2]);
+    tex.dispose();
+    await expect(wait).resolves.toBeUndefined();
+  });
+
+  it("waits again when a refresh aborts the opening load", async () => {
+    const pending: Array<(p: DecodedPage) => void> = [];
+    const decode: PageDecoder = (_s, target, signal) =>
+      new Promise<DecodedPage>((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason));
+        pending.push(() => resolve(composed(target)));
+      });
+    const t = setup({ decode });
+    t.size.texH = 2;
+    let settled = false;
+    const wait = t.tex.whenSettled([2]).then(() => (settled = true));
+    await flush();
+    t.size.texH = 1024;
+    t.tex.refresh();
+    await flush();
+    expect(settled).toBe(false);
+    expect(pending).toHaveLength(2);
+    pending[1]!(page());
+    await wait;
+    expect(t.tex.has(2)).toBe(true);
   });
 });

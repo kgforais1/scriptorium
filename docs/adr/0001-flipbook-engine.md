@@ -1,6 +1,6 @@
 # ADR-0001: Page-turn engine — port mockup E's WebGL2 curl engine
 
-Last reviewed: 2026-10-28
+Last reviewed: 2026-10-30
 Date: 2026-10-28
 Status: accepted
 Deciders: product owner, Claude Code (pre-M1 spike)
@@ -94,37 +94,49 @@ Interaction requirements from the plan:
 
 - **Max pages smoke-tested:** 202 (Dulac corpus, 102 spreads) in WKWebView. Twenty-five rapid
   turns kept the cache at its cap.
-- **Texture memory:** pages upload at 2048 px tall with mipmaps (about 15 MB each). A wide book or a
-  smaller GPU limit lowers the height so both sides fit `MAX_TEXTURE_SIZE`. The LRU
-  keeps 12 textures around the open spread, about 180 MB of VRAM. The open spread and the
-  turning leaf are never evicted.
+- **Texture memory:** the height of a page texture is the smallest of the display height in
+  device pixels, 2048, the memory budget's limit, the GPU's `MAX_TEXTURE_SIZE`, and the height at
+  which the width still fits it. The budget is 256 MB for 12 cached pages with mipmaps, which
+  gives `floor(sqrt(TEX_BUDGET * boxAspect / 64))` (`boxAspect` is height over width). A page
+  costs about 15 MB at 2048 px. After a resize, an uploaded texture is rebuilt when the new
+  height is more than 1.25 times the height it was built at. The old texture stays on screen
+  until the new one lands. A smaller target never rebuilds. The LRU keeps 12 textures around the open spread. The
+  open spread and the turning leaf are never evicted.
+- **Decoding:** pages decode and letterbox in a worker (`createImageBitmap` plus
+  `OffscreenCanvas`). Where a worker has no `OffscreenCanvas`, decoding runs on the main thread
+  behind the same interface, so an older webview is slower, not broken. The macOS floor is 13.3.
+- **Reduced motion:** with `prefers-reduced-motion`, a turn is a short cross-fade and the corner
+  peek and pulses stop. The setting is read live, so changing it mid-session takes effect.
+- **Context loss:** the engine stops on `webglcontextlost`, and rebuilds its programs and the
+  open spread on `webglcontextrestored`.
 - **Upload cost:** fetch, decode, letterbox, and upload average 16–37 ms per page in Chromium
   and 51–65 ms in WKWebView.
 - **Frame rate:** 120 fps mean (p95 frame 8.9 ms) over ten turns in Chromium on a 120 Hz display.
   WKWebView was not instrumented. The turns looked smooth.
 - **Process RSS:** not measured. M1's ≤ 2 GB target still needs a real sample.
 - **WebGL2 support:** it works in WKWebView on macOS. WebView2 (Windows) and WebKitGTK (Linux)
-  are untested. WebKitGTK is the main risk.
+  are untested. WebKitGTK is the main risk. Without WebGL2, the reader shows an error state
+  and has no fallback.
 
 ## M1 rewrite scope
 
-The spike is throwaway. M1 keeps the geometry, shaders, and scene loader, and rewrites the rest:
+Done in M1 Phase 3. The spike kept its geometry, shaders, and scene loader. The rest was
+rewritten. Each item landed as follows:
 
-- Replace the dev-only spike entry in `src/App.tsx`. Release builds show the placeholder shell.
-- Move the code to `src/features/reader/`, and replace the spike harness with E's chrome
-  (header, bottom bar with thumbnail scrubber, notes panel) driven by `tokens.json`.
-- Feed pages from the book package (`meta.json`) instead of the spike folder command
-  (`spike_pages`, compiled only without `tauri/custom-protocol`: `tauri dev` in either profile
-  or a plain `cargo build`, never `tauri build`; it admits only the listed files). Scope the asset
-  protocol to the opened book. The `protocol-asset` feature and `assetProtocol.enable` ship in
-  every build today with an empty static scope.
-- Decode off the main thread (worker plus `OffscreenCanvas`) and pick the texture size from
-  the display, not a fixed 2048.
-- Handle `webglcontextlost` and `webglcontextrestored`. The spike ignores them. Check every
-  texture upload for GL errors, including the blank-paper texture, which the spike does not check.
-- Add thumbnail-scrubber `goTo`, a visible focus ring on the canvas, and an accessible name
-  that announces the current pages.
-- Add unit tests for `parseScene`, `fitRect`, and the slot mapping.
+- The dev-only spike entry in `src/App.tsx` is gone. `App.tsx` renders the reader (chunk 5).
+- The code lives in `src/features/reader/`, with E's chrome (header, bottom bar with a basic
+  page scrubber, notes panel shell) driven by `--sk-*` tokens from `tokens.json` (chunks 3
+  and 4). A thumbnail scrubber waits for M7.
+- Pages come from the book package (`meta.json`) through the asset protocol. `spike_pages` and
+  the rest of the spike are removed. The asset scope admits only the page files `load_book`
+  verified (Phase 2 and chunk 5).
+- Decoding runs in a worker, and the texture height follows the display and a memory budget
+  (chunk 2).
+- `webglcontextlost` and `webglcontextrestored` are handled, and every upload is checked for GL
+  errors, including the blank-paper texture (chunk 1).
+- The canvas has a visible focus ring and an accessible name that announces the open pages.
+  `goTo` is on the controller, and the scrubber uses it (chunks 1 and 4).
+- `parseScene`, `fitRect`, and the slot mapping have unit tests (chunk 1).
 
 ## Consequences
 
@@ -156,18 +168,18 @@ The spike is throwaway. M1 keeps the geometry, shaders, and scene loader, and re
 ## Demo
 
 ```sh
-scripts/make-spike-fixtures.sh   # needs the Dulac and Princess corpora, see tests/fixtures/README.md
-pnpm tauri dev                   # WKWebView, pages via the asset protocol
-pnpm dev                         # browser only, http://localhost:1420
-SCRIPTORIUM_SPIKE_DIR="$PWD/tmp/fixtures/corpus/dulac-picture-book/jpg" pnpm tauri dev   # 202-page smoke
+pnpm tauri dev    # WKWebView, pages via the asset protocol; opens the last book, or Home
+pnpm dev          # browser only, http://localhost:1420 (no Tauri bridge, so no book opens)
+pnpm shots        # headless Chrome with a stubbed bridge; screenshots land in tmp/shots/
 ```
 
-The fixture script needs the Dulac and Princess corpora in `tmp/fixtures/corpus/` (see
-`tests/fixtures/README.md`). `pnpm tauri dev` starts its own Vite on port 1420, so stop any
-other `pnpm dev` first. The spike shows only in dev builds.
+The reader is the app: open a book from Home and it shows the flipbook full-screen. `pnpm tauri dev`
+starts its own Vite on port 1420, so stop any other `pnpm dev` first. `pnpm shots` needs the
+Dulac corpus or the fixture book in `tmp/` (see `tests/fixtures/README.md`).
 
-Arrow keys or Page Up / Page Down turn the page. Drag a page to turn it by hand. The bar's
-**Scene** button swaps to the daylight placeholder, and **Remount** disposes and recreates the engine.
+Arrow keys or Page Up / Page Down turn the page, and Home and End jump to the ends. Drag a page
+to turn it by hand. The bottom bar's scrubber jumps to a spread, and **Notes** opens the notes
+panel. The engine's `stats()` reports the texture height, but no screen shows it.
 
 ## References
 

@@ -41,6 +41,11 @@ export class LruCache<T> {
     this.evict(new Set([key, ...pinned]));
   }
 
+  /** A snapshot of the entries. Does not count as a use. */
+  snapshot(): [number, T][] {
+    return [...this.entries].map(([k, e]) => [k, e.value]);
+  }
+
   /** Drops every entry. */
   clear(): void {
     for (const e of this.entries.values()) this.onDrop(e.value);

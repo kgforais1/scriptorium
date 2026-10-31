@@ -21,10 +21,17 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 ## Unplanned / small
 
 - **M1 manual smoke (non-blocking)** — run [`docs/manual-test-m1.md`](docs/manual-test-m1.md):
-  release build under the production CSP (A13), A5–A7, and one Windows release run. Does not
-  block merging Phase 2 PRs or starting Phase 3.
+  release build under the production CSP (A13), A5–A7, and one Windows release run. Add the
+  Phase 3 checks: A4 with a 1-page book, mouse and touch turns, reduced motion, the glass chrome,
+  A6 with a moved library, the A9 measurements on the Dulac corpus (open to first turn, RSS with
+  texture height, fps), and a WebView2 run. Does not block merging PRs.
+- **Reader notes follow-up** — Reader notes: clear a page's failure note when it later loads (after a context restore), and the engine note after a successful resize or scene update; and cap concurrent texture rebuilds in refresh() — CodeRabbit #67.
+- **Cap decoded scan size** — Cap decoded scan size (createImageBitmap resize) so huge scans don't spike memory — CodeRabbit #68.
 - **Sonar backlog (22 local issues)** — all in template hook and CI scripts (complexity, regexes, duplicated literals). See
   `tmp/sonar-latest-issues.md` after a scan.
+- **README polish** — update and polish `README.md` for the reader: badges (CI, SonarCloud,
+  licence), an app icon, and screenshots from `docs/screenshots/` (regenerate with
+  `pnpm shots --save`). Do it after Phase 3 merges, so the shots show the final chrome.
 - **Grey+alpha JPEG 2000 fixture** — the transparency refusal test depends on macOS `sips`
   writing two components. Generate a two-component JP2 in-test (or check in a tiny fixture)
   so it runs on every OS. From CodeRabbit on PR #65.

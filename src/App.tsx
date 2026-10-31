@@ -1,30 +1,17 @@
-import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from "react";
-import { BookView } from "./features/book/BookView";
+import { useEffect, useState } from "react";
 import { ErrorDialog } from "./features/common/ErrorDialog";
 import "./features/common/common.css";
 import { Home } from "./features/home/Home";
+import { Reader } from "./features/reader/Reader";
 import { lastBook } from "./lib/api";
 import type { BookView as Book, CommandError } from "./lib/bookTypes";
 import { toCommandError } from "./lib/errors";
 
-// The engine harness exists in dev builds only. The constant condition lets the bundler drop
-// the dynamic import, so release builds never include the harness or the engine.
-const Harness = import.meta.env.DEV ? lazy(() => import("./features/reader/DevHarness")) : null;
-
-function subscribeToHash(notify: () => void): () => void {
-  window.addEventListener("hashchange", notify);
-  return () => window.removeEventListener("hashchange", notify);
-}
-
-function useIsHarnessRoute(): boolean {
-  const hash = useSyncExternalStore(subscribeToHash, () => window.location.hash);
-  return Harness !== null && hash === "#spike";
-}
-
 /** What the reader shows: the start-up check, the home screen, or an open book. */
 type Screen = { name: "loading" } | { name: "home" } | { name: "book"; book: Book };
 
-function Reader() {
+/** The shell around the screens: start-up check, home, the reader, and the error dialog. */
+function Shell() {
   const [screen, setScreen] = useState<Screen>({ name: "loading" });
   const [error, setError] = useState<CommandError | null>(null);
 
@@ -58,28 +45,16 @@ function Reader() {
         <Home onOpen={(book) => setScreen({ name: "book", book })} onError={setError} />
       )}
       {screen.name === "book" && (
-        <BookView
-          key={screen.book.root}
-          book={screen.book}
-          onClose={() => setScreen({ name: "home" })}
-        />
+        <Reader key={screen.book.root} book={screen.book} onClose={() => setScreen({ name: "home" })} />
       )}
       {error && <ErrorDialog error={error} onClose={() => setError(null)} />}
     </div>
   );
 }
 
-/** Root component: the reader, or in dev builds the engine harness at `#spike`. */
+/** Root component: the app shell. */
 function App() {
-  const showHarness = useIsHarnessRoute();
-  if (showHarness && Harness) {
-    return (
-      <Suspense fallback={null}>
-        <Harness />
-      </Suspense>
-    );
-  }
-  return <Reader />;
+  return <Shell />;
 }
 
 export default App;

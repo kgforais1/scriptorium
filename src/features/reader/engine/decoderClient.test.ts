@@ -163,8 +163,28 @@ describe("worker decoding", () => {
   it("rejects with the worker's message on an error reply", async () => {
     const result = handle.decode(src, target, new AbortController().signal);
     await flush();
-    w.reply({ type: "error", id: 1, message: "page fetch failed: HTTP 404" });
+    w.reply({ type: "error", id: 1, message: "page fetch failed: HTTP 404", stage: "fetch" });
     await expect(result).rejects.toThrow("page fetch failed: HTTP 404");
+  });
+
+  it("retries a page on the main thread when the worker could not compose it, and keeps the worker", async () => {
+    stubMainThread();
+    const result = handle.decode(src, target, new AbortController().signal);
+    await flush();
+    w.reply({ type: "error", id: 1, message: "no surface", stage: "compose" });
+    expect((await result).composed).toBe(false);
+    expect(handle.mode()).toBe("worker");
+    expect(w.terminated).toBe(false);
+  });
+
+  it("does not retry on the main thread when it is disposed right after a compose error", async () => {
+    stubMainThread();
+    const result = handle.decode(src, target, new AbortController().signal);
+    await flush();
+    w.reply({ type: "error", id: 1, message: "no surface", stage: "compose" });
+    handle.dispose();
+    await expect(result).rejects.toThrow("disposed");
+    expect(createImageBitmap).not.toHaveBeenCalled();
   });
 
   it("tells the worker to cancel and rejects with the abort reason", async () => {
@@ -215,6 +235,36 @@ describe("worker decoding", () => {
   it("dispose terminates the worker", () => {
     handle.dispose();
     expect(w.terminated).toBe(true);
+  });
+
+  it("dispose rejects pending decodes without re-running them on the main thread", async () => {
+    const bitmap = stubMainThread();
+    const result = handle.decode(src, target, new AbortController().signal);
+    const failed = expect(result).rejects.toThrow("disposed");
+    await flush();
+    handle.dispose();
+    await failed;
+    expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+    expect(bitmap.close).not.toHaveBeenCalled();
+  });
+
+  it("dispose rejects a decode still waiting on the probe", async () => {
+    const w2 = new FakeWorker();
+    const h2 = createPageDecoder(env(w2));
+    stubMainThread();
+    const result = h2.decode(src, target, new AbortController().signal);
+    h2.dispose();
+    await expect(result).rejects.toThrow("disposed");
+    expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+  });
+
+  it("rejects at once after dispose, and does not switch to main mode", async () => {
+    stubMainThread();
+    handle.dispose();
+    await expect(handle.decode(src, target, new AbortController().signal)).rejects.toThrow("disposed");
+    expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+    expect(handle.mode()).toBe("worker");
+    handle.dispose();
   });
 });
 

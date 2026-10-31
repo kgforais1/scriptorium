@@ -66,6 +66,8 @@ export function openBook(path: string): Promise<BookView> {
 // Numbers every save in this run. Rust ignores a save numbered below one it already has, so a
 // slow older save can never overwrite a newer page, even across two views of one book.
 let saveSeq = 0;
+// The latest number issued per book root, so a background write can be compared with it.
+const issuedSeq = new Map<string, number>();
 
 /** Numbers later saves above the book's own, so a reloaded webview is never "stale". */
 function seeded(book: BookView): BookView {
@@ -84,7 +86,20 @@ function seeded(book: BookView): BookView {
  */
 export function saveProgress(root: string, page: number): Promise<SaveOutcome> {
   saveSeq += 1;
+  issuedSeq.set(root, saveSeq);
   return call<SaveOutcome>("save_progress", { root, page, seq: saveSeq });
+}
+
+/**
+ * The number of the latest `saveProgress` call for a book. Read it right after a call to get
+ * that call's number. Compare it with `ProgressSaved.seq` to tell whether a background write
+ * covers every save issued so far.
+ *
+ * @param root - The `root` of the open `BookView`.
+ * @returns The latest save number issued for `root`, or 0 when none was issued.
+ */
+export function latestSaveSeq(root: string): number {
+  return issuedSeq.get(root) ?? 0;
 }
 
 /**
@@ -107,6 +122,9 @@ export function lastBook(): Promise<BookView | null> {
 }
 
 let importCount = 0;
+// Fixed per module load, so a reload that restarts the counter inside the same millisecond still
+// gets different ids.
+const loadNonce = crypto.randomUUID().slice(0, 8);
 
 /**
  * Makes an id for one import, to pass to `createBook` and `onIngestProgress`. Ids differ
@@ -116,7 +134,7 @@ let importCount = 0;
  */
 export function newImportId(): string {
   importCount += 1;
-  return `${Date.now().toString(36)}-${importCount}`;
+  return `${Date.now().toString(36)}-${loadNonce}-${importCount}`;
 }
 
 /**
@@ -144,7 +162,7 @@ export function onIngestProgress(
  * Listens for background saves of the reading position. Rust emits one when a held page
  * reaches `meta.json` without another page turn.
  *
- * @param cb - Called with the `root` of the book that was saved.
+ * @param cb - Called with the `root` of the book that was saved and the `seq` that was written.
  * @returns A function that stops listening.
  */
 export function onProgressSaved(cb: (saved: ProgressSaved) => void): Promise<() => void> {

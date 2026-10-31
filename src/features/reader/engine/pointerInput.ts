@@ -104,7 +104,7 @@ export class PointerInput {
       const T = m.beginTurn(c.side > 0 ? 1 : -1, "peek", c.cv);
       if (T) T.pkT = 1;
     } else if (m.turn?.kind === "peek") {
-      m.turn.pkT = peekStays(m.queued, m.turn.dir, c) ? 1 : 0;
+      m.turn.pkT = peekStays(m.queued, m.turn.dir, c, m.jumpPending) ? 1 : 0;
     }
   }
 
@@ -154,7 +154,7 @@ export class PointerInput {
     this.canvas.style.cursor = "grab";
     const T = this.machine.turn;
     if (!T) return;
-    const s = settleFor(T, d, e.type);
+    const s = settleFor(T, d, e.type, performance.now());
     this.machine.animateTo(s.target, s.dur, s.ease);
   };
 

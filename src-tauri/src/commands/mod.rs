@@ -53,6 +53,19 @@ struct IngestProgress {
 struct ProgressSaved {
     /// The book's root as the view spells it (`BookView.root`).
     root: String,
+    /// The webview save sequence of the page that was written. A save numbered above this is
+    /// newer than the write, so the webview must not treat it as covered.
+    seq: u64,
+}
+
+impl ProgressSaved {
+    /// The payload for a write of `seq` to the book at `root`.
+    fn new(root: &Path, seq: u64) -> Self {
+        Self {
+            root: dunce::simplified(root).to_string_lossy().into_owned(),
+            seq,
+        }
+    }
 }
 
 /// Resolve the library folder, create it, register the app state, and sweep stale ingest
@@ -298,10 +311,9 @@ fn spawn_worker(app: &AppHandle, root: PathBuf, token: u64) {
         let Some(state) = app.try_state::<Mutex<Session>>() else {
             return;
         };
-        let announce = || {
-            let root = dunce::simplified(&root).to_string_lossy().into_owned();
+        let announce = |seq: u64| {
             // A webview that went away is not a save failure.
-            let _ = app.emit("progress-saved", ProgressSaved { root });
+            let _ = app.emit("progress-saved", ProgressSaved::new(&root, seq));
         };
         run_worker(
             &state,
@@ -317,7 +329,7 @@ fn spawn_worker(app: &AppHandle, root: PathBuf, token: u64) {
 /// The loop of a background worker: wait until the book's write is due, write it under the
 /// session lock, and stop once the book is saved, clean, gone, or claimed by another worker.
 /// A failed write keeps the worker looping at the retry backoff. `on_saved` runs once, after
-/// the lock is released, when this worker's write succeeded. The writer and the sleep are
+/// the lock is released, when this worker's write succeeded. It gets the save sequence written. The writer and the sleep are
 /// passed in so the loop is testable without a Tauri runtime.
 fn run_worker(
     session: &Mutex<Session>,
@@ -325,7 +337,7 @@ fn run_worker(
     token: u64,
     mut write: impl FnMut(&Path, u32) -> Result<(), BookError>,
     sleep: impl Fn(Duration),
-    on_saved: impl FnOnce(),
+    on_saved: impl FnOnce(u64),
 ) {
     loop {
         let step = lock(session).worker_step(root, token, Instant::now(), &mut write);
@@ -335,7 +347,7 @@ fn run_worker(
                 "could not save reading position for {}: {err}",
                 root.display()
             ),
-            WorkerStep::Saved => return on_saved(),
+            WorkerStep::Saved(seq) => return on_saved(seq),
             WorkerStep::Done => return,
         }
     }

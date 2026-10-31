@@ -13,28 +13,6 @@ export function formatMegabytes(bytes: number): string {
 }
 
 /**
- * Builds the page indicator text.
- *
- * @param page - The zero-based current page.
- * @param count - The number of pages in the book.
- * @returns "n / total" with a one-based n. An empty book gives "0 / 0".
- */
-export function pageLabel(page: number, count: number): string {
-  return count <= 0 ? "0 / 0" : `${page + 1} / ${count}`;
-}
-
-/**
- * Builds the accessible text for the page image.
- *
- * @param page - The zero-based current page.
- * @param count - The number of pages in the book.
- * @returns Text such as "Page 3 of 40". An empty book gives "No page".
- */
-export function pageAlt(page: number, count: number): string {
-  return count <= 0 ? "No page" : `Page ${page + 1} of ${count}`;
-}
-
-/**
  * Builds the progress text shown while a book is imported.
  *
  * @param done - Pages written so far.

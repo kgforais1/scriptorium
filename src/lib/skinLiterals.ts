@@ -7,9 +7,29 @@
 export type SkinViolation = { line: number; rule: string; text: string };
 
 const NAMED_COLORS = [
-  "aqua", "black", "blue", "brown", "cyan", "fuchsia", "gold", "gray", "green", "grey", "lime",
-  "magenta", "maroon", "navy", "olive", "orange", "pink", "purple", "red", "silver", "teal",
-  "white", "yellow",
+  // The 148 CSS named colours. `transparent` and `currentcolor` are left out: they are not skin colours.
+  "aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque", "black",
+  "blanchedalmond", "blue", "blueviolet", "brown", "burlywood", "cadetblue", "chartreuse",
+  "chocolate", "coral", "cornflowerblue", "cornsilk", "crimson", "cyan", "darkblue", "darkcyan",
+  "darkgoldenrod", "darkgray", "darkgreen", "darkgrey", "darkkhaki", "darkmagenta",
+  "darkolivegreen", "darkorange", "darkorchid", "darkred", "darksalmon", "darkseagreen",
+  "darkslateblue", "darkslategray", "darkslategrey", "darkturquoise", "darkviolet", "deeppink",
+  "deepskyblue", "dimgray", "dimgrey", "dodgerblue", "firebrick", "floralwhite", "forestgreen",
+  "fuchsia", "gainsboro", "ghostwhite", "gold", "goldenrod", "gray", "green", "greenyellow",
+  "grey", "honeydew", "hotpink", "indianred", "indigo", "ivory", "khaki", "lavender",
+  "lavenderblush", "lawngreen", "lemonchiffon", "lightblue", "lightcoral", "lightcyan",
+  "lightgoldenrodyellow", "lightgray", "lightgreen", "lightgrey", "lightpink", "lightsalmon",
+  "lightseagreen", "lightskyblue", "lightslategray", "lightslategrey", "lightsteelblue",
+  "lightyellow", "lime", "limegreen", "linen", "magenta", "maroon", "mediumaquamarine",
+  "mediumblue", "mediumorchid", "mediumpurple", "mediumseagreen", "mediumslateblue",
+  "mediumspringgreen", "mediumturquoise", "mediumvioletred", "midnightblue", "mintcream",
+  "mistyrose", "moccasin", "navajowhite", "navy", "oldlace", "olive", "olivedrab", "orange",
+  "orangered", "orchid", "palegoldenrod", "palegreen", "paleturquoise", "palevioletred",
+  "papayawhip", "peachpuff", "peru", "pink", "plum", "powderblue", "purple", "rebeccapurple",
+  "red", "rosybrown", "royalblue", "saddlebrown", "salmon", "sandybrown", "seagreen", "seashell",
+  "sienna", "silver", "skyblue", "slateblue", "slategray", "slategrey", "snow", "springgreen",
+  "steelblue", "tan", "teal", "thistle", "tomato", "turquoise", "violet", "wheat", "white",
+  "whitesmoke", "yellow", "yellowgreen",
   // CSS system colours. They follow the OS, not the skin, so a skin must not lean on them.
   "Canvas", "CanvasText", "ButtonFace", "ButtonText", "ButtonBorder", "Field", "FieldText",
   "Highlight", "HighlightText", "LinkText", "VisitedText", "ActiveText", "GrayText", "Mark",
@@ -21,19 +41,32 @@ const COLOR_PROP_NAMES = new Set([
   "stroke", "stop-color", "flood-color", "lighting-color", "box-shadow", "text-shadow", "caret-color",
   "accent-color", "text-decoration-color",
 ]);
-const BORDER_COLOR_PROP = /^border(?:-(?:top|right|bottom|left))?(?:-color)?$/;
+// Physical sides, and the logical inline and block sides with their -start and -end forms.
+const BORDER_SIDES = new Set([
+  "border", "border-top", "border-right", "border-bottom", "border-left", "border-inline",
+  "border-inline-start", "border-inline-end", "border-block", "border-block-start", "border-block-end",
+]);
+function isBorderColorProp(prop: string): boolean {
+  return BORDER_SIDES.has(prop.replace(/-color$/, ""));
+}
 
 /** Matches #rgb, #rgba, #rrggbb, #rrggbbaa. Exported for tests. */
 export const HEX_COLOR = /#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![0-9a-z_-])/i;
+const NAMED_COLOR_FUNCTION = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/;
+// `color(` is also a plain function name in TS, so it counts only when a colour space or `from`
+// follows. A hyphenated space such as display-p3 or xyz-d50 matches on its first word.
+const COLOR_SPACE_FUNCTION = /\bcolor\(\s*(?:srgb|display-p3|a98-rgb|prophoto-rgb|rec2020|xyz|from)\b/;
 /** Matches a CSS colour function call. Exported for tests. */
-export const COLOR_FUNCTION = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/i;
+export const COLOR_FUNCTION = new RegExp(`${NAMED_COLOR_FUNCTION.source}|${COLOR_SPACE_FUNCTION.source}`, "i");
 const NAMED_COLOR_WORD = new RegExp(String.raw`(?<![\w-])(?:${NAMED_COLORS})(?![\w-])`, "i");
 const CSS_DECL = /(?<![\w-])([\w-]+)\s*:\s*([^;{}]+)/g;
-// A JS style-object entry: a camelCase or PascalCase (vendor-prefixed) key and a colon. The
-// literal after it is read by hand.
-const JS_KEY = /\b([A-Za-z]\w*)\s*:\s*/g;
+// A JS style-object entry: a camelCase or PascalCase (vendor-prefixed) key, bare or in matching
+// quotes, and a colon. Group 2 is the key. The literal after it is read by hand.
+// A quoted key may be kebab-case ("border-color"); a bare key cannot hold a hyphen.
+const JS_KEY = /(?<![\w-])(?:(["'])([A-Za-z][\w-]*)\1|([A-Za-z]\w*))\s*:\s*/g;
 // A JSX or SVG presentation attribute that carries a colour.
-const COLOR_ATTR = /(?<![\w-])(fill|stroke|color|stop-?[cC]olor|flood-?[cC]olor)\s*=\s*["']([^"'\n]*)["']/g;
+// The string may sit in braces, as in fill={"red"}.
+const COLOR_ATTR = /(?<![\w-])(fill|stroke|color|(?:stop|flood)-?[cC]olor)\s*=\s*(?:\{\s*)?["']([^"'\n]*)["']/g;
 const HEX_GLOBAL = new RegExp(HEX_COLOR.source, "gi");
 const COLOR_FUNCTION_GLOBAL = new RegExp(COLOR_FUNCTION.source, "gi");
 const JS_NUMBER = /-?[\d.]+/y;
@@ -57,7 +90,7 @@ function stripVars(value: string): string {
 
 // Custom properties may hold any colour, so they are checked like a colour property.
 function carriesColor(prop: string): boolean {
-  return prop.startsWith("--") || COLOR_PROP_NAMES.has(prop) || BORDER_COLOR_PROP.test(prop);
+  return prop.startsWith("--") || COLOR_PROP_NAMES.has(prop) || isBorderColorProp(prop);
 }
 
 function usesNamedColor(prop: string, value: string): boolean {
@@ -164,7 +197,7 @@ function scriptHits(text: string): Hit[] {
   const hits = colorLiteralHits(text, 0);
   for (const m of text.matchAll(JS_KEY)) {
     const value = literalAt(text, m.index + m[0].length);
-    const rule = value === null ? null : checkDeclaration(kebab(m[1]), value);
+    const rule = value === null ? null : checkDeclaration(kebab(m[2] ?? m[3]), value);
     if (rule) hits.push({ index: m.index, rule });
   }
   for (const m of text.matchAll(COLOR_ATTR)) {

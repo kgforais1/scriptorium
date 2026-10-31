@@ -36,4 +36,13 @@ describe("computeCamera", () => {
       expect(ly).toBeCloseTo(y, 3);
     }
   });
+
+  it("centres the book vertically between the top and bottom insets", () => {
+    for (const [w, h] of [[1200, 800], [900, 900], [1600, 700]]) {
+      const cam = computeCamera(w, h, book, 18);
+      const c = transform(cam.VP, [0, 0, 0, 1]);
+      const py = (1 - ((c[1] / c[3]) * 0.5 + 0.5)) * h;
+      expect(Math.abs(py - (INSETS.top + h - INSETS.bot) / 2)).toBeLessThan(1);
+    }
+  });
 });

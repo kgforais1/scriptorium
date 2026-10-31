@@ -14,8 +14,16 @@ describe("HEX_COLOR", () => {
 });
 
 describe("COLOR_FUNCTION", () => {
-  it.each(["rgb(0 0 0)", "rgba(0,0,0,.5)", "hsl(10 10% 10%)", "HSLA(1,1%,1%,1)", "oklch(0.5 0.1 90)"])("matches %s", (s) => {
+  it.each(["rgb(0 0 0)", "rgba(0,0,0,.5)", "hsl(10 10% 10%)", "HSLA(1,1%,1%,1)", "oklch(0.5 0.1 90)", "color(display-p3 1 0 0)"])("matches %s", (s) => {
     expect(COLOR_FUNCTION.test(s)).toBe(true);
+  });
+
+  it.each(["color(srgb 1 0 0)", "color(srgb-linear 1 0 0)", "color(xyz-d65 1 0 0)", "color(from red srgb r g b)"])("matches %s", (s) => {
+    expect(COLOR_FUNCTION.test(s)).toBe(true);
+  });
+
+  it("ignores a plain color(...) call", () => {
+    expect(COLOR_FUNCTION.test("color(page)")).toBe(false);
   });
 
   it("ignores identifiers that merely end in rgb", () => {
@@ -150,6 +158,34 @@ describe("review follow-ups", () => {
     expect(rules("a.css", ".a { border: 1px solid canvastext; }")).toEqual(["1:named-color"]);
   });
 
+  it("flags the full CSS named-colour list, but not transparent or currentcolor", () => {
+    expect(rules("a.css", ".a { color: rebeccapurple; }")).toEqual(["1:named-color"]);
+    expect(rules("a.css", ".a { background: lightgoldenrodyellow; }")).toEqual(["1:named-color"]);
+    expect(rules("a.css", ".a { color: transparent; fill: currentcolor; }")).toEqual([]);
+  });
+
+  it("flags quoted style-object keys with matching quotes", () => {
+    expect(rules("a.tsx", 'const s = { "borderColor": "red" };')).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", "const s = { 'color': 'red' };")).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", 'const s = { "color": "var(--sk-color-ink)" };')).toEqual([]);
+    expect(rules("a.tsx", 'const s = { "border-color": "red" };')).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", "const s = { 'background-color': 'red' };")).toEqual(["1:named-color"]);
+  });
+
+  it("flags colour attributes given as a braced string", () => {
+    expect(rules("a.tsx", '<path fill={"red"} />')).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", "<path stroke={'blue'} />")).toEqual(["1:named-color"]);
+    expect(rules("a.tsx", '<path fill={"none"} />')).toEqual([]);
+  });
+
+  it("checks logical border colours", () => {
+    for (const prop of ["border-inline", "border-block-start", "border-inline-end-color", "border-block-color"]) {
+      expect(rules("a.css", `.a { ${prop}: 1px solid red; }`)).toEqual(["1:named-color"]);
+    }
+    expect(rules("a.tsx", 'const s = { borderInlineStartColor: "red" };')).toEqual(["1:named-color"]);
+    expect(rules("a.css", ".a { border-inline-start: 1px solid var(--sk-color-ink); }")).toEqual([]);
+  });
+
   it("ignores hex-looking fragments that are not colours", () => {
     expect(rules("a.css", "#fade {\n  margin: 0;\n}")).toEqual([]);
     expect(rules("a.css", "#abc, #def { margin: 0; }")).toEqual([]);
@@ -192,5 +228,16 @@ describe("isCheckedFile", () => {
     [String.raw`src\features\reader\engine\a.ts`, false],
   ])("%s -> %s", (path, expected) => {
     expect(isCheckedFile(path)).toBe(expected);
+  });
+});
+
+describe("color( in script and CSS", () => {
+  it("passes a plain color(page) call in a .tsx", () => {
+    expect(rules("a.tsx", "const c = color(page);")).toEqual([]);
+  });
+
+  it("flags a CSS colour space call in a .tsx and in CSS", () => {
+    expect(rules("a.tsx", "const c = 'color(display-p3 1 0 0)';")).toEqual(["1:color-function"]);
+    expect(rules("a.css", ".a { color: color(display-p3 1 0 0); }")).toEqual(["1:color-function"]);
   });
 });

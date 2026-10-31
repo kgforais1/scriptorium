@@ -3,7 +3,7 @@
 // owns the keyboard. See docs/adr/0001-flipbook-engine.md.
 
 import {
-  clearSlot, createGeometryBuffer, writeLeafSlot, writeStackSlot,
+  clearSlot, createGeometryBuffer, leafFace, writeLeafSlot, writeStackSlot,
 } from "./corners";
 import { decodeRaw, type DecodedPage, type PageDecoder, type PageSource } from "./decode";
 import { browserDecoderEnv, createPageDecoder, type PageDecoderHandle } from "./decoderClient";
@@ -104,10 +104,13 @@ export class FlipbookEngine implements FlipbookController {
   private disposed = false;
   private lost = false;
   private readonly cleanup: (() => void)[] = [];
+  // Settled when the graphics context comes back, fails to come back, or the engine is disposed.
+  // Only openingLoaded waits on it.
+  private restoreWaiters: { resolve: () => void; reject: (err: unknown) => void }[] = [];
 
   /**
    * Starts an engine on a canvas. Page 1 decodes first because its aspect fixes the book's page
-   * box. Rejects when WebGL2 is missing, there are no pages, page 1 fails, or the signal aborts;
+   * box. Resolves once the opening spread's pages have loaded or failed. Rejects when WebGL2 is missing, there are no pages, page 1 fails, or the signal aborts;
    * an aborted start leaves nothing behind, so a StrictMode double mount is safe.
    */
   static async create(canvas: HTMLCanvasElement, opts: EngineOptions, signal?: AbortSignal): Promise<FlipbookController> {
@@ -124,6 +127,9 @@ export class FlipbookEngine implements FlipbookController {
     try {
       engine = new FlipbookEngine(gl, canvas, opts, first);
       engine.start(first);
+      // Resolve once the opening spread has its textures, so the caller's loading state covers
+      // them. A page that fails counts as loaded: it shows paper and is reported through onError.
+      await engine.openingLoaded(sig);
       return engine;
     } catch (err) {
       // A failed start (shader error, GL error) frees what it built.
@@ -167,6 +173,45 @@ export class FlipbookEngine implements FlipbookController {
     this.prefetch();
     this.raf = requestAnimationFrame(this.frame);
     this.emit();
+  }
+
+  // Resolves when the opening spread's two slots have settled, or rejects as soon as the signal
+  // aborts, so a closed book does not wait on decodes.
+  private async openingLoaded(signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
+    const k = this.machine.spread;
+    let onAbort: (() => void) | undefined;
+    const aborted = new Promise<never>((_, reject) => {
+      onAbort = () => reject(signal.reason);
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
+    try {
+      await Promise.race([this.textures.whenSettled([2 * k, 2 * k + 1], signal), aborted]);
+      // A context lost during the opening suspends the textures, so whenSettled returns early.
+      // Wait for the restore, then for the opening spread again.
+      while (this.lost && !signal.aborted && !this.disposed) {
+        await Promise.race([this.whenRestored(), aborted]);
+        await Promise.race([this.textures.whenSettled([2 * k, 2 * k + 1], signal), aborted]);
+      }
+    } finally {
+      // The signal outlives a normal start, so drop the listener it never needed.
+      if (onAbort) signal.removeEventListener("abort", onAbort);
+    }
+    signal.throwIfAborted();
+  }
+
+  // Resolves when the context is restored. Rejects if the restore fails or the engine is disposed.
+  private whenRestored(): Promise<void> {
+    return new Promise<void>((resolve, reject) => this.restoreWaiters.push({ resolve, reject }));
+  }
+
+  private settleRestoreWaiters(err?: unknown) {
+    const waiters = this.restoreWaiters;
+    this.restoreWaiters = [];
+    for (const w of waiters) {
+      if (err === undefined) w.resolve();
+      else w.reject(err);
+    }
   }
 
   // ---------- public API ----------
@@ -224,6 +269,7 @@ export class FlipbookEngine implements FlipbookController {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.settleRestoreWaiters(new Error("the engine was disposed"));
     cancelAnimationFrame(this.raf);
     for (const off of this.cleanup) off();
     this.input?.detach();
@@ -325,8 +371,8 @@ export class FlipbookEngine implements FlipbookController {
     writeStackSlot(buf, 1, pageOfSlot(ST.rp, n) ?? -1, ST.R.prof, 1, this.book, t);
     const T = this.machine.turn;
     if (T) {
-      const back = (T.dir > 0 ? T.t : 1 - T.t) >= 0.5;
-      writeLeafSlot(buf, 2, pageOfSlot(2 * T.leaf + (back ? 2 : 1), n) ?? -1, this.renderer.leafVertices, back, t);
+      const { back, slot } = leafFace(T.leaf, T.t);
+      writeLeafSlot(buf, 2, pageOfSlot(slot, n) ?? -1, this.renderer.leafVertices, back, t);
     } else {
       clearSlot(buf, 2);
     }
@@ -352,7 +398,15 @@ export class FlipbookEngine implements FlipbookController {
       clearTimeout(t);
       t = window.setTimeout(() => {
         if (this.disposed || this.lost) return;
-        this.renderer.layout(this.scene);
+        try {
+          this.renderer.layout(this.scene);
+          // A canvas that grew (from its first tiny layout, or a window maximised) wants sharper pages.
+          this.textures.refresh();
+          this.prefetch();
+        } catch (err) {
+          this.fail(null, "could not resize the scene", err);
+          return;
+        }
         this.dirty = true;
         this.geometryDue = true;
       }, 60);
@@ -383,6 +437,7 @@ export class FlipbookEngine implements FlipbookController {
       this.textures.resume();
     } catch (err) {
       this.fail(null, "could not rebuild the scene after the graphics context was lost", err);
+      this.settleRestoreWaiters(err);
       return;
     }
     this.lost = false;
@@ -391,6 +446,7 @@ export class FlipbookEngine implements FlipbookController {
     this.prefetch();
     this.emit();
     this.raf = requestAnimationFrame(this.frame);
+    this.settleRestoreWaiters();
   }
 
   // ---------- main loop ----------

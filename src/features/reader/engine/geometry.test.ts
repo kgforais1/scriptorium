@@ -60,6 +60,15 @@ describe("updateLeaf", () => {
     expect(tip(NV >> 1)).toBeLessThan(-0.5);
   });
 
+  it("lays a backward leaf on the left at t = 1 and on the right at t = 0", () => {
+    const leafV = new Float32Array(LEAF_FLOATS), foot = new Float32Array(NV * 4);
+    const tip = (j: number) => leafV[(j * NU + NU - 1) * 8];
+    updateLeaf(book, turn(-1, 1, "anim"), leafV, foot);
+    expect(tip(NV >> 1)).toBeLessThan(-0.5);
+    updateLeaf(book, turn(-1, 0, "anim"), leafV, foot);
+    expect(tip(NV >> 1)).toBeGreaterThan(0.5);
+  });
+
   it("indexes every leaf vertex", () => {
     const idx = leafIndices();
     expect(Math.max(...idx)).toBe(NU * NV - 1);

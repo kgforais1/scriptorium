@@ -4,8 +4,8 @@
 import type { Book } from "./geometry";
 import { PI, invert, lookAt, multiply, perspective, type Mat4, type Vec3 } from "./math";
 
-/** CSS pixels kept clear around the book: the header, the bottom bar, and the sides. */
-export const INSETS = { top: 24, bot: 88, side: 28 };
+/** CSS pixels kept clear around the book: the header text, the bottom bar, and the sides. */
+export const INSETS = { top: 46, bot: 82, side: 28 };
 
 /** View-projection, its inverse, the eye position, and the pixels-per-world-unit scale. */
 export type Camera = { VP: Mat4; inv: Mat4; eye: Vec3; k: number };
