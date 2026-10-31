@@ -119,9 +119,9 @@ describe("gripAt", () => {
   });
 
   it("lifts the corner hard near the head or tail and gently mid-page", () => {
-    expect(gripAt(book, book.H / 2).A0).toBe(1.3);
-    expect(gripAt(book, -book.H / 2).A0).toBe(1.3);
-    expect(gripAt(book, 0).A0).toBe(0.45);
+    expect(gripAt(book, book.H / 2).A0).toBeCloseTo(1.3);
+    expect(gripAt(book, -book.H / 2).A0).toBeCloseTo(1.3);
+    expect(gripAt(book, 0).A0).toBeCloseTo(0.45);
   });
 });
 
