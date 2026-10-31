@@ -1,6 +1,6 @@
 # Policy: Commits & Branches
 
-Last reviewed: 2026-07-09
+Last reviewed: 2026-10-30
 Enforced by: convention; optional CI check (commitlint / branch-name regex);
 advisory open-PR check via [`ci/scripts/check_open_prs.py`](../ci/scripts/check_open_prs.py).
 
@@ -33,6 +33,11 @@ Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `build`, `perf`
 
 - Title follows the commit convention; body states purpose, scope, and verification done.
 - Keep PRs small and reviewable; split unrelated changes.
+- Keep each PR under **90 changed files**. CodeRabbit skips PRs over 100 files, so plan a phase
+  as a stack of PRs before it gets there. Check with `git diff --name-only origin/main...HEAD | wc -l`.
+  To split a branch that is already too big, push an earlier commit as its own branch, open a PR
+  for it against `main`, and retarget the big PR's base to that branch. The repo merges with
+  merge commits, so the stacked PR keeps its history when the lower PR merges.
 - Link the plan/ADR/issue the PR implements.
 - Do not merge red CI; do not bump version in feature PRs unless that is the PR's purpose.
 
