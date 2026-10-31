@@ -5,13 +5,13 @@
 // the production CSP and asset scope are not covered (see docs/manual-test-m1.md section 8).
 //
 //   pnpm shots                     # Dulac corpus if present, else the 12-page fixture book
-//   pnpm shots --pages <dir>       # any folder of JPEG or PNG scans
+//   pnpm shots --pages <dir>       # any folder of JPEG or PNG scans inside tmp/
 //   pnpm shots --save              # also copy the README set into docs/screenshots/
 //
 // First run: `pnpm exec playwright install chromium`.
 
-import { copyFileSync, mkdirSync, openSync, readSync, closeSync, readdirSync, existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { copyFileSync, mkdirSync, openSync, readSync, closeSync, readdirSync, existsSync, realpathSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import { createServer } from "vite";
@@ -51,6 +51,18 @@ function jpegSize(buf, path) {
     i += 2 + buf.readUInt16BE(i + 2);
   }
   throw new Error(`${path}: no JPEG size marker in the first 64 KB`);
+}
+
+// The scans folder, resolved through symlinks. It must sit inside tmp/: the scans belong with the
+// fixtures, and Vite serves /@fs/ only inside the project.
+function pagesDir(input) {
+  const tmp = realpathSync(join(ROOT, "tmp"));
+  const candidate = resolve(ROOT, input ?? (existsSync(DULAC) ? DULAC : FIXTURE));
+  if (!existsSync(candidate)) throw new Error(`--pages folder does not exist: ${candidate}`);
+  const dir = realpathSync(candidate);
+  const rel = relative(tmp, dir);
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) throw new Error(`--pages must be a folder inside tmp/: ${dir}`);
+  return dir;
 }
 
 function loadBook(dir) {
@@ -157,7 +169,7 @@ async function smallAndReduced(browser, url, book) {
 }
 
 async function main() {
-  const dir = resolve(args.pages ?? (existsSync(DULAC) ? DULAC : FIXTURE));
+  const dir = pagesDir(args.pages);
   const book = loadBook(dir);
   mkdirSync(OUT, { recursive: true });
   const server = await createServer({ root: ROOT, logLevel: "error", server: { port: 1430, strictPort: false } });
