@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { inspectFolder, openBook, pickFolder } from "../../lib/api";
 import type { BookView, CommandError, ScansFolderInfo } from "../../lib/bookTypes";
 import { toCommandError } from "../../lib/errors";
@@ -20,6 +20,12 @@ interface PendingScans {
 export function Home({ onOpen, onError }: Readonly<HomeProps>) {
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingScans | null>(null);
+  const openRef = useRef<HTMLButtonElement>(null);
+
+  // Start keyboard focus on Open…, so closing a book does not leave focus on the body.
+  useEffect(() => {
+    openRef.current?.focus();
+  }, []);
 
   async function choose() {
     setBusy(true);
@@ -45,7 +51,7 @@ export function Home({ onOpen, onError }: Readonly<HomeProps>) {
     <main className="home">
       <h1>Scriptorium</h1>
       <p>Open a book, or a folder of scanned pages.</p>
-      <button type="button" className="button primary" onClick={() => void choose()} disabled={busy}>
+      <button ref={openRef} type="button" className="button primary" onClick={() => void choose()} disabled={busy}>
         Open…
       </button>
       {pending && (
