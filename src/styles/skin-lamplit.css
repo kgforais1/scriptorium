@@ -20,6 +20,9 @@
   --sk-color-detail-background: #2a1f16;
   --sk-color-badge-background: #140e0ab8;
   --sk-color-loading: #9b7a48;
+  --sk-color-scrim: #090604b8;
+  --sk-color-shadow: #0000006b;
+  --sk-color-error: #ff9999;
   --sk-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
   --sk-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
   --sk-font-serif: "Iowan Old Style", "Hoefler Text", "Palatino", "Palatino Linotype", "Book Antiqua", "Georgia", serif;
@@ -28,6 +31,8 @@
   --sk-radius-panel: 18px;
   --sk-blur-bar: 22px;
   --sk-blur-panel: 28px;
+  --sk-saturate-bar: 1.25;
+  --sk-saturate-panel: 1.2;
   --sk-motion-ease: cubic-bezier(0.2, 0.75, 0.15, 1);
   --sk-motion-panel: 650ms;
   --sk-motion-fade: 350ms;

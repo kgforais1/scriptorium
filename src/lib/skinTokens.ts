@@ -46,6 +46,11 @@ function quantityToCss(path: string, value: unknown, units: Set<string>): string
   throw new Error(`${path}: expected {value, unit} or a string`);
 }
 
+function numberToCss(path: string, value: unknown): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${path}: a number must be a finite number`);
+  return String(value);
+}
+
 function cubicBezierToCss(path: string, value: unknown): string {
   if (!Array.isArray(value) || value.length !== 4 || !value.every((n) => typeof n === "number" && Number.isFinite(n))) {
     throw new Error(`${path}: a cubicBezier must be an array of four numbers`);
@@ -78,6 +83,8 @@ export function tokenToCss(path: string, type: string, value: unknown): string {
       return quantityToCss(path, value, DIMENSION_UNITS);
     case "duration":
       return quantityToCss(path, value, DURATION_UNITS);
+    case "number":
+      return numberToCss(path, value);
     case "cubicBezier":
       return cubicBezierToCss(path, value);
     case "fontFamily":

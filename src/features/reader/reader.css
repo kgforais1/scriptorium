@@ -1,0 +1,284 @@
+/* Reader chrome, following mockup E. It reads only --sk-* custom properties from the skin. */
+.reader {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--sk-color-background);
+  color: var(--sk-color-ink);
+  font: 400 13px/1.4 var(--sk-font-sans);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The canvas blocks browser pan and pinch so the engine gets every pointer event. */
+.reader__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: 0;
+  touch-action: none;
+  transition: opacity var(--sk-motion-panel) var(--sk-motion-ease);
+}
+
+.reader__canvas[data-ready="true"] {
+  opacity: 1;
+}
+
+.reader__canvas:focus-visible {
+  outline: 2px solid var(--sk-color-focus-ring);
+  outline-offset: -4px;
+}
+
+/* Header and bar are glass. They fade while a page turns and never sit on the gutter. */
+.reader__header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 0 16px 0 26px;
+  background: linear-gradient(180deg, var(--sk-color-scrim), transparent);
+  pointer-events: none;
+  transition: opacity var(--sk-motion-fade) var(--sk-motion-ease);
+}
+
+.reader__header > * {
+  pointer-events: auto;
+}
+
+.reader__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 11px/1.2 var(--sk-font-sans);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sk-color-ink-title);
+}
+
+.reader__title:focus-visible {
+  outline: 2px solid var(--sk-color-focus-ring);
+  outline-offset: 4px;
+}
+
+.reader__indicator {
+  font: 400 11.5px/1 var(--sk-font-sans);
+  color: var(--sk-color-ink-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.reader__bar {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: min(560px, calc(100vw - 24px));
+  min-height: 60px;
+  padding: 8px 10px 8px 14px;
+  border-radius: var(--sk-radius-bar);
+  background: var(--sk-color-glass);
+  backdrop-filter: blur(var(--sk-blur-bar)) saturate(var(--sk-saturate-bar));
+  -webkit-backdrop-filter: blur(var(--sk-blur-bar)) saturate(var(--sk-saturate-bar));
+  box-shadow:
+    inset 0 0 0 1px var(--sk-color-hairline),
+    0 14px 36px var(--sk-color-shadow);
+  transition: opacity var(--sk-motion-fade) var(--sk-motion-ease);
+}
+
+.reader[data-turning="true"] .reader__header,
+.reader[data-turning="true"] .reader__bar {
+  opacity: 0;
+}
+
+.reader[data-turning="true"] .reader__header > *,
+.reader[data-turning="true"] .reader__bar {
+  pointer-events: none;
+}
+
+.reader__button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font: inherit;
+  color: var(--sk-color-ink-control);
+  background: transparent;
+  border: 0;
+  border-radius: var(--sk-radius-control);
+  cursor: pointer;
+  transition: background var(--sk-motion-fade) var(--sk-motion-ease);
+}
+
+.reader__button--text {
+  padding: 0 14px;
+  font: 500 11.5px/1 var(--sk-font-sans);
+  white-space: nowrap;
+  color: var(--sk-color-ink-toggle);
+}
+
+.reader__button:hover:not(:disabled),
+.reader__button[aria-pressed="true"] {
+  background: var(--sk-color-hairline);
+  color: var(--sk-color-ink);
+}
+
+.reader__button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.reader__button:focus-visible,
+.reader__scrubber:focus-visible {
+  outline: 2px solid var(--sk-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.reader__icon {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.reader__scrubber {
+  flex: 1;
+  min-width: 96px;
+  height: 44px;
+  margin: 0 4px;
+  accent-color: var(--sk-color-accent);
+  cursor: pointer;
+}
+
+.reader__range {
+  min-width: 3.5em;
+  font: 500 12px/1 var(--sk-font-sans);
+  color: var(--sk-color-ink-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.reader__sep {
+  width: 1px;
+  height: 28px;
+  margin: 0 4px;
+  background: var(--sk-color-hairline);
+}
+
+.reader__note {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0 4px 2px;
+  font: 400 11.5px/1.4 var(--sk-font-sans);
+  color: var(--sk-color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.reader__note--error {
+  color: var(--sk-color-error);
+}
+
+/* Notes panel: an empty shell. Closed, it sits off screen. */
+.reader__panel {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 6;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(384px, calc(100vw - 28px));
+  overflow: hidden;
+  border-radius: var(--sk-radius-panel);
+  background: var(--sk-color-panel);
+  backdrop-filter: blur(var(--sk-blur-panel)) saturate(var(--sk-saturate-panel));
+  -webkit-backdrop-filter: blur(var(--sk-blur-panel)) saturate(var(--sk-saturate-panel));
+  box-shadow:
+    inset 0 0 0 1px var(--sk-color-hairline),
+    0 26px 64px var(--sk-color-shadow);
+  transform: translateX(calc(100% + 30px));
+  transition: transform var(--sk-motion-panel) var(--sk-motion-ease);
+}
+
+.reader__panel[data-open="true"] {
+  transform: none;
+}
+
+.reader__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 0 24px;
+}
+
+.reader__kicker {
+  margin: 0;
+  font: 600 10px/1 var(--sk-font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sk-color-accent);
+}
+
+.reader__panel-empty {
+  margin: 14px 24px;
+  font: italic 14.5px/1.4 var(--sk-font-serif);
+  color: var(--sk-color-ink-muted);
+}
+
+/* Loading and error states sit in the middle of the screen, over the canvas. */
+.reader__status {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 24px;
+  text-align: center;
+  pointer-events: none;
+  font: 400 14px/1.5 var(--sk-font-sans);
+  color: var(--sk-color-ink-muted);
+}
+
+.reader__status--loading {
+  font: italic 14px/1.5 var(--sk-font-serif);
+  letter-spacing: 0.1em;
+  color: var(--sk-color-loading);
+}
+
+.reader__status--error {
+  color: var(--sk-color-error);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader__canvas,
+  .reader__header,
+  .reader__bar,
+  .reader__button,
+  .reader__panel {
+    transition: none;
+  }
+}

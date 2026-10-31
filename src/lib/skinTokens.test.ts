@@ -16,6 +16,11 @@ describe("tokenToCss", () => {
     expect(tokenToCss("d", "duration", "1s")).toBe("1s");
   });
 
+  it("writes a number as written", () => {
+    expect(tokenToCss("s", "number", 1.25)).toBe("1.25");
+    expect(tokenToCss("s", "number", 0)).toBe("0");
+  });
+
   it("writes a cubicBezier as cubic-bezier()", () => {
     expect(tokenToCss("e", "cubicBezier", [0.2, 0.75, 0.15, 1])).toBe("cubic-bezier(0.2, 0.75, 0.15, 1)");
   });
@@ -41,6 +46,8 @@ describe("tokenToCss", () => {
     ["dimension", { value: "1", unit: "px" }],
     ["duration", { value: 1, unit: "px" }],
     ["duration", 7],
+    ["number", "1.2"],
+    ["number", Number.NaN],
     ["cubicBezier", [1, 2, 3]],
     ["cubicBezier", [1, 2, 3, "x"]],
     ["fontFamily", []],

@@ -21,6 +21,9 @@
     "color.detail-background",
     "color.badge-background",
     "color.loading",
+    "color.scrim",
+    "color.shadow",
+    "color.error",
     "font.sans",
     "font.display",
     "font.serif",
@@ -29,6 +32,8 @@
     "radius.panel",
     "blur.bar",
     "blur.panel",
+    "saturate.bar",
+    "saturate.panel",
     "motion.ease",
     "motion.panel",
     "motion.fade"
