@@ -1,10 +1,14 @@
-// Pointer input on the canvas: hover peek, drag-to-turn, and the cancel paths. The engine has no
+// Event glue for pointer input on the canvas: hover peek, drag-to-turn, and the cancel paths.
+// Every decision (hit areas, tap versus drag, how a release settles) lives in gesture.ts. The engine has no
 // keyboard listener; the reader chrome owns keys. Under reduced motion there is no peek and no
 // drag, and a tap on a page turns it with a cross-fade.
 
-import { cornerAt, dragProgress, pickLocal, turnCompletes, type Drag } from "./gesture";
+import {
+  cornerAt, dragProgress, gripAt, hoverOnPage, onPageAt, pastSlop, peekStays, pickLocal, settleFor, tapDirection, trackDrag,
+  type Drag, type Tap,
+} from "./gesture";
 import type { Book } from "./geometry";
-import { clamp, easeInOut, easeOut, lerp, type Mat4 } from "./math";
+import type { Mat4 } from "./math";
 import type { TurnMachine } from "./turnMachine";
 
 /** What the input needs to know about the view. */
@@ -18,7 +22,7 @@ export interface PointerView {
 /** Turns pointer events on a canvas into turn-machine calls. */
 export class PointerInput {
   private drag: Drag | null = null;
-  private tap: { id: number; sx: number; sy: number; dir: 1 | -1 } | null = null;
+  private tap: Tap | null = null;
   private off: (() => void)[] = [];
 
   /** Call `attach` to start listening. */
@@ -27,7 +31,7 @@ export class PointerInput {
     private readonly book: Book,
     private readonly machine: TurnMachine,
     private readonly view: PointerView,
-    private readonly reducedMotion: boolean,
+    private reducedMotion: boolean,
   ) {}
 
   /** Starts listening on the canvas. */
@@ -59,15 +63,15 @@ export class PointerInput {
     return pickLocal(this.view.inverse(), w, h, e.clientX - r.left, e.clientY - r.top);
   }
 
-  // Where a press can grab: on a page, off the gutter.
-  private onPage(l: [number, number], slack: number): boolean {
-    return Math.abs(l[1]) <= this.book.H / 2 + slack && Math.abs(l[0]) <= 1.08 && Math.abs(l[0]) >= 0.03;
+  /** Switches between curl-and-drag and tap-to-fade input. A gesture already held finishes as it began. */
+  setReducedMotion(reduced: boolean): void {
+    this.reducedMotion = reduced;
   }
 
   private readonly onMove = (e: PointerEvent) => {
     const l = this.local(e);
     if (this.reducedMotion) {
-      this.canvas.style.cursor = this.onPage(l, 0.06) ? "pointer" : "default";
+      this.canvas.style.cursor = onPageAt(this.book, l, 0.06) ? "pointer" : "default";
     } else if (this.drag) {
       this.dragMove(e, l, this.drag);
     } else if (e.pointerType === "mouse") {
@@ -79,7 +83,7 @@ export class PointerInput {
   private dragMove(e: PointerEvent, l: [number, number], d: Drag) {
     const T = this.machine.turn;
     if (!T || e.pointerId !== d.id) return;
-    if (Math.abs(e.clientX - d.sx) > 4 || Math.abs(e.clientY - d.sy) > 4) d.moved = true;
+    if (pastSlop(d.sx, d.sy, e.clientX, e.clientY)) d.moved = true;
     if (!d.moved) return;
     if (T.kind === "peek") T.lift = T.pk;
     if (T.kind !== "drag") {
@@ -88,23 +92,18 @@ export class PointerInput {
     }
     T.anim = null;
     T.cancel = 0;
-    const now = performance.now(), dt = Math.max(1, now - d.lt);
-    d.vx = lerp(d.vx, ((l[0] - d.lx) / dt) * 1000, 0.5);
-    d.lx = l[0];
-    d.lt = now;
+    trackDrag(d, l[0], performance.now());
     T.t = dragProgress(T.dir, d.x0, l[0]);
   }
 
   private hoverMove(l: [number, number]) {
-    const m = this.machine, c = cornerAt(this.book, l), h2 = this.book.H / 2;
-    const onPage = Math.abs(l[1]) < h2 && Math.abs(l[0]) < 1.05 && Math.abs(l[0]) > 0.04;
-    this.canvas.style.cursor = c || onPage ? "grab" : "default";
+    const m = this.machine, c = cornerAt(this.book, l);
+    this.canvas.style.cursor = c || hoverOnPage(this.book, l) ? "grab" : "default";
     if (c && !m.turn) {
       const T = m.beginTurn(c.side > 0 ? 1 : -1, "peek", c.cv);
       if (T) T.pkT = 1;
     } else if (m.turn?.kind === "peek") {
-      // Once navigation has queued a step, the peek must settle; hovering cannot re-arm it.
-      m.turn.pkT = m.queued === 0 && m.turn.dir === c?.side ? 1 : 0;
+      m.turn.pkT = peekStays(m.queued, m.turn.dir, c) ? 1 : 0;
     }
   }
 
@@ -116,7 +115,7 @@ export class PointerInput {
   private readonly onDown = (e: PointerEvent) => {
     if (e.button !== 0 || this.drag || this.tap) return;
     const l = this.local(e);
-    if (!this.onPage(l, 0.06)) return;
+    if (!onPageAt(this.book, l, 0.06)) return;
     const dir = l[0] > 0 ? 1 : -1;
     if (this.reducedMotion) {
       this.tap = { id: e.pointerId, sx: e.clientX, sy: e.clientY, dir };
@@ -128,15 +127,14 @@ export class PointerInput {
   };
 
   private grab(e: PointerEvent, l: [number, number], dir: 1 | -1) {
-    const m = this.machine, h2 = this.book.H / 2;
+    const m = this.machine, grip = gripAt(this.book, l[1]);
     if (m.turn && !(m.turn.kind === "peek" && m.turn.dir === dir)) return;
-    const vn = clamp((h2 - l[1]) / this.book.H, 0, 1);
-    const T = m.turn || m.beginTurn(dir, "drag", vn);
+    const T = m.turn || m.beginTurn(dir, "drag", grip.vn);
     if (!T) return;
     if (T.kind === "peek") T.A0 = 1.3;
     else {
-      T.cv = vn;
-      T.A0 = Math.abs(vn - 0.5) > 0.32 ? 1.3 : 0.45;
+      T.cv = grip.vn;
+      T.A0 = grip.A0;
     }
     this.drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, x0: l[0], lx: l[0], lt: performance.now(), vx: 0, moved: false };
     m.dragging = true;
@@ -155,21 +153,15 @@ export class PointerInput {
     this.canvas.style.cursor = "grab";
     const T = this.machine.turn;
     if (!T) return;
-    const up = e.type === "pointerup";
-    if (!d.moved) {
-      if (up) this.machine.animateTo(T.dir > 0 ? 1 : 0, 1.05, easeInOut);
-      else this.machine.animateTo(T.dir > 0 ? 0 : 1, 0.3, easeOut);
-      return;
-    }
-    const target = (T.dir > 0) === turnCompletes(T, d, up) ? 1 : 0;
-    this.machine.animateTo(target, 0.3 + 0.55 * Math.abs(target - T.t), easeOut);
+    const s = settleFor(T, d, e.type);
+    this.machine.animateTo(s.target, s.dur, s.ease);
   };
 
   private releaseTap(e: PointerEvent) {
     const t = this.tap;
     if (t?.id !== e.pointerId) return;
     this.tap = null;
-    const still = Math.abs(e.clientX - t.sx) <= 4 && Math.abs(e.clientY - t.sy) <= 4;
-    if (e.type === "pointerup" && still) this.machine.go(t.dir);
+    const dir = tapDirection(t, e.type, e.clientX, e.clientY);
+    if (dir) this.machine.go(dir);
   }
 }

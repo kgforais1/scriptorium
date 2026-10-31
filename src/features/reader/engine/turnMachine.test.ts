@@ -188,6 +188,33 @@ describe("TurnMachine", () => {
     });
   });
 
+  describe("setReducedMotion", () => {
+    it("switches later turns to the cross-fade and back to the curl", () => {
+      const { m, log, settle } = setup(5);
+      m.setReducedMotion(true);
+      m.go(1);
+      expect(m.turn).toBeNull();
+      expect(log).toContain("fade 0");
+      m.setReducedMotion(false);
+      m.go(1);
+      expect(m.turn).not.toBeNull();
+      settle();
+      expect(m.spread).toBe(2);
+    });
+
+    it("lets a curl already in the air finish, queueing navigation made meanwhile", () => {
+      const { m, log, settle } = setup(5);
+      m.go(1);
+      m.setReducedMotion(true);
+      m.go(1);
+      expect(m.queued).toBe(1);
+      expect(m.spread).toBe(0);
+      settle();
+      expect(m.spread).toBe(2);
+      expect(log).toContain("fade 1");
+    });
+  });
+
   describe("reapply", () => {
     it("redraws the rest stacks when nothing turns", () => {
       const { m, log } = setup(5, { start: 2 });

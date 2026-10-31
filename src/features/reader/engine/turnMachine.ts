@@ -37,7 +37,7 @@ export class TurnMachine {
     private readonly book: Book,
     private readonly nLeaf: number,
     readonly host: TurnHost,
-    private readonly reducedMotion: boolean,
+    private reducedMotion: boolean,
     startSpread: number,
   ) {
     this.K = clamp(Math.round(startSpread), 0, nLeaf);
@@ -58,6 +58,14 @@ export class TurnMachine {
     return this.nLeaf + 1;
   }
 
+  /**
+   * Switches between the curl and the cross-fade. A turn already in the air finishes as a curl,
+   * and the change applies from the next one.
+   */
+  setReducedMotion(reduced: boolean): void {
+    this.reducedMotion = reduced;
+  }
+
   /** True while a leaf is turning. A corner peek is not a turn. */
   get turning(): boolean {
     return !!this.turn && this.turn.kind !== "peek";
@@ -74,13 +82,10 @@ export class TurnMachine {
    */
   go(dir: 1 | -1, dur = 1.05): void {
     if (this.dragging) return;
-    if (this.reducedMotion) {
-      this.jump(this.K + dir);
-      return;
-    }
     const T = this.turn;
     if (!T) {
-      if (this.beginTurn(dir, "anim")) this.animateTo(dir > 0 ? 1 : 0, dur, easeInOut);
+      if (this.reducedMotion) this.jump(this.K + dir);
+      else if (this.beginTurn(dir, "anim")) this.animateTo(dir > 0 ? 1 : 0, dur, easeInOut);
     } else if (T.kind === "peek" && T.dir === dir) {
       T.A0 = 1.3;
       this.animateTo(dir > 0 ? 1 : 0, dur, easeInOut);

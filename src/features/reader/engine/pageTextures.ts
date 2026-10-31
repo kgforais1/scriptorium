@@ -115,11 +115,18 @@ export class PageTextures<T> {
   /**
    * Rebuilds the paper texture and drops every cached page, because the letterbox band bakes the
    * paper colour into each page. In-flight loads finish with the new colour, since the backend
-   * letterboxes at upload time.
+   * letterboxes at upload time. If the new paper texture cannot be built this throws and changes
+   * nothing. While suspended there is no GPU to upload to: it only records the colour and clears
+   * the cache, and `resume` builds the texture from that colour.
    */
   setPaper(paper: Rgb): void {
-    this.paperColor = paper;
+    if (this.suspended) {
+      this.paperColor = paper;
+      this.cache.clear();
+      return;
+    }
     const fresh = this.backend.paper(paper);
+    this.paperColor = paper;
     this.backend.free(this.paperTex);
     this.paperTex = fresh;
     this.cache.clear();

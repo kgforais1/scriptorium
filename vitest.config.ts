@@ -8,8 +8,10 @@ export default defineConfig({
       include: ["src/lib/**", "src/features/reader/engine/**"],
       exclude: [
         "src/**/*.test.{ts,tsx}",
-        // GL, shader, and pointer-event code needs a GPU and a real canvas, so it has no unit
-        // tests. The logic they drive is split into the pure modules above, which do.
+        // GL, shader, and DOM-event glue needs a GPU or a real canvas, so it has no unit tests.
+        // The decisions it acts on are in the pure modules that are covered: turnMachine,
+        // pageTextures, gesture (tap versus drag, settle targets), camera, corners.
+        // What stays untested is the wiring itself: draw order, listener setup, and teardown.
         "src/features/reader/engine/{engine,renderer,glBackend,gl,shaders,pointerInput,index}.ts",
       ],
       reporter: ["text", "lcov"],

@@ -130,6 +130,46 @@ describe("PageTextures", () => {
       expect(fb.freed.filter((t) => t.kind === "page")).toHaveLength(3);
     });
 
+    it("changes nothing when the new paper texture cannot be built", () => {
+      const { tex, fb } = setup();
+      tex.upload(1, page());
+      const paperBefore = tex.get(0);
+      const freedBefore = fb.freed.length;
+      const real = fb.backend.paper;
+      fb.backend.paper = () => {
+        throw new Error("texture upload failed: GL error 0x505");
+      };
+      expect(() => tex.setPaper(PAPER_B)).toThrow(/GL error/);
+      expect(tex.size).toBe(1);
+      expect(tex.get(0)).toBe(paperBefore);
+      expect(fb.freed).toHaveLength(freedBefore);
+      // The old colour is still what new pages are composed with.
+      fb.backend.paper = real;
+      tex.upload(2, page());
+      expect(tex.get(2).paper).toEqual(PAPER_A);
+    });
+
+    it("only records the colour and clears the cache while suspended", () => {
+      const { tex, fb } = setup();
+      tex.upload(1, page());
+      tex.suspend();
+      const made = fb.made.length;
+      fb.backend.paper = () => {
+        throw new Error("no GPU while suspended");
+      };
+      expect(() => tex.setPaper(PAPER_B)).not.toThrow();
+      expect(tex.size).toBe(0);
+      expect(fb.made).toHaveLength(made);
+    });
+
+    it("rebuilds the paper from the colour set while suspended when it resumes", () => {
+      const { tex } = setup();
+      tex.suspend();
+      tex.setPaper(PAPER_B);
+      tex.resume();
+      expect(tex.get(0).paper).toEqual(PAPER_B);
+    });
+
     it("recomposes pages with the new paper colour when they reload", async () => {
       const { tex } = setup();
       tex.upload(1, page());

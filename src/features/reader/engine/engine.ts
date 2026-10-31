@@ -50,8 +50,13 @@ export interface FlipbookController {
   prev(): void;
   /** Open a spread. A distant one jumps next to it and turns the last step. */
   goTo(spread: number): void;
-  /** Restyle the book from a new scene. Page textures are rebuilt for the new paper colour. */
+  /**
+   * Restyle the book from a new scene. Page textures are rebuilt for the new paper colour. Never
+   * throws: a failure keeps the old scene and reports through `onError`.
+   */
   setScene(scene: Scene): void;
+  /** Switch between the curl and the cross-fade. Applies from the next turn. */
+  setReducedMotion(reduced: boolean): void;
   /** Free everything. Safe to call twice. */
   dispose(): void;
 }
@@ -162,12 +167,28 @@ export class FlipbookEngine implements FlipbookController {
    * dropped, because the letterbox band bakes `material.paper` into each page.
    */
   setScene(scene: Scene) {
-    this.scene = scene;
-    this.textures.setPaper(scene.material.paper);
-    this.renderer.layout(scene);
-    this.prefetch();
+    if (this.disposed) return;
+    try {
+      // Paper first: it throws without changing anything, so a failure keeps the old skin whole.
+      this.textures.setPaper(scene.material.paper);
+      this.scene = scene;
+      // While the context is lost there is no GPU to lay out on; the restore does it.
+      if (!this.lost) {
+        this.renderer.layout(scene);
+        this.prefetch();
+      }
+    } catch (err) {
+      this.fail(null, "could not apply the new scene", err);
+      return;
+    }
     this.dirty = true;
     this.geometryDue = true;
+  }
+
+  /** Switches between the curl and the cross-fade. Applies from the next turn. */
+  setReducedMotion(reduced: boolean) {
+    this.machine.setReducedMotion(reduced);
+    this.input.setReducedMotion(reduced);
   }
 
   /** Frees everything. Safe to call twice, and after a start that threw part way. */
@@ -354,16 +375,19 @@ export class FlipbookEngine implements FlipbookController {
     if (this.disposed || this.lost) return;
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    // onChange and onGeometry run user code, which may dispose the engine mid-frame.
     const moving = this.machine.step(dt);
     const hadFade = !!this.fade;
     const fade = this.stepFade(dt);
+    if (this.disposed || this.lost) return;
     const T = this.machine.turn;
     if (T) this.renderer.uploadLeaf(T);
     if (T || this.geometryDue) this.publishGeometry();
+    if (this.disposed || this.lost) return;
     if (this.dirty || moving || hadFade) {
       this.renderer.render(this.scene, (slot) => this.textures.get(slot), T, fade);
       this.dirty = false;
     }
-    this.raf = requestAnimationFrame(this.frame);
+    if (!this.disposed && !this.lost) this.raf = requestAnimationFrame(this.frame);
   };
 }
