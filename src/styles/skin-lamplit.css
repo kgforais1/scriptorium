@@ -1,0 +1,34 @@
+/* Generated from design/skins/lamplit/tokens.json by scripts/build-skin-css.mjs. Do not edit. */
+:root {
+  --sk-color-background: #0b0705;
+  --sk-color-ink: #f2e8d6;
+  --sk-color-ink-muted: #f2e8d694;
+  --sk-color-ink-faint: #f2e8d65c;
+  --sk-color-ink-title: #f6ecdaeb;
+  --sk-color-ink-heading: #f7eedf;
+  --sk-color-ink-body: #f2e8d6d6;
+  --sk-color-ink-control: #f2e8d6b8;
+  --sk-color-ink-toggle: #f2e8d6cc;
+  --sk-color-hairline: #ffecce1a;
+  --sk-color-accent: #d9b36e;
+  --sk-color-accent-strong: #b8873f;
+  --sk-color-focus-ring: #d9b36e;
+  --sk-color-chip-text: #e7c98f;
+  --sk-color-chip-background: #d9b36e1c;
+  --sk-color-glass: #1a130d8f;
+  --sk-color-panel: #19120dcc;
+  --sk-color-detail-background: #2a1f16;
+  --sk-color-badge-background: #140e0ab8;
+  --sk-color-loading: #9b7a48;
+  --sk-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  --sk-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  --sk-font-serif: "Iowan Old Style", "Hoefler Text", "Palatino", "Palatino Linotype", "Book Antiqua", "Georgia", serif;
+  --sk-radius-control: 10px;
+  --sk-radius-bar: 16px;
+  --sk-radius-panel: 18px;
+  --sk-blur-bar: 22px;
+  --sk-blur-panel: 28px;
+  --sk-motion-ease: cubic-bezier(0.2, 0.75, 0.15, 1);
+  --sk-motion-panel: 650ms;
+  --sk-motion-fade: 350ms;
+}

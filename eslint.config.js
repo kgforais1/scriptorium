@@ -47,6 +47,12 @@ export default tseslint.config(
     },
   },
   {
+    // Build and check scripts run in Node. Same complexity limit as the app code.
+    files: ["scripts/**/*.mjs"],
+    languageOptions: { globals: { ...globals.node } },
+    rules: { complexity: ["error", 15] },
+  },
+  {
     // Config files run in Node.
     files: ["*.config.{js,ts}"],
     languageOptions: { globals: { ...globals.node } },
