@@ -86,7 +86,9 @@ export function peekStays(queued: number, peekDir: number, corner: { side: numbe
 /** Updates a drag's smoothed horizontal velocity (book units per second) and position. */
 export function trackDrag(d: Drag, x: number, now: number): void {
   const dt = Math.max(1, now - d.lt);
-  d.vx = lerp(d.vx, ((x - d.lx) / dt) * 1000, 0.5);
+  // After a pause the old velocity is stale, so the blend starts from rest.
+  const prev = now - d.lt > FLICK_WINDOW_MS ? 0 : d.vx;
+  d.vx = lerp(prev, ((x - d.lx) / dt) * 1000, 0.5);
   d.lx = x;
   d.lt = now;
 }

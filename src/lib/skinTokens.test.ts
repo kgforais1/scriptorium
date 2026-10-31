@@ -132,6 +132,10 @@ describe("checkRequired", () => {
     expect(checkRequired([tok("a", "number")], [tok("a", "color")])).toEqual(["a: expected $type color, got number"]);
   });
 
+  it("reports a path listed twice in the required list", () => {
+    expect(checkRequired([tok("a")], [tok("a"), tok("a")])).toEqual(["a: listed more than once in required-tokens.json"]);
+  });
+
   it("reports a path defined twice, such as a dotted key next to a nested group", () => {
     const tokens = flattenTokens({
       "color.ink": { $type: "color", $value: "#000" },

@@ -165,6 +165,20 @@ describe("trackDrag", () => {
     expect([d.lx, d.lt]).toEqual([0.4, 1100]);
   });
 
+  it("starts from rest after a pause longer than the flick window", () => {
+    const d = { ...drag(-4), lt: 1000 };
+    trackDrag(d, d.lx, 1500);
+    expect(d.vx).toBe(0);
+    expect(turnCompletes(turn(1, 0.2), d, true, 1510)).toBe(false);
+  });
+
+  it("keeps the old velocity across a short gap, so a flick still completes", () => {
+    const d = { ...drag(-4), lt: 1000 };
+    trackDrag(d, d.lx, 1000 + FLICK_WINDOW_MS);
+    expect(d.vx).toBeCloseTo(-2);
+    expect(turnCompletes(turn(1, 0.2), d, true, 1000 + FLICK_WINDOW_MS + 10)).toBe(true);
+  });
+
   it("treats a zero time step as 1 ms instead of dividing by zero", () => {
     const d = drag(0);
     d.lx = 0;

@@ -142,9 +142,13 @@ export type RequiredToken = { path: string; type: string };
  * path), or of the wrong `$type`.
  */
 export function checkRequired(tokens: readonly RequiredToken[], required: readonly RequiredToken[]): string[] {
-  const want = new Map(required.map((r) => [r.path, r.type]));
-  const seen = new Set<string>();
+  const want = new Map<string, string>();
   const errors: string[] = [];
+  for (const r of required) {
+    if (want.has(r.path)) errors.push(`${r.path}: listed more than once in required-tokens.json`);
+    want.set(r.path, r.type);
+  }
+  const seen = new Set<string>();
   for (const t of tokens) {
     if (seen.has(t.path)) {
       errors.push(`${t.path}: defined more than once`);

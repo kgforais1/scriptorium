@@ -134,17 +134,22 @@ export class PageTextures<T> {
 
   /**
    * Starts any of the slots not yet loaded and resolves once each one is cached, has failed
-   * (the host has been told), or has nothing to load. It never rejects, and a load that was
-   * aborted counts as over, so waiting on it cannot hang on a dropped decode.
+   * (the host has been told), or has nothing to load. A load that a resize aborted is started
+   * again, so the wait ends on a texture and not on a dropped decode. It stops waiting when the
+   * optional signal aborts, when the cache is disposed, or while suspended. It never rejects.
    */
-  async whenSettled(slots: readonly number[]): Promise<void> {
-    const waits: Promise<void>[] = [];
-    for (const slot of slots) {
-      this.load(slot);
-      const entry = this.loading.get(slot);
-      if (entry) waits.push(entry.done);
+  async whenSettled(slots: readonly number[], signal?: AbortSignal): Promise<void> {
+    while (!signal?.aborted && !this.abort.signal.aborted && !this.suspended) {
+      const waits: Promise<void>[] = [];
+      for (const slot of slots) {
+        if (this.cache.has(slot) || this.failed.has(slot) || !this.host.sourceOf(slot)) continue;
+        this.load(slot);
+        const entry = this.loading.get(slot);
+        if (entry) waits.push(entry.done);
+      }
+      if (waits.length === 0) return;
+      await Promise.allSettled(waits);
     }
-    await Promise.allSettled(waits);
   }
 
   /**

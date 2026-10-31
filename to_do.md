@@ -25,6 +25,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
   Phase 3 checks: A4 with a 1-page book, mouse and touch turns, reduced motion, the glass chrome,
   A6 with a moved library, the A9 measurements on the Dulac corpus (open to first turn, RSS with
   texture height, fps), and a WebView2 run. Does not block merging PRs.
+- **Reader notes follow-up** — Reader notes: clear a page's failure note when it later loads (after a context restore), and the engine note after a successful resize or scene update; and cap concurrent texture rebuilds in refresh() — CodeRabbit #67.
 - **Cap decoded scan size** — Cap decoded scan size (createImageBitmap resize) so huge scans don't spike memory — CodeRabbit #68.
 - **Sonar backlog (22 local issues)** — all in template hook and CI scripts (complexity, regexes, duplicated literals). See
   `tmp/sonar-latest-issues.md` after a scan.

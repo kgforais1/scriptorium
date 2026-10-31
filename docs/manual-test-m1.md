@@ -225,8 +225,9 @@ the Results table. Compare it with the `csp` block in `tauri.conf.json`.
 
 ### Page turns (A4)
 
-- [ ] Make a 1-page book: a scans folder with one image. Open it. Expected: the page lies alone
-  on the right, the back pastedown shows, and the indicator reads "page 1 of 1".
+- [ ] Make a 1-page book: a scans folder with one image. Open it. Expected: the blank
+  front pastedown lies on the left and the scan on the right, with no back pastedown, and the
+  indicator reads "page 1 of 1".
 - [ ] Press the right arrow key, then click **Next page**. Expected: nothing can turn, and
   **Previous page** and **Next page** are both disabled.
 - [ ] Open the 12-page fixture. Turn from the front to the back with **Next page**. Expected:

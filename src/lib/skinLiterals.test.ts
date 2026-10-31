@@ -18,6 +18,14 @@ describe("COLOR_FUNCTION", () => {
     expect(COLOR_FUNCTION.test(s)).toBe(true);
   });
 
+  it.each(["color(srgb 1 0 0)", "color(srgb-linear 1 0 0)", "color(xyz-d65 1 0 0)", "color(from red srgb r g b)"])("matches %s", (s) => {
+    expect(COLOR_FUNCTION.test(s)).toBe(true);
+  });
+
+  it("ignores a plain color(...) call", () => {
+    expect(COLOR_FUNCTION.test("color(page)")).toBe(false);
+  });
+
   it("ignores identifiers that merely end in rgb", () => {
     expect(COLOR_FUNCTION.test("toRgb(x)")).toBe(false);
   });
@@ -220,5 +228,16 @@ describe("isCheckedFile", () => {
     [String.raw`src\features\reader\engine\a.ts`, false],
   ])("%s -> %s", (path, expected) => {
     expect(isCheckedFile(path)).toBe(expected);
+  });
+});
+
+describe("color( in script and CSS", () => {
+  it("passes a plain color(page) call in a .tsx", () => {
+    expect(rules("a.tsx", "const c = color(page);")).toEqual([]);
+  });
+
+  it("flags a CSS colour space call in a .tsx and in CSS", () => {
+    expect(rules("a.tsx", "const c = 'color(display-p3 1 0 0)';")).toEqual(["1:color-function"]);
+    expect(rules("a.css", ".a { color: color(display-p3 1 0 0); }")).toEqual(["1:color-function"]);
   });
 });

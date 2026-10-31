@@ -183,7 +183,7 @@ export class FlipbookEngine implements FlipbookController {
       signal.addEventListener("abort", onAbort, { once: true });
     });
     try {
-      await Promise.race([this.textures.whenSettled([2 * k, 2 * k + 1]), aborted]);
+      await Promise.race([this.textures.whenSettled([2 * k, 2 * k + 1], signal), aborted]);
     } finally {
       // The signal outlives a normal start, so drop the listener it never needed.
       if (onAbort) signal.removeEventListener("abort", onAbort);

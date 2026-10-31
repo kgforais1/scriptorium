@@ -177,6 +177,16 @@ describe("worker decoding", () => {
     expect(w.terminated).toBe(false);
   });
 
+  it("does not retry on the main thread when it is disposed right after a compose error", async () => {
+    stubMainThread();
+    const result = handle.decode(src, target, new AbortController().signal);
+    await flush();
+    w.reply({ type: "error", id: 1, message: "no surface", stage: "compose" });
+    handle.dispose();
+    await expect(result).rejects.toThrow("disposed");
+    expect(createImageBitmap).not.toHaveBeenCalled();
+  });
+
   it("tells the worker to cancel and rejects with the abort reason", async () => {
     const ac = new AbortController();
     const result = handle.decode(src, target, ac.signal);

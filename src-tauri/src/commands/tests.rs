@@ -361,6 +361,8 @@ fn a_worker_announces_only_after_meta_json_holds_the_page() {
         s.record_seq(&key, 2, 1, t0).unwrap();
     }
     let token = session.lock().unwrap().claim_worker(&key).unwrap();
+    // A later save lands after the claim and before the worker runs; the worker writes it.
+    session.lock().unwrap().record_seq(&key, 1, 2, t0).unwrap();
     assert_eq!(view_of(&root).last_read_page, 0, "not written yet");
     let announced = Cell::new(false);
     run_worker(
@@ -370,10 +372,10 @@ fn a_worker_announces_only_after_meta_json_holds_the_page() {
         |r, p| save_last_read_page(r, p).map(|_| ()),
         std::thread::sleep,
         |seq| {
-            assert_eq!(seq, 1);
+            assert_eq!(seq, 2, "the event carries the newest seq");
             assert_eq!(
                 view_of(&root).last_read_page,
-                2,
+                1,
                 "the event goes out after the write"
             );
             announced.set(true);

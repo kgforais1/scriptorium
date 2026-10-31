@@ -619,4 +619,26 @@ describe("PageTextures.whenSettled", () => {
     tex.dispose();
     await expect(wait).resolves.toBeUndefined();
   });
+
+  it("waits again when a refresh aborts the opening load", async () => {
+    const pending: Array<(p: DecodedPage) => void> = [];
+    const decode: PageDecoder = (_s, target, signal) =>
+      new Promise<DecodedPage>((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason));
+        pending.push(() => resolve(composed(target)));
+      });
+    const t = setup({ decode });
+    t.size.texH = 2;
+    let settled = false;
+    const wait = t.tex.whenSettled([2]).then(() => (settled = true));
+    await flush();
+    t.size.texH = 1024;
+    t.tex.refresh();
+    await flush();
+    expect(settled).toBe(false);
+    expect(pending).toHaveLength(2);
+    pending[1]!(page());
+    await wait;
+    expect(t.tex.has(2)).toBe(true);
+  });
 });

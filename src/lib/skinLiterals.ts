@@ -52,8 +52,12 @@ function isBorderColorProp(prop: string): boolean {
 
 /** Matches #rgb, #rgba, #rrggbb, #rrggbbaa. Exported for tests. */
 export const HEX_COLOR = /#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![0-9a-z_-])/i;
+const NAMED_COLOR_FUNCTION = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/;
+// `color(` is also a plain function name in TS, so it counts only when a colour space or `from`
+// follows. A hyphenated space such as display-p3 or xyz-d50 matches on its first word.
+const COLOR_SPACE_FUNCTION = /\bcolor\(\s*(?:srgb|display-p3|a98-rgb|prophoto-rgb|rec2020|xyz|from)\b/;
 /** Matches a CSS colour function call. Exported for tests. */
-export const COLOR_FUNCTION = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/i;
+export const COLOR_FUNCTION = new RegExp(`${NAMED_COLOR_FUNCTION.source}|${COLOR_SPACE_FUNCTION.source}`, "i");
 const NAMED_COLOR_WORD = new RegExp(String.raw`(?<![\w-])(?:${NAMED_COLORS})(?![\w-])`, "i");
 const CSS_DECL = /(?<![\w-])([\w-]+)\s*:\s*([^;{}]+)/g;
 // A JS style-object entry: a camelCase or PascalCase (vendor-prefixed) key, bare or in matching

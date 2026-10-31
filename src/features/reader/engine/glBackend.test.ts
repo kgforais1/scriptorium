@@ -9,7 +9,7 @@ const raw: DecodedPage = { bitmap, width: 200, height: 100, composed: false };
 const done: DecodedPage = { bitmap, width: 1000, height: 1000, composed: true };
 
 // A stand-in GL context: constants are numbers, getError is clean, and every call is recorded.
-function fakeGl(errorAfterUpload = 0) {
+function fakeGl(errorAfterUpload = 0, throwOnUpload?: Error) {
   const calls: Record<string, unknown[][]> = {};
   let pending = 0;
   const gl = new Proxy(
@@ -30,7 +30,10 @@ function fakeGl(errorAfterUpload = 0) {
         return (...args: unknown[]) => {
           if (!calls[prop]) calls[prop] = [];
           calls[prop].push(args);
-          if (prop === "texImage2D") pending = errorAfterUpload;
+          if (prop === "texImage2D") {
+            if (throwOnUpload) throw throwOnUpload;
+            pending = errorAfterUpload;
+          }
           return prop === "createTexture" ? { id: calls[prop].length } : undefined;
         };
       },
@@ -92,6 +95,14 @@ describe("createGlBackend", () => {
     const { gl, calls } = fakeGl(0x501);
     const backend = createGlBackend(gl, 1.4);
     expect(() => backend.page(done, [1, 1, 1], 512)).toThrow(/GL error 0x501/);
+    expect(calls.deleteTexture).toHaveLength(1);
+  });
+
+  it("rethrows an error thrown by the upload and deletes the texture once", () => {
+    const boom = new Error("upload blew up");
+    const { gl, calls } = fakeGl(0, boom);
+    const backend = createGlBackend(gl, 1.4);
+    expect(() => backend.page(done, [1, 1, 1], 512)).toThrow(boom);
     expect(calls.deleteTexture).toHaveLength(1);
   });
 

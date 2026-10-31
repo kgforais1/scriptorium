@@ -125,7 +125,11 @@ export function createPageDecoder(env: DecoderEnv): PageDecoderHandle {
     try {
       return await viaWorker(page, target, signal);
     } catch (err) {
-      if (err instanceof WorkerFailed) return decodePage(page, target, signal);
+      if (err instanceof WorkerFailed) {
+        // Disposed between the failed reply and this catch: no retry on a stopped decoder.
+        if (disposed) throw Object.assign(new Error(DISPOSED), { cause: err });
+        return decodePage(page, target, signal);
+      }
       throw err;
     }
   };
