@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCamera } from "./camera";
+import { computeCamera, INSETS } from "./camera";
 import {
   cornerAt, dragProgress, gripAt, hoverOnPage, onPageAt, pastSlop, peekStays, pickLocal, settleFor, tapDirection, TAP_SLOP,
   trackDrag, turnCompletes, type Drag, type Tap,
@@ -69,7 +69,7 @@ describe("cornerAt", () => {
 describe("pickLocal", () => {
   it("hits the book centre at the canvas centre", () => {
     const cam = computeCamera(1000, 800, makeBook(1.4, 10), 18);
-    const [x] = pickLocal(cam.inv, 1000, 800, 500, 24 + (800 - 24 - 88) / 2);
+    const [x] = pickLocal(cam.inv, 1000, 800, 500, INSETS.top + (800 - INSETS.top - INSETS.bot) / 2);
     expect(Math.abs(x)).toBeLessThan(0.01);
   });
 });

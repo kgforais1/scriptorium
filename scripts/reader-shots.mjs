@@ -57,7 +57,7 @@ function loadBook(dir) {
   const files = readdirSync(dir).filter((f) => /\.(jpe?g|png)$/i.test(f)).sort();
   if (files.length === 0) throw new Error(`${dir}: no JPEG or PNG scans`);
   const pages = files.map((f) => ({ path: join(dir, f), ...imageSize(join(dir, f)) }));
-  const title = dir.includes("dulac") ? "Stories from Hans Andersen" : "Fixture book";
+  const title = dir.includes("dulac") ? "Edmund Dulac's Picture-Book" : "Fixture book";
   return { id: "shots", title, root: "/shots", lastReadPage: 0, saveSeq: 0, pages };
 }
 
