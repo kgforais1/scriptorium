@@ -68,6 +68,15 @@ describe("LruCache", () => {
     expect(make(1).cache.get(9)).toBeUndefined();
   });
 
+  it("snapshot lists the entries without counting as a use", () => {
+    const { cache, dropped } = make(2);
+    cache.set(1, "a");
+    cache.set(2, "b");
+    expect(cache.snapshot()).toEqual([[1, "a"], [2, "b"]]);
+    cache.set(3, "c");
+    expect(dropped).toEqual(["a"]);
+  });
+
   it("clear drops everything", () => {
     const { cache, dropped } = make(3);
     cache.set(1, "a");

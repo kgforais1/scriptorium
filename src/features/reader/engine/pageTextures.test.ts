@@ -67,6 +67,13 @@ function setup(opts: { capacity?: number; decode?: PageDecoder; pinned?: number[
   return { tex, fb, decodeSpy, onLoad, onError, pinned, size };
 }
 
+// Loads slots at a tiny height, as when the canvas was laid out at 1 px.
+async function loadTiny(tex: ReturnType<typeof setup>, slots: number[], texH = 2) {
+  tex.size.texH = texH;
+  for (const s of slots) tex.tex.load(s);
+  await flush();
+}
+
 describe("PageTextures", () => {
   it("shows paper while a page loads, then the page", async () => {
     const { tex, onLoad } = setup();
@@ -272,6 +279,173 @@ describe("PageTextures", () => {
       tex.upload(2, page());
       expect(tex.get(1)).toMatchObject({ composed: true, texH: 300 });
       expect(tex.get(2)).toMatchObject({ composed: false, texH: 640, paper: PAPER_A });
+    });
+  });
+
+  describe("refresh (a bigger target replaces small textures)", () => {
+    it("rebuilds textures built much smaller than the target, pinned ones included", async () => {
+      const t = setup({ pinned: [1, 2] });
+      await loadTiny(t, [1, 2, 3]);
+      expect(t.tex.get(1).texH).toBe(2);
+      t.size.texH = 800;
+      t.tex.refresh();
+      await flush();
+      for (const slot of [1, 2, 3]) expect(t.tex.get(slot).texH).toBe(800);
+      expect(t.tex.size).toBe(3);
+    });
+
+    it("keeps the old texture on screen until the new one lands, then frees it", async () => {
+      const t = setup();
+      await loadTiny(t, [1]);
+      const old = t.tex.get(1);
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(t.tex.get(1)).toBe(old);
+      expect(t.fb.freed).not.toContain(old);
+      await flush();
+      expect(t.tex.get(1)).not.toBe(old);
+      expect(t.fb.freed).toContain(old);
+      expect(t.onLoad).toHaveBeenCalledTimes(2);
+    });
+
+    it("asks the decoder for the new height and the current paper", async () => {
+      const t = setup();
+      await loadTiny(t, [1]);
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(t.decodeSpy.mock.calls[1][1]).toEqual({ boxAspect: BOX, texH: 800, paper: PAPER_A });
+    });
+
+    it("leaves textures alone for a small resize or a smaller target", async () => {
+      const t = setup();
+      await loadTiny(t, [1, 2], 800);
+      t.size.texH = 900;
+      t.tex.refresh();
+      t.size.texH = 300;
+      t.tex.refresh();
+      await flush();
+      expect(t.decodeSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not rebuild a texture twice while the rebuild is in flight", async () => {
+      const t = setup();
+      await loadTiny(t, [1]);
+      t.size.texH = 800;
+      t.tex.refresh();
+      t.tex.refresh();
+      await flush();
+      expect(t.decodeSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("rebuilds raw (main-thread fallback) textures at the new height too", async () => {
+      const t = setup({ decode: async () => page() });
+      await loadTiny(t, [1], 100);
+      expect(t.tex.get(1)).toMatchObject({ composed: false, texH: 100 });
+      t.size.texH = 800;
+      t.tex.refresh();
+      await flush();
+      expect(t.tex.get(1)).toMatchObject({ composed: false, texH: 800 });
+    });
+
+    it("keeps the old texture and reports nothing when a rebuild fails to decode", async () => {
+      let fail = false;
+      const t = setup({
+        decode: async (_s, target) => {
+          if (fail) throw new Error("HTTP 500");
+          return composed(target);
+        },
+      });
+      await loadTiny(t, [1]);
+      const old = t.tex.get(1);
+      fail = true;
+      t.size.texH = 800;
+      t.tex.refresh();
+      await flush();
+      expect(t.tex.get(1)).toBe(old);
+      expect(t.onError).not.toHaveBeenCalled();
+      // The next refresh tries again.
+      fail = false;
+      t.tex.refresh();
+      await flush();
+      expect(t.tex.get(1).texH).toBe(800);
+    });
+
+    it("keeps the old texture and reports nothing when the GPU refuses the rebuild", async () => {
+      const t = setup();
+      await loadTiny(t, [1]);
+      const old = t.tex.get(1);
+      t.fb.failPages(true);
+      t.size.texH = 800;
+      t.tex.refresh();
+      await flush();
+      expect(t.tex.get(1)).toBe(old);
+      expect(t.onError).not.toHaveBeenCalled();
+      expect(t.fb.freed).not.toContain(old);
+    });
+
+    it("drops a rebuild whose slot was evicted while it decoded", async () => {
+      let finish!: () => void;
+      let slow = false;
+      const t = setup({
+        capacity: 1,
+        decode: (_s, target) =>
+          slow ? new Promise<DecodedPage>((resolve) => (finish = () => resolve(composed(target)))) : Promise.resolve(composed(target)),
+      });
+      await loadTiny(t, [1]);
+      slow = true;
+      t.size.texH = 800;
+      t.tex.refresh();
+      slow = false;
+      t.tex.upload(2, composed({ boxAspect: BOX, texH: 800, paper: PAPER_A }));
+      expect(t.tex.has(1)).toBe(false);
+      finish();
+      await flush();
+      expect(t.tex.has(1)).toBe(false);
+      expect(t.tex.size).toBe(1);
+    });
+
+    it("aborts a decode in flight that would land too small and lets it restart on demand", async () => {
+      const signals: AbortSignal[] = [];
+      const t = setup({
+        decode: (...args) => {
+          signals.push(args[2]);
+          return new Promise<DecodedPage>(() => undefined);
+        },
+      });
+      t.size.texH = 2;
+      t.tex.load(1);
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(signals[0].aborted).toBe(true);
+      t.tex.load(1);
+      expect(signals).toHaveLength(2);
+      expect(t.decodeSpy.mock.calls[1][1].texH).toBe(800);
+    });
+
+    it("lets an in-flight decode at a fitting size finish", async () => {
+      const signals: AbortSignal[] = [];
+      const t = setup({
+        decode: (_s, target, signal) => {
+          signals.push(signal);
+          return new Promise<DecodedPage>((resolve) => setTimeout(() => resolve(composed(target)), 0));
+        },
+      });
+      t.size.texH = 780;
+      t.tex.load(1);
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(signals[0].aborted).toBe(false);
+      await flush();
+      expect(t.tex.has(1)).toBe(true);
+    });
+
+    it("does nothing while suspended", async () => {
+      const t = setup();
+      await loadTiny(t, [1]);
+      t.tex.suspend();
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(t.decodeSpy).toHaveBeenCalledTimes(1);
     });
   });
 

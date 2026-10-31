@@ -353,6 +353,9 @@ export class FlipbookEngine implements FlipbookController {
       t = window.setTimeout(() => {
         if (this.disposed || this.lost) return;
         this.renderer.layout(this.scene);
+        // A canvas that grew (from its first tiny layout, or a window maximised) wants sharper pages.
+        this.textures.refresh();
+        this.prefetch();
         this.dirty = true;
         this.geometryDue = true;
       }, 60);
