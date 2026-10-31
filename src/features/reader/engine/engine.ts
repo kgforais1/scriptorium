@@ -175,12 +175,19 @@ export class FlipbookEngine implements FlipbookController {
   // Resolves when the opening spread's two slots have settled, or rejects as soon as the signal
   // aborts, so a closed book does not wait on decodes.
   private async openingLoaded(signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
     const k = this.machine.spread;
+    let onAbort: (() => void) | undefined;
     const aborted = new Promise<never>((_, reject) => {
-      if (signal.aborted) reject(signal.reason);
-      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      onAbort = () => reject(signal.reason);
+      signal.addEventListener("abort", onAbort, { once: true });
     });
-    await Promise.race([this.textures.whenSettled([2 * k, 2 * k + 1]), aborted]);
+    try {
+      await Promise.race([this.textures.whenSettled([2 * k, 2 * k + 1]), aborted]);
+    } finally {
+      // The signal outlives a normal start, so drop the listener it never needed.
+      if (onAbort) signal.removeEventListener("abort", onAbort);
+    }
     signal.throwIfAborted();
   }
 
