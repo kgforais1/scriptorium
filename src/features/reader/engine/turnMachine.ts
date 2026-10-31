@@ -60,10 +60,11 @@ export class TurnMachine {
 
   /**
    * Switches between the curl and the cross-fade. A turn already in the air finishes as a curl,
-   * and the change applies from the next one.
+   * and the change applies from the next one. A corner peek is not a turn, so it settles at once.
    */
   setReducedMotion(reduced: boolean): void {
     this.reducedMotion = reduced;
+    if (reduced && this.turn?.kind === "peek") this.turn.pkT = 0;
   }
 
   /** True while a leaf is turning. A corner peek is not a turn. */
@@ -78,7 +79,9 @@ export class TurnMachine {
 
   /**
    * Turns one spread. During an animation, or while a corner peek settles, the step is queued
-   * (up to two) and applied when the turn ends. During an active drag it is dropped.
+   * (up to two) and applied when the turn ends. During an active drag it is dropped. Under
+   * reduced motion an open peek is never turned into a curl: it settles, then the step runs as
+   * a cross-fade.
    */
   go(dir: 1 | -1, dur = 1.05): void {
     if (this.dragging) return;
@@ -86,7 +89,7 @@ export class TurnMachine {
     if (!T) {
       if (this.reducedMotion) this.jump(this.K + dir);
       else if (this.beginTurn(dir, "anim")) this.animateTo(dir > 0 ? 1 : 0, dur, easeInOut);
-    } else if (T.kind === "peek" && T.dir === dir) {
+    } else if (T.kind === "peek" && T.dir === dir && !this.reducedMotion) {
       T.A0 = 1.3;
       this.animateTo(dir > 0 ? 1 : 0, dur, easeInOut);
     } else {

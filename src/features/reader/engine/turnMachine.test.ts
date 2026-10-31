@@ -202,6 +202,37 @@ describe("TurnMachine", () => {
       expect(m.spread).toBe(2);
     });
 
+    it("settles an open peek at once when reduced motion turns on", () => {
+      const { m } = setup(5);
+      const T = m.beginTurn(1, "peek", 0.9)!;
+      expect(T.pkT).toBe(1);
+      m.setReducedMotion(true);
+      expect(T.pkT).toBe(0);
+    });
+
+    it("does not touch a peek when reduced motion turns off", () => {
+      const { m } = setup(5);
+      m.setReducedMotion(true);
+      const T = m.beginTurn(1, "peek", 0.9)!;
+      m.setReducedMotion(false);
+      expect(T.pkT).toBe(1);
+    });
+
+    it("never curls an open peek under reduced motion: it settles, then fades", () => {
+      const { m, log, settle } = setup(5);
+      const T = m.beginTurn(1, "peek", 0.9)!;
+      m.setReducedMotion(true);
+      m.go(1);
+      expect(T.kind).toBe("peek");
+      expect(T.anim).toBeNull();
+      expect(m.queued).toBe(1);
+      expect(m.spread).toBe(0);
+      settle();
+      expect(m.turn).toBeNull();
+      expect(m.spread).toBe(1);
+      expect(log).toContain("fade 0");
+    });
+
     it("lets a curl already in the air finish, queueing navigation made meanwhile", () => {
       const { m, log, settle } = setup(5);
       m.go(1);

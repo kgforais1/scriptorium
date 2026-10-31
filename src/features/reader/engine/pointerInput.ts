@@ -70,10 +70,11 @@ export class PointerInput {
 
   private readonly onMove = (e: PointerEvent) => {
     const l = this.local(e);
-    if (this.reducedMotion) {
-      this.canvas.style.cursor = onPageAt(this.book, l, 0.06) ? "pointer" : "default";
-    } else if (this.drag) {
+    // A drag already held keeps going until release, whatever the setting is now.
+    if (this.drag) {
       this.dragMove(e, l, this.drag);
+    } else if (this.reducedMotion) {
+      this.canvas.style.cursor = onPageAt(this.book, l, 0.06) ? "pointer" : "default";
     } else if (e.pointerType === "mouse") {
       // Hover peek is a mouse-only polish; touch and pen get the same turn by dragging.
       this.hoverMove(l);

@@ -52,7 +52,9 @@ export interface FlipbookController {
   goTo(spread: number): void;
   /**
    * Restyle the book from a new scene. Page textures are rebuilt for the new paper colour. Never
-   * throws: a failure keeps the old scene and reports through `onError`.
+   * throws, and reports failures through `onError`. If the new paper texture cannot be built, the
+   * old scene stays whole. Layout runs after the scene is committed, so a layout failure leaves
+   * the new scene applied with the previous camera.
    */
   setScene(scene: Scene): void;
   /** Switch between the curl and the cross-fade. Applies from the next turn. */
