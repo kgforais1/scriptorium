@@ -57,16 +57,4 @@ export default tseslint.config(
     files: ["*.config.{js,ts}"],
     languageOptions: { globals: { ...globals.node } },
   },
-  {
-    // Throwaway flipbook spike (ADR-0001). It is rewritten in Phase 3, so it is exempt from
-    // the complexity limit, the doc-comment rule, and the two React Compiler rules it trips.
-    // Do not add new files here.
-    files: ["src/spike/flipbook/**"],
-    rules: {
-      complexity: "off",
-      "jsdoc/require-jsdoc": "off",
-      "react-hooks/refs": "off",
-      "react-hooks/set-state-in-effect": "off",
-    },
-  },
 );

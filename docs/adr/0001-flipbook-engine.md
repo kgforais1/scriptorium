@@ -24,7 +24,8 @@ a page-flip library.
 
 - **Library:** none. Own code, ported from
   [`design/mockups/e-lamplit-gallery-ui.html`](../../design/mockups/e-lamplit-gallery-ui.html).
-  The spike port lives in [`src/spike/flipbook/`](../../src/spike/flipbook/).
+  The spike port was rewritten as [`src/features/reader/engine/`](../../src/features/reader/engine/)
+  in M1 Phase 3. The spike itself is in git history before that removal.
 - **Canvas vs HTML:** neither StPageFlip mode applies. The book is one WebGL2 canvas.
   Hard pages for M7 are a geometry change in the same engine (a stiff leaf with no bend), not
   a library limit.
@@ -42,7 +43,7 @@ a page-flip library.
 ### `scene.json` keys the engine reads
 
 All keys are required. A missing or malformed key is a load error
-([`scene.ts`](../../src/spike/flipbook/scene.ts)).
+([`scene.ts`](../../src/features/reader/engine/scene.ts)).
 
 | Key | Meaning |
 |---|---|
