@@ -576,8 +576,14 @@ spike exemption sentence in `AGENTS.md`, Phase 2's `BookView` and `book.css`, `p
 ADR-0001's demo section to point at the reader. Changelog history stays. `src/spike/`, its ESLint
 block, the `AGENTS.md` sentence, and the ADR's links to the spike went early, after chunk 4,
 because SonarCloud counted the unused copy as duplicated code. `scripts/reader-shots.mjs`
-(`pnpm shots`) drives the reader through `#spike` with a stubbed Tauri bridge; when the route
-goes, point it at `/`, where `last_book` opens the reader.
+(`pnpm shots`) drives the reader at `/` with a stubbed Tauri bridge, where `last_book` opens the reader.
+
+Chunk 5 did the rest of this list: `spike.rs`, `mod spike;`, the dev `generate_handler!` block
+(one handler set remains), `make-spike-fixtures.sh`, the `#spike` route, `Harness`,
+`DevHarness.tsx`, `devHarness.css`, `BookView` and `book.css`, `pageLabel` and `pageAlt`, and
+manual-test sections 8's spike step and 9. Phase 2's `clamp` and `paging` helpers lost their last
+caller with `BookView` and went too. `protocol-asset` and the asset scope stay: the reader loads
+pages through them. Chunk 6 rewrites the manual test.
 
 **Measurements** (in the PR and the manual test), on the Dulac corpus (A9):
 

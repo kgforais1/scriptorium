@@ -9,9 +9,6 @@ pub mod book_format;
 mod commands;
 pub mod ingest;
 pub mod library;
-// `dev` is Tauri's cfg for `tauri dev`, including `tauri dev --release`, where the spike UI runs.
-#[cfg(dev)]
-mod spike;
 
 use tauri::{Manager, RunEvent, WindowEvent};
 
@@ -27,19 +24,6 @@ pub fn run() {
                 commands::flush_all(window.app_handle());
             }
         });
-    // Exactly one `generate_handler!` per cfg: a second `invoke_handler` call would replace
-    // the first.
-    #[cfg(dev)]
-    let builder = builder.invoke_handler(tauri::generate_handler![
-        commands::inspect_folder,
-        commands::create_book,
-        commands::open_book,
-        commands::save_progress,
-        commands::close_book,
-        commands::last_book,
-        spike::spike_pages,
-    ]);
-    #[cfg(not(dev))]
     let builder = builder.invoke_handler(tauri::generate_handler![
         commands::inspect_folder,
         commands::create_book,

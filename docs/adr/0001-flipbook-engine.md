@@ -156,18 +156,17 @@ The spike is throwaway. M1 keeps the geometry, shaders, and scene loader, and re
 ## Demo
 
 ```sh
-scripts/make-spike-fixtures.sh   # needs the Dulac and Princess corpora, see tests/fixtures/README.md
-pnpm tauri dev                   # WKWebView, pages via the asset protocol
-pnpm dev                         # browser only, http://localhost:1420
-SCRIPTORIUM_SPIKE_DIR="$PWD/tmp/fixtures/corpus/dulac-picture-book/jpg" pnpm tauri dev   # 202-page smoke
+pnpm tauri dev    # WKWebView, pages via the asset protocol; opens the last book, or Home
+pnpm dev          # browser only, http://localhost:1420 (no Tauri bridge, so no book opens)
+pnpm shots        # headless Chrome with a stubbed bridge; screenshots land in tmp/shots/
 ```
 
-The fixture script needs the Dulac and Princess corpora in `tmp/fixtures/corpus/` (see
-`tests/fixtures/README.md`). `pnpm tauri dev` starts its own Vite on port 1420, so stop any
-other `pnpm dev` first. The spike shows only in dev builds.
+The reader is the app: open a book from Home and it shows the flipbook full-screen. `pnpm tauri dev`
+starts its own Vite on port 1420, so stop any other `pnpm dev` first. `pnpm shots` needs the
+Dulac corpus or the fixture book in `tmp/` (see `tests/fixtures/README.md`).
 
-Arrow keys or Page Up / Page Down turn the page. Drag a page to turn it by hand. The bar's
-**Scene** button swaps to the daylight placeholder, and **Remount** disposes and recreates the engine.
+Arrow keys or Page Up / Page Down turn the page. Drag a page to turn it by hand. The bottom bar's
+scrubber jumps to a spread, and **Notes** opens the notes panel.
 
 ## References
 

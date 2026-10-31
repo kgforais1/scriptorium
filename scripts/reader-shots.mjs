@@ -1,6 +1,6 @@
 /* global window, HTMLInputElement -- these functions run inside the browser page. */
 // Drives the real Reader in headless Chrome and takes screenshots. It runs the Vite dev server
-// with a stubbed Tauri bridge: `last_book` returns a book built from a folder of scans, and
+// with a stubbed Tauri bridge, and opens `/`: `last_book` returns a book built from a folder of scans, and
 // page files are served through Vite's /@fs/ route. Nothing touches the library or Rust, so
 // the production CSP and asset scope are not covered (see docs/manual-test-m1.md section 8).
 //
@@ -108,9 +108,8 @@ async function openReader(browser, url, book, options = {}) {
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
   await page.addInitScript(stubTauri, { ...book, lastReadPage: options.lastReadPage ?? 0 });
-  await page.goto(`${url}#spike`);
-  // The harness's own Scene and Remount buttons are not part of the reader.
-  await page.addStyleTag({ content: ".dev-harness__tools { display: none !important; }" });
+  // The stubbed last_book makes App open the reader directly.
+  await page.goto(url);
   await page.waitForSelector(".reader__canvas[data-ready=true]", { timeout: 30000 });
   await page.waitForTimeout(800);
   return { ctx, page, errors };

@@ -176,33 +176,16 @@ the policy in
   app. Expected: the build finishes and prints the path of the app bundle.
 - [ ] Run the built app. Do not use `pnpm tauri dev`.
 - [ ] Open a book (create one from scans, or open the fixture package). Expected: the pages
-  show as images. A blocked page shows "This page could not be loaded." with a **Try again**
-  button instead.
+  render on the reader canvas. A blocked page shows a note in the reader instead.
 - [ ] Repeat this section once on Windows. Expected: pages show there too.
 - [ ] Open the devtools console. In a `--debug` build, right-click the window and choose
   Inspect Element. Expected: no message that mentions "Content Security Policy" or "Refused
   to".
-- [ ] Turn pages with the keys and the buttons. Expected: each page loads and the console
-  stays free of CSP violations.
-- [ ] In the built app, set `location.hash = "spike"` in the console. Expected: nothing
-  changes, because the release bundle has no spike.
+- [ ] Turn pages with the arrow keys. Expected: each spread renders and the console stays free
+  of CSP violations.
 
 If a page does not render, or the console reports a violation, record the exact message in
 the Results table. Compare it with the `csp` block in `tauri.conf.json`.
-
-## 9. The dev-only flipbook spike
-
-The flipbook spike is throwaway code that proves the page-turn engine. It stays in dev
-builds until Phase 3 replaces it.
-
-- [ ] Run `pnpm tauri dev`.
-- [ ] Open the devtools console and run `location.hash = "spike"`. Expected: the engine
-  harness replaces the reader. Since Phase 3 chunk 1 it shows the last opened book on the new
-  engine (`src/features/reader/engine/`), with Prev, Next, Scene, Remount, and Reduced motion
-  buttons. Run `location.hash = ""` to return.
-- [ ] For a realistic page set, build the spike pages with `scripts/make-spike-fixtures.sh`.
-  It needs macOS and the Dulac and Princess corpora from
-  [`tests/fixtures/README.md`](../tests/fixtures/README.md).
 
 ## Results
 
