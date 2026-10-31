@@ -25,6 +25,9 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
   block merging Phase 2 PRs or starting Phase 3.
 - **Sonar backlog (22 local issues)** — all in template hook and CI scripts (complexity, regexes, duplicated literals). See
   `tmp/sonar-latest-issues.md` after a scan.
+- **README polish** — update and polish `README.md` for the reader: badges (CI, SonarCloud,
+  licence), an app icon, and screenshots from `docs/screenshots/` (regenerate with
+  `pnpm shots --save`). Do it after Phase 3 merges, so the shots show the final chrome.
 - **Grey+alpha JPEG 2000 fixture** — the transparency refusal test depends on macOS `sips`
   writing two components. Generate a two-component JP2 in-test (or check in a tiny fixture)
   so it runs on every OS. From CodeRabbit on PR #65.

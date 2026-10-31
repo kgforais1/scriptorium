@@ -575,7 +575,9 @@ spike exemption sentence in `AGENTS.md`, Phase 2's `BookView` and `book.css`, `p
 9) of `docs/manual-test-m1.md`, and the spike count in `to_do.md`'s Sonar backlog line. Update
 ADR-0001's demo section to point at the reader. Changelog history stays. `src/spike/`, its ESLint
 block, the `AGENTS.md` sentence, and the ADR's links to the spike went early, after chunk 4,
-because SonarCloud counted the unused copy as duplicated code.
+because SonarCloud counted the unused copy as duplicated code. `scripts/reader-shots.mjs`
+(`pnpm shots`) drives the reader through `#spike` with a stubbed Tauri bridge; when the route
+goes, point it at `/`, where `last_book` opens the reader.
 
 **Measurements** (in the PR and the manual test), on the Dulac corpus (A9):
 
