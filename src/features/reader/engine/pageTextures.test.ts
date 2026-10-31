@@ -617,6 +617,6 @@ describe("PageTextures.whenSettled", () => {
     const { tex } = setup({ decode });
     const wait = tex.whenSettled([2]);
     tex.dispose();
-    await wait;
+    await expect(wait).resolves.toBeUndefined();
   });
 });

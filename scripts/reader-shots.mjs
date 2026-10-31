@@ -33,24 +33,32 @@ const { values: args } = parseArgs({
 function imageSize(path) {
   const fd = openSync(path, "r");
   try {
-    const head = Buffer.alloc(65536);
-    const n = readSync(fd, head, 0, head.length, 0);
+    const head = Buffer.alloc(24);
+    readSync(fd, head, 0, head.length, 0);
     if (head.readUInt32BE(0) === 0x89504e47) return { width: head.readUInt32BE(16), height: head.readUInt32BE(20) };
-    return jpegSize(head.subarray(0, n), path);
+    return jpegSize(fd, path);
   } finally {
     closeSync(fd);
   }
 }
 
-function jpegSize(buf, path) {
-  let i = 2;
-  while (i + 9 < buf.length) {
-    const marker = buf[i + 1];
-    const isSof = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
-    if (isSof) return { width: buf.readUInt16BE(i + 7), height: buf.readUInt16BE(i + 5) };
-    i += 2 + buf.readUInt16BE(i + 2);
+const isSof = (m) => m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m);
+// RST0-7 and TEM carry no length field.
+const isStandalone = (m) => m === 0x01 || (m >= 0xd0 && m <= 0xd7);
+
+// Walks the JPEG segment headers from the file, however much metadata comes before the SOF.
+// Fill bytes (0xFF 0xFF) are skipped, and EOI ends the search.
+function jpegSize(fd, path) {
+  const seg = Buffer.alloc(9);
+  let pos = 2;
+  while (readSync(fd, seg, 0, 9, pos) === 9 && seg[0] === 0xff && seg[1] !== 0xd9) {
+    const marker = seg[1];
+    if (isSof(marker)) return { width: seg.readUInt16BE(7), height: seg.readUInt16BE(5) };
+    if (marker === 0xff) pos += 1;
+    else if (isStandalone(marker)) pos += 2;
+    else pos += 2 + seg.readUInt16BE(2);
   }
-  throw new Error(`${path}: no JPEG size marker in the first 64 KB`);
+  throw new Error(`${path}: no JPEG size marker found`);
 }
 
 // The scans folder, resolved through symlinks. It must sit inside tmp/: the scans belong with the
@@ -58,7 +66,10 @@ function jpegSize(buf, path) {
 function pagesDir(input) {
   const tmp = realpathSync(join(ROOT, "tmp"));
   const candidate = resolve(ROOT, input ?? (existsSync(DULAC) ? DULAC : FIXTURE));
-  if (!existsSync(candidate)) throw new Error(`--pages folder does not exist: ${candidate}`);
+  if (!existsSync(candidate)) {
+    const hint = input ? "" : " Run `python3 scripts/generate-fixture-book.py` first, or pass --pages.";
+    throw new Error(`scans folder does not exist: ${candidate}.${hint}`);
+  }
   const dir = realpathSync(candidate);
   const rel = relative(tmp, dir);
   if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) throw new Error(`--pages must be a folder inside tmp/: ${dir}`);
@@ -131,7 +142,8 @@ async function scrubTo(page, spread) {
 
 // The main tour: rest, mid-turn, notes, scrubbing, last page. Returns the pages saved.
 async function tour(browser, url, book) {
-  const start = Math.min(20, book.pages.length - 1);
+  // Page 20 is a colour plate in the Dulac corpus. A short book starts at page 1, so a next spread exists.
+  const start = book.pages.length > 24 ? 20 : Math.min(1, book.pages.length - 1);
   const { ctx, page, errors } = await openReader(browser, url, book, { lastReadPage: start });
   await shot(page, "reader-spread");
   await page.keyboard.press("ArrowRight");
