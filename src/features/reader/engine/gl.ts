@@ -97,31 +97,35 @@ function clearErrors(gl: WebGL2RenderingContext) {
 }
 
 /**
- * Uploads an image as a mipmapped texture and checks gl.getError() afterwards. On a GL error the
- * texture is deleted and the call throws, so a refused upload is never cached.
+ * Uploads an image as a mipmapped texture and checks gl.getError() afterwards. On a GL error, or an
+ * exception from the upload calls, the texture is deleted and the call throws, so a refused upload is never cached.
  */
 export function uploadTexture(gl: WebGL2RenderingContext, src: TexImageSource): WebGLTexture {
   const t = gl.createTexture();
   if (!t) throw new Error("texture upload failed: no texture (context lost?)");
-  clearErrors(gl);
-  gl.bindTexture(gl.TEXTURE_2D, t);
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
-  gl.generateMipmap(gl.TEXTURE_2D);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  const aniso = gl.getExtension("EXT_texture_filter_anisotropic");
-  if (aniso) {
-    const max = gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number;
-    gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, max));
-  }
-  const err = gl.getError();
-  if (err !== gl.NO_ERROR) {
+  try {
+    clearErrors(gl);
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const aniso = gl.getExtension("EXT_texture_filter_anisotropic");
+    if (aniso) {
+      const max = gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number;
+      gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, max));
+    }
+    const err = gl.getError();
+    if (err !== gl.NO_ERROR) {
+      throw new Error(`texture upload failed: GL error 0x${err.toString(16)}`);
+    }
+  } catch (err) {
     gl.deleteTexture(t);
-    throw new Error(`texture upload failed: GL error 0x${err.toString(16)}`);
+    throw err;
   }
   return t;
 }

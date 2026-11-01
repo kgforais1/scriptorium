@@ -28,5 +28,5 @@ export function pagesOfSpread(s: number, pageCount: number): number[] {
 /** The scan shown in a slot, or null for a pastedown or an out-of-range slot. */
 export function pageOfSlot(slot: number, pageCount: number): number | null {
   const p = slot - 1;
-  return p >= 0 && p < pageCount ? p : null;
+  return Number.isInteger(p) && p >= 0 && p < pageCount ? p : null;
 }

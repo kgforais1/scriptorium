@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeCamera } from "./camera";
 import {
-  GEOMETRY_SLOTS, GEOMETRY_STRIDE, clearSlot, createGeometryBuffer, projectInto, writeLeafSlot, writeStackSlot,
+  GEOMETRY_SLOTS, GEOMETRY_STRIDE, clearSlot, createGeometryBuffer, leafFace, projectInto, writeLeafSlot, writeStackSlot,
 } from "./corners";
 import { NU, NV, makeBook, restProfile } from "./geometry";
 import { IDENTITY } from "./math";
@@ -108,5 +108,17 @@ describe("writeLeafSlot", () => {
     // Top-left is the outer edge (x = 1), top-right is the hinge (x = 0).
     expect(buf[o + 1]).toBeGreaterThan(buf[o + 3]);
     expect(buf[o + 5]).toBeCloseTo(buf[o + 3], 3);
+  });
+});
+
+describe("leafFace", () => {
+  it("shows the front while the leaf lies on the right, in both directions", () => {
+    expect(leafFace(3, 0)).toEqual({ back: false, slot: 7 });
+    expect(leafFace(3, 0.49)).toEqual({ back: false, slot: 7 });
+  });
+
+  it("shows the back while the leaf lies on the left, including the start of a backward turn", () => {
+    expect(leafFace(2, 1)).toEqual({ back: true, slot: 6 });
+    expect(leafFace(2, 0.5)).toEqual({ back: true, slot: 6 });
   });
 });

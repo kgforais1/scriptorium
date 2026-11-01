@@ -119,6 +119,40 @@ describe("TurnMachine", () => {
     expect(m.spread).toBe(1);
   });
 
+  describe("held peek", () => {
+    it("stops asking for frames once fully open, and wakes when the hover leaves", () => {
+      const { m } = setup(5);
+      const T = m.beginTurn(1, "peek", 0.9)!;
+      let moving = true;
+      for (let i = 0; i < 100 && moving; i++) moving = m.step(0.05);
+      expect(moving).toBe(false);
+      expect(T.pk).toBe(1);
+      expect(m.step(0.05)).toBe(false);
+      T.pkT = 0;
+      expect(m.step(0.05)).toBe(true);
+      expect(T.pk).toBeLessThan(1);
+    });
+
+    it("keeps moving while the peek is still opening", () => {
+      const { m } = setup(5);
+      m.beginTurn(1, "peek", 0.9);
+      expect(m.step(0.016)).toBe(true);
+    });
+  });
+
+  describe("jumpPending", () => {
+    it("is true from a goTo during a peek until the peek settles, and the peek stays closed", () => {
+      const { m, settle } = setup(10);
+      const T = m.beginTurn(1, "peek", 0.9)!;
+      m.goTo(8);
+      expect(m.jumpPending).toBe(true);
+      expect(T.pkT).toBe(0);
+      settle();
+      expect(m.jumpPending).toBe(false);
+      expect(m.spread).toBe(8);
+    });
+  });
+
   describe("goTo", () => {
     it("jumps next to a distant spread and turns the last step", () => {
       const { m, log, settle } = setup(10);

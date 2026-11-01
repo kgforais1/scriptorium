@@ -46,8 +46,9 @@ struct Entry {
 pub enum WorkerStep<E> {
     /// Nothing is due yet. Sleep until this instant, then ask again.
     Wait(Instant),
-    /// The held page was written. The book is clean and the worker's claim is released.
-    Saved,
+    /// The held page was written. The book is clean and the worker's claim is released. The
+    /// number is the webview save sequence of the page that reached disk.
+    Saved(u64),
     /// The write failed. The book stays dirty and the claim is kept, so the worker asks again
     /// after the retry backoff.
     Failed(E),
@@ -194,7 +195,8 @@ impl Session {
             Some(due) if now < due => return WorkerStep::Wait(due),
             Some(_) => match self.flush(Some(root), now, write).into_iter().next() {
                 Some((_, e)) => return WorkerStep::Failed(e),
-                None => WorkerStep::Saved,
+                // The flush wrote the page that `last_seq` numbers, all under the caller's lock.
+                None => WorkerStep::Saved(self.last_seq(root)),
             },
         };
         if let Some(e) = self.books.get_mut(root) {
@@ -393,7 +395,7 @@ mod tests {
         assert_eq!(s.claim_worker(a), None, "an inline flush kept the claim");
         // The owner writes when due and releases.
         let step = s.worker_step(a, token, t0 + SEC * 2, ok_writer(&mut log));
-        assert_eq!(step, WorkerStep::<()>::Saved);
+        assert_eq!(step, WorkerStep::<()>::Saved(2));
         assert_eq!(log.last(), Some(&(PathBuf::from("/a"), 2)));
         s.record(a, 3, t0 + SEC * 2).unwrap();
         let next = s.claim_worker(a).expect("released after the write");
@@ -437,7 +439,7 @@ mod tests {
         );
         assert_eq!(s.claim_worker(a), None, "a failure keeps the claim");
         let saved = s.worker_step(a, token, due, ok_writer(&mut log));
-        assert_eq!(saved, WorkerStep::<()>::Saved);
+        assert_eq!(saved, WorkerStep::<()>::Saved(1));
         assert_eq!(log, [(PathBuf::from("/a"), 4)]);
         // The claim was released, so the token is spent.
         let done = s.worker_step(a, token, due, ok_writer(&mut log));

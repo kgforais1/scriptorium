@@ -274,7 +274,7 @@ fn a_held_or_failed_save_claims_exactly_one_worker() {
         .lock()
         .unwrap()
         .worker_step(&key, token, t0 + SAVE_INTERVAL * 20, ok);
-    assert_eq!(step, super::WorkerStep::Saved);
+    assert_eq!(step, super::WorkerStep::Saved(3));
     assert_eq!(view_of(&root).last_read_page, 2);
     let next = save_in(&session, &root, 0, 4, t0 + SAVE_INTERVAL * 20, ok);
     assert_eq!(next, Ok(SaveOutcome::Pending));
@@ -300,6 +300,7 @@ fn a_worker_retries_after_a_failure_then_announces_once() {
     let attempts = Cell::new(0);
     let announced = Cell::new(0);
     let slept = Cell::new(0);
+    let announced_seq = Cell::new(0);
     run_worker(
         &session,
         &key,
@@ -318,18 +319,69 @@ fn a_worker_retries_after_a_failure_then_announces_once() {
             slept.set(slept.get() + 1);
             std::thread::sleep(d);
         },
-        || announced.set(announced.get() + 1),
+        |seq| {
+            announced.set(announced.get() + 1);
+            announced_seq.set(seq);
+        },
     );
     assert_eq!(attempts.get(), 3, "two failures, then a success");
     assert_eq!(announced.get(), 1);
+    assert_eq!(announced_seq.get(), 1, "the event carries the seq it wrote");
     assert!(
         slept.get() >= 3,
         "it waited for the interval and each backoff"
     );
     // A worker whose book is already clean exits and announces nothing.
     let none = Cell::new(0);
-    run_worker(&session, &key, token, |_, _| Ok(()), |_| {}, || none.set(1));
+    run_worker(
+        &session,
+        &key,
+        token,
+        |_, _| Ok(()),
+        |_| {},
+        |_| none.set(1),
+    );
     assert_eq!(none.get(), 0);
+}
+
+#[test]
+fn a_worker_announces_only_after_meta_json_holds_the_page() {
+    use super::run_worker;
+    use std::cell::Cell;
+    use std::sync::Mutex;
+    use std::time::Duration;
+    let (_fx, root) = Fixture::new("announce");
+    let key = canonical_key(&root).unwrap();
+    let tick = Duration::from_millis(5);
+    let session = Mutex::new(Session::new(tick));
+    let t0 = Instant::now();
+    {
+        let mut s = session.lock().unwrap();
+        s.register(key.clone(), 0, 3, t0);
+        s.record_seq(&key, 2, 1, t0).unwrap();
+    }
+    let token = session.lock().unwrap().claim_worker(&key).unwrap();
+    // A later save lands after the claim and before the worker runs; the worker writes it.
+    session.lock().unwrap().record_seq(&key, 1, 2, t0).unwrap();
+    assert_eq!(view_of(&root).last_read_page, 0, "not written yet");
+    let announced = Cell::new(false);
+    run_worker(
+        &session,
+        &key,
+        token,
+        |r, p| save_last_read_page(r, p).map(|_| ()),
+        std::thread::sleep,
+        |seq| {
+            assert_eq!(seq, 2, "the event carries the newest seq");
+            assert_eq!(
+                view_of(&root).last_read_page,
+                1,
+                "the event goes out after the write"
+            );
+            announced.set(true);
+        },
+    );
+    assert!(announced.get());
 }
 
 #[test]
@@ -344,9 +396,9 @@ fn event_payloads_serialize_camel_case() {
         serde_json::to_value(tick).unwrap(),
         serde_json::json!({ "importId": "i1", "done": 2, "total": 5 })
     );
-    let saved = ProgressSaved { root: "/r".into() };
+    let saved = ProgressSaved::new(std::path::Path::new("/r"), 9);
     assert_eq!(
         serde_json::to_value(saved).unwrap(),
-        serde_json::json!({ "root": "/r" })
+        serde_json::json!({ "root": "/r", "seq": 9 })
     );
 }

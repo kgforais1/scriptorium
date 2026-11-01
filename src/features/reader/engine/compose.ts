@@ -10,9 +10,12 @@ export type Paint2D = Pick<CanvasRenderingContext2D, "fillStyle" | "fillRect" | 
 /** A scan to draw, with its pixel size. */
 export type Scan = { image: CanvasImageSource; width: number; height: number };
 
-/** The width of a texture of height texH for a page box of aspect boxAspect. */
+/**
+ * The width of a texture of height texH for a page box of aspect boxAspect. Never less than 1: a
+ * zero-wide canvas cannot be turned into a bitmap or uploaded.
+ */
 export function textureWidth(texH: number, boxAspect: number): number {
-  return Math.round(texH / boxAspect);
+  return Math.max(1, Math.round(texH / boxAspect));
 }
 
 /** A `rgb(...)` string for a 0 to 1 colour, with channels clamped. */

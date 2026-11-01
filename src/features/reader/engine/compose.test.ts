@@ -13,6 +13,12 @@ describe("textureWidth", () => {
     expect(textureWidth(1400, 1.4)).toBe(1000);
     expect(textureWidth(1000, 3)).toBe(333);
   });
+
+  it("is never less than 1, even for a tiny texture of a tall box", () => {
+    expect(textureWidth(1, 2.1)).toBe(1);
+    expect(textureWidth(2, 5)).toBe(1);
+    expect(textureWidth(0, 1.4)).toBe(1);
+  });
 });
 
 describe("paperCss", () => {

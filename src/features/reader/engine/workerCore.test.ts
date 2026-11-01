@@ -64,7 +64,7 @@ describe("createWorkerHandler", () => {
     const { handle, posted } = setup({ fetch: async () => ({ ok: false, status: 404, blob: async () => new Blob() }) });
     handle(request());
     await flush();
-    expect(posted[posted.length - 1].reply).toEqual({ type: "error", id: 1, message: "page fetch failed: HTTP 404" });
+    expect(posted[posted.length - 1].reply).toEqual({ type: "error", id: 1, message: "page fetch failed: HTTP 404", stage: "fetch" });
   });
 
   it("replies with an error and closes the scan when no surface can be made", async () => {
@@ -72,7 +72,7 @@ describe("createWorkerHandler", () => {
     const { handle, posted, scan } = setup({ surface: () => (calls++ === 0 ? { ctx: {} as Paint2D, finish: () => ({}) as ImageBitmap } : null) });
     handle(request());
     await flush();
-    expect(posted[posted.length - 1].reply).toMatchObject({ type: "error", id: 1, message: expect.stringContaining("OffscreenCanvas") });
+    expect(posted[posted.length - 1].reply).toMatchObject({ type: "error", id: 1, message: expect.stringContaining("OffscreenCanvas"), stage: "compose" });
     expect(scan.close).toHaveBeenCalled();
   });
 
@@ -97,10 +97,11 @@ describe("createWorkerHandler", () => {
 
   it("closes a bitmap that finished composing just as the request was cancelled", async () => {
     let finishScan!: () => void;
+    const scanClose = vi.fn();
     const { handle, posted, out } = setup({
       createImageBitmap: () =>
         new Promise<ImageBitmap>((resolve) => {
-          finishScan = () => resolve({ width: 200, height: 100, close: vi.fn() } as unknown as ImageBitmap);
+          finishScan = () => resolve({ width: 200, height: 100, close: scanClose } as unknown as ImageBitmap);
         }),
     });
     handle(request());
@@ -110,6 +111,7 @@ describe("createWorkerHandler", () => {
     await flush();
     expect(posted).toHaveLength(1);
     expect(out.close).not.toHaveBeenCalled();
+    expect(scanClose).toHaveBeenCalledTimes(1);
   });
 
   it("ignores an abort for a request that already finished", async () => {
@@ -118,6 +120,27 @@ describe("createWorkerHandler", () => {
     await flush();
     handle({ type: "abort", id: 1 });
     expect(posted.filter((p) => p.reply.type === "page")).toHaveLength(1);
+  });
+
+  it("closes the bitmap and reports a compose failure when the transfer throws", async () => {
+    const posted: WorkerReply[] = [];
+    const out = { width: 10, height: 10, close: vi.fn() };
+    const ctx = { fillStyle: "", fillRect: vi.fn(), drawImage: vi.fn(), imageSmoothingQuality: "low" } as unknown as Paint2D;
+    const handle = createWorkerHandler(
+      {
+        fetch: async () => ({ ok: true, status: 200, blob: async () => new Blob(["x"]) }),
+        createImageBitmap: async () => ({ width: 2, height: 2, close: vi.fn() }) as unknown as ImageBitmap,
+        surface: () => ({ ctx, finish: () => out as unknown as ImageBitmap }),
+      },
+      (reply) => {
+        if (reply.type === "page") throw new DOMException("cannot clone", "DataCloneError");
+        posted.push(reply);
+      },
+    );
+    handle(request());
+    await flush();
+    expect(out.close).toHaveBeenCalledTimes(1);
+    expect(posted[posted.length - 1]).toEqual({ type: "error", id: 1, message: "cannot clone", stage: "compose" });
   });
 
   it("runs requests independently by id", async () => {

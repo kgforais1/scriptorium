@@ -55,6 +55,16 @@ export function writeStackSlot(out: Float32Array, slot: number, page: number, pr
 }
 
 /**
+ * The face of the turning leaf that is on show, from where it lies. At t >= 0.5 the leaf is on the
+ * left and shows its back, in either turn direction: a forward turn ends there at t = 1, and a
+ * backward turn starts there. `slot` is the texture slot of that face.
+ */
+export function leafFace(leaf: number, t: number): { back: boolean; slot: number } {
+  const back = t >= 0.5;
+  return { back, slot: 2 * leaf + (back ? 2 : 1) };
+}
+
+/**
  * Writes the turning leaf's visible face from its vertex grid. The front face reads with the
  * hinge on the left, the back face with the hinge on the right.
  */

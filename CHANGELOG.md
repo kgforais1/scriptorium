@@ -10,6 +10,10 @@ uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Books open in a page-turning reader. A header shows the title, the page indicator, and **Close book**.
+- A bottom bar offers **Previous**, a **Go to page** scrubber, **Next**, and **Notes**.
+- Turn pages with the keyboard.
+- The reader honours the reduced-motion setting and turns pages without animation.
 - You can now open a folder of scanned pages, turn it into a book, and page through it with the buttons or the arrow keys. Scriptorium remembers your page and reopens the book where you left off. Errors such as an empty folder or a damaged book now show a clear message.
 - Book package format version 2: a package can keep the untouched original of each converted page under `originals/`. Version 1 packages still open. See [`docs/book-format.md`](docs/book-format.md).
 - Public repository posture: [`SECURITY.md`](SECURITY.md) for vulnerability reporting; README reflects public/early-dev status.

@@ -16,6 +16,11 @@ describe("tokenToCss", () => {
     expect(tokenToCss("d", "duration", "1s")).toBe("1s");
   });
 
+  it("writes a number as written", () => {
+    expect(tokenToCss("s", "number", 1.25)).toBe("1.25");
+    expect(tokenToCss("s", "number", 0)).toBe("0");
+  });
+
   it("writes a cubicBezier as cubic-bezier()", () => {
     expect(tokenToCss("e", "cubicBezier", [0.2, 0.75, 0.15, 1])).toBe("cubic-bezier(0.2, 0.75, 0.15, 1)");
   });
@@ -41,6 +46,8 @@ describe("tokenToCss", () => {
     ["dimension", { value: "1", unit: "px" }],
     ["duration", { value: 1, unit: "px" }],
     ["duration", 7],
+    ["number", "1.2"],
+    ["number", Number.NaN],
     ["cubicBezier", [1, 2, 3]],
     ["cubicBezier", [1, 2, 3, "x"]],
     ["fontFamily", []],
@@ -107,16 +114,40 @@ describe("propertyName", () => {
 });
 
 describe("checkRequired", () => {
+  const tok = (path: string, type = "color") => ({ path, type });
+
   it("passes when the sets match, in any order", () => {
-    expect(checkRequired(["a", "b"], ["b", "a"])).toEqual([]);
+    expect(checkRequired([tok("a"), tok("b")], [tok("b"), tok("a")])).toEqual([]);
   });
 
   it("names a missing required token", () => {
-    expect(checkRequired(["a"], ["a", "b"])).toEqual(["b: required token is missing"]);
+    expect(checkRequired([tok("a")], [tok("a"), tok("b")])).toEqual(["b: required token is missing"]);
   });
 
   it("names an unexpected token", () => {
-    expect(checkRequired(["a", "x"], ["a"])).toEqual(["x: unexpected token (not in required-tokens.json)"]);
+    expect(checkRequired([tok("a"), tok("x")], [tok("a")])).toEqual(["x: unexpected token (not in required-tokens.json)"]);
+  });
+
+  it("names a token of the wrong type", () => {
+    expect(checkRequired([tok("a", "number")], [tok("a", "color")])).toEqual(["a: expected $type color, got number"]);
+  });
+
+  it("reports a path listed twice in the required list", () => {
+    expect(checkRequired([tok("a")], [tok("a"), tok("a")])).toEqual(["a: listed more than once in required-tokens.json"]);
+  });
+
+  it("reports a path listed twice with conflicting types", () => {
+    expect(checkRequired([tok("a", "number")], [tok("a", "color"), tok("a", "number")])).toEqual([
+      "a: listed more than once in required-tokens.json",
+    ]);
+  });
+
+  it("reports a path defined twice, such as a dotted key next to a nested group", () => {
+    const tokens = flattenTokens({
+      "color.ink": { $type: "color", $value: "#000" },
+      color: { $type: "color", ink: { $value: "#111" } },
+    });
+    expect(checkRequired(tokens, [tok("color.ink")])).toEqual(["color.ink: defined more than once"]);
   });
 });
 

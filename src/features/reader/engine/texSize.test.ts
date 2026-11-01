@@ -52,7 +52,7 @@ describe("textureHeight", () => {
     for (const maxTex of [1024, 2048, 4096]) {
       for (const boxAspect of [0.3, 0.5, 1, 1.4]) {
         const texH = textureHeight({ boxAspect, maxTex, devicePixelHeight: 4000 });
-        expect(Math.round(texH / boxAspect)).toBeLessThanOrEqual(maxTex + 1);
+        expect(Math.round(texH / boxAspect)).toBeLessThanOrEqual(maxTex);
       }
     }
   });

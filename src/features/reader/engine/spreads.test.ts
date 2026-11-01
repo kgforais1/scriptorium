@@ -66,5 +66,6 @@ describe("pageOfSlot", () => {
     expect(pageOfSlot(1, 3)).toBe(0);
     expect(pageOfSlot(3, 3)).toBe(2);
     expect(pageOfSlot(4, 3)).toBeNull();
+    expect(pageOfSlot(1.5, 3)).toBeNull();
   });
 });

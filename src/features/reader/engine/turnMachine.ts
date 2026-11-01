@@ -53,6 +53,11 @@ export class TurnMachine {
     return this.queue;
   }
 
+  /** True while a jump to a distant spread waits for the current turn or peek to end. */
+  get jumpPending(): boolean {
+    return this.pending !== null;
+  }
+
   /** The number of spreads. */
   get spreads(): number {
     return this.nLeaf + 1;
@@ -179,6 +184,13 @@ export class TurnMachine {
       this.host.changed();
       this.host.settled();
       this.drain();
+      return true;
+    }
+    // A peek held fully open is still: snap it and stop asking for frames. A hover change moves
+    // pkT, and the next step then returns true again.
+    if (T.pkT === 1 && 1 - T.pk < 0.001) {
+      T.pk = 1;
+      return false;
     }
     return true;
   }
