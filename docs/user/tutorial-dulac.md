@@ -38,7 +38,8 @@ images, one JPEG per page.
 3. Choose `tmp/fixtures/corpus/dulac-picture-book/jpg`.
 4. The dialog says "Create a book from these scans?". It lists the image files and an
    estimated size.
-5. Change the title to "Edmund Dulac's Picture-Book".
+5. Change the title to "Edmund Dulac's Picture-Book" and the book id to `dulac-picture-book`. The
+   id starts as `jpg`, from the folder name, and names the book's folder in your library.
 6. In **Rights**, type "Public domain". In **Attribution**, type "Internet Archive,
    edmunddulacspict00dulauoft".
 7. Press **Create**.

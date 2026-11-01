@@ -41,7 +41,7 @@ You can fill in these fields:
 
 - **Title** is the name shown above the book. It starts as the folder name.
 - **Book id** is the name of the book's folder in your library. It starts as a short form of
-  the title. It may use only lowercase letters, digits, and dashes. The app tells you if the id
+  the title. It may use only lowercase letters, digits, dots, underscores, and dashes. The app tells you if the id
   is not allowed.
 - **Rights** and **Attribution** are optional. Use them to record where the scans came from.
 

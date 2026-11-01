@@ -60,7 +60,7 @@ Spec: [`docs/book-format.md`](docs/book-format.md).
 ### Reader screenshots
 
 `pnpm shots` runs the reader in headless Chrome and writes screenshots to gitignored
-`tmp/shots/`. It uses the Dulac corpus under `tmp/fixtures/corpus/` when present, and the
+`tmp/shots/`. It uses the Dulac corpus in `tmp/fixtures/corpus/dulac-picture-book/jpg/` when present, and the
 fixture book otherwise. `pnpm shots --save` also refreshes [`docs/screenshots/`](docs/screenshots/).
 The first run needs `pnpm exec playwright install chromium`.
 
@@ -74,7 +74,8 @@ Run `pnpm tauri dev` to start the app. The home screen has one button, **Open…
 
 ### Open a book
 
-Click **Open…** and choose a folder of scanned pages. The app counts the images and shows a
+Click **Open…** and choose a folder of scanned pages. For a quick sample, generate the fixture
+book (see [Book fixtures](#book-fixtures)) and choose `tmp/fixtures/fixture-book/pages`. The app counts the images and shows a
 dialog titled "Create a book from these scans?". Check the title and press **Create**. The
 app copies the pages into your library and opens the book. Pages sort in natural order, so
 `page2` comes before `page10`.
@@ -98,7 +99,9 @@ If your system asks for reduced motion, a turn is a quick fade instead of a curl
 return to the home screen. The app remembers your page. It reopens the last book at that page
 the next time you start it.
 
-![The reader with the Notes panel open beside the book.](docs/screenshots/reader-notes.jpg)
+| | |
+|---|---|
+| ![The reader with the Notes panel open beside the book.](docs/screenshots/reader-notes.jpg) | ![The Go to page scrubber jumping to another spread mid-turn.](docs/screenshots/reader-scrub.jpg) |
 
 For a longer walk through, read [`docs/user/getting-started.md`](docs/user/getting-started.md)
 or the [Dulac tutorial](docs/user/tutorial-dulac.md). To check a build by hand, follow
@@ -111,7 +114,7 @@ or the [Dulac tutorial](docs/user/tutorial-dulac.md). To check a build by hand, 
 | [`src-tauri/`](src-tauri/) | Tauri 2 Rust host + `book_format` types |
 | [`src/`](src/) | Vite + React + TypeScript app: the home screen and the book reader |
 | [`docs/book-format.md`](docs/book-format.md) | Book package format (formatVersion 2; reads 1) |
-| [`docs/user/`](docs/user/getting-started.md) | User guides: getting started and a Dulac tutorial |
+| [`docs/user/`](docs/user/) | User guides: getting started and a Dulac tutorial |
 | [`scripts/generate-fixture-book.py`](scripts/generate-fixture-book.py) | Deterministic fixture generator |
 | [`prompts/`](prompts/) | Reusable agent prompts: bootstrap, session-start, maintenance, reviews, audits |
 | [`templates/`](templates/) | Fill-in artifacts: briefs, plans, designs, ADRs, runbooks, release checklists, reviews, assessments |
