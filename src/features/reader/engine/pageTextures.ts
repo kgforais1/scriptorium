@@ -124,7 +124,7 @@ export class PageTextures<T> {
     const signal = ac.signal;
     const texH = this.host.texHeight();
     const target: ComposeTarget = { boxAspect: this.host.boxAspect, texH, paper: this.paperColor };
-    const done = this.decode(source, target, signal)
+    const done = this.decodeAsync(source, target, signal)
       .then((page) => {
         if (signal.aborted || this.suspended || (replacing && !this.cache.has(slot))) return page.bitmap.close();
         if (replacing) this.replace(slot, page);
@@ -139,6 +139,12 @@ export class PageTextures<T> {
         if (this.loading.get(slot)?.ac === ac) this.loading.delete(slot);
       });
     this.loading.set(slot, { ac, texH, done });
+  }
+
+  // A decoder that throws before returning its promise becomes a rejection, so the cleanup in
+  // start() still runs and the page is reported, instead of the throw escaping into a frame.
+  private async decodeAsync(source: PageSource, target: ComposeTarget, signal: AbortSignal): Promise<DecodedPage> {
+    return await this.decode(source, target, signal);
   }
 
   /**

@@ -471,6 +471,19 @@ describe("PageTextures", () => {
   });
 
   describe("errors", () => {
+    it("reports a decoder that throws before returning a promise, and does not throw from get", async () => {
+      const t = setup({
+        decode: () => {
+          throw new Error("sync failure");
+        },
+      });
+      expect(() => t.tex.get(1)).not.toThrow();
+      await flush();
+      expect(t.onError).toHaveBeenCalledWith(1, expect.objectContaining({ message: "sync failure" }));
+      // The load is over, so the slot is not stuck as loading: a whenSettled ends at once.
+      await expect(t.tex.whenSettled([1])).resolves.toBeUndefined();
+    });
+
     it("shows paper and reports once for a page that fails to decode", async () => {
       const { tex, onError, decodeSpy } = setup({ decode: async () => {
           throw new Error("HTTP 404");
