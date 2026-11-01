@@ -1,6 +1,9 @@
 # Scriptorium
 
-Last reviewed: 2026-10-30
+[![CI](https://github.com/kgforais1/scriptorium/actions/workflows/ci.yml/badge.svg)](https://github.com/kgforais1/scriptorium/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=kgforais1_scriptorium&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=kgforais1_scriptorium)
+
+Last reviewed: 2026-11-01
 
 Tauri-first app for assembling scanned page folders into textured virtual books
 (page-turn reading, faithful page images, curator hotspots with lore popups) and
@@ -11,10 +14,11 @@ and visitors/students (readers).
 [`kgrizz-git/project-seed-template`](https://github.com/kgrizz-git/project-seed-template).
 Local agent profile (gitignored): `.context/project-profile.md`.
 
-**Security:** [`SECURITY.md`](SECURITY.md) · **Agent sessions:** [`prompts/new-agent-session.md`](prompts/new-agent-session.md).
+**Security:** [`SECURITY.md`](SECURITY.md) · **Third-party notices:** [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) · **Agent sessions:** [`prompts/new-agent-session.md`](prompts/new-agent-session.md).
 **Roadmap:** [`plans/2026-08-23-product-roadmap.md`](plans/2026-08-23-product-roadmap.md) · **Backlog:** [`to_do.md`](to_do.md).
 **CI & hooks:** [`docs/ci-and-hooks.md`](docs/ci-and-hooks.md).
 **Domain menu:** [`inventory/virtual-books-flipbook.md`](inventory/virtual-books-flipbook.md).
+**User guides:** [`docs/user/getting-started.md`](docs/user/getting-started.md) · [`docs/user/tutorial-dulac.md`](docs/user/tutorial-dulac.md).
 **Book format:** [`docs/book-format.md`](docs/book-format.md) · schema [`docs/book-format.v2.schema.json`](docs/book-format.v2.schema.json).
 
 ---
@@ -53,21 +57,61 @@ python3 scripts/generate-fixture-book.py --pages 8 --seed 42
 Output lands under gitignored `tmp/fixtures/` (see [`tests/fixtures/README.md`](tests/fixtures/README.md)).
 Spec: [`docs/book-format.md`](docs/book-format.md).
 
+### Reader screenshots
+
+`pnpm shots` runs the reader in headless Chrome and writes screenshots to gitignored
+`tmp/shots/`. It uses the Dulac corpus under `tmp/fixtures/corpus/` when present, and the
+fixture book otherwise. `pnpm shots --save` also refreshes [`docs/screenshots/`](docs/screenshots/).
+The first run needs `pnpm exec playwright install chromium`.
+
 ## Try it
 
-Run `pnpm tauri dev`, click **Open…**, and choose a folder of scanned pages. The app asks
-you to confirm, copies the pages into your library, and opens the book. You can page
-through it with the buttons or the arrow keys. It reopens at your last page the next time
-you start it. The page-turn animation arrives in the next phase. Follow
-[`docs/manual-test-m1.md`](docs/manual-test-m1.md) for the full step-by-step check.
+Run `pnpm tauri dev` to start the app. The home screen has one button, **Open…**.
+
+| | |
+|---|---|
+| ![A two-page spread of an open book on a wooden desk.](docs/screenshots/reader-spread.jpg) | ![A page curling over mid-turn, with the next page showing beneath it.](docs/screenshots/reader-turn.jpg) |
+
+### Open a book
+
+Click **Open…** and choose a folder of scanned pages. The app counts the images and shows a
+dialog titled "Create a book from these scans?". Check the title and press **Create**. The
+app copies the pages into your library and opens the book. Pages sort in natural order, so
+`page2` comes before `page10`.
+
+You can also choose a folder that is already a book. It opens at once, with no dialog.
+
+### Turn the pages
+
+- Drag a page by its corner. Let go past the middle to finish the turn.
+- Click or tap a page to turn it.
+- Press **Previous page** or **Next page** in the bottom bar.
+- Press the left and right arrow keys, or Page Up and Page Down.
+- Press Home for the first page and End for the last.
+- Drag the **Go to page** scrubber to jump anywhere in the book.
+
+If your system asks for reduced motion, a turn is a quick fade instead of a curl.
+
+### Notes and your place
+
+**Notes** opens a panel beside the book. Books have no notes yet. Press **Close book** to
+return to the home screen. The app remembers your page. It reopens the last book at that page
+the next time you start it.
+
+![The reader with the Notes panel open beside the book.](docs/screenshots/reader-notes.jpg)
+
+For a longer walk through, read [`docs/user/getting-started.md`](docs/user/getting-started.md)
+or the [Dulac tutorial](docs/user/tutorial-dulac.md). To check a build by hand, follow
+[`docs/manual-test-m1.md`](docs/manual-test-m1.md).
 
 ## What's here and why
 
 | Directory | What it is |
 |---|---|
 | [`src-tauri/`](src-tauri/) | Tauri 2 Rust host + `book_format` types |
-| [`src/`](src/) | Vite + React + TypeScript UI shell |
+| [`src/`](src/) | Vite + React + TypeScript app: the home screen and the book reader |
 | [`docs/book-format.md`](docs/book-format.md) | Book package format (formatVersion 2; reads 1) |
+| [`docs/user/`](docs/user/getting-started.md) | User guides: getting started and a Dulac tutorial |
 | [`scripts/generate-fixture-book.py`](scripts/generate-fixture-book.py) | Deterministic fixture generator |
 | [`prompts/`](prompts/) | Reusable agent prompts: bootstrap, session-start, maintenance, reviews, audits |
 | [`templates/`](templates/) | Fill-in artifacts: briefs, plans, designs, ADRs, runbooks, release checklists, reviews, assessments |
