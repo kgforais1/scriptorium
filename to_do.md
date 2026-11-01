@@ -1,6 +1,6 @@
 # Scriptorium backlog
 
-Last reviewed: 2026-10-28
+Last reviewed: 2026-11-01
 
 Agents: start at **Next Up** (3–5 pointer lines). Detail lives in linked plans, not here.
 Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
@@ -16,7 +16,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 | Plan | Status | Note |
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
-| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | in-progress | Phase 0 gate open; Phases 1–2 done (manual checks pending); Phase 3 reader in progress on `m1/phase3-reader` |
+| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | in-progress | Phases 1–3 done (manual checks pending); Phase 4 docs on `m1/phase4-docs` |
 
 ## Unplanned / small
 
@@ -29,9 +29,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 - **Cap decoded scan size** — Cap decoded scan size (createImageBitmap resize) so huge scans don't spike memory — CodeRabbit #68.
 - **Sonar backlog (22 local issues)** — all in template hook and CI scripts (complexity, regexes, duplicated literals). See
   `tmp/sonar-latest-issues.md` after a scan.
-- **README polish** — update and polish `README.md` for the reader: badges (CI, SonarCloud,
-  licence), an app icon, and screenshots from `docs/screenshots/` (regenerate with
-  `pnpm shots --save`). Do it after Phase 3 merges, so the shots show the final chrome.
+
 - **Grey+alpha JPEG 2000 fixture** — the transparency refusal test depends on macOS `sips`
   writing two components. Generate a two-component JP2 in-test (or check in a tiny fixture)
   so it runs on every OS. From CodeRabbit on PR #65.

@@ -633,6 +633,28 @@ tests and the dev harness; chunk 4 is the first a user would see.
 - [ ] `VERSION` → **0.2.0**; `CHANGELOG.md` user-facing
 - [ ] Update roadmap / `to_do.md`; archive this plan when verified
 
+Phase 3 shipped in #68 and #67 (merged 2026-10-31 and 2026-11-01). Phase 4 runs on
+`m1/phase4-docs`, one PR, in chunks:
+
+0. Bookkeeping: this chunk list, `to_do.md` Active row, roadmap status line.
+1. README: replace the Phase 2 "Try it" with the reader (keys, scrubber, notes, where books
+   live), add the four `docs/screenshots/` images (regenerated with `pnpm shots --save` on
+   `main`), and CI and SonarCloud badges. No licence badge: the repo has no `LICENSE` yet, and
+   choosing one is the owner's call. The app icon is still Tauri's default; a real icon is an
+   open question below.
+2. User docs in `docs/user/`: `getting-started.md` (install a build, open a folder of scans,
+   the confirm dialog, reading with mouse, keys and touch, where books live, progress) and
+   `tutorial-dulac.md` (build the public-domain Dulac sample with the
+   `tests/fixtures/README.md` recipe and read it). Plain words, short sentences, no internals,
+   so in-app help can reuse them. Link from README and `docs/NAVIGATION.md`.
+3. Third-party notices: `THIRD_PARTY_NOTICES.md` with the full licence texts of the statically
+   linked C libraries (OpenJPEG BSD-2 via `jpeg2k`/`openjpeg-sys`, LittleCMS MIT via `lcms2`),
+   versions read from `Cargo.lock` and the crates' bundled sources. Bundle it with the app
+   (`bundle.resources` in `tauri.conf.json`). Check the bundled OpenJPEG version against
+   published advisories and record the result and date in the file.
+4. Release (held until the manual smoke run in `to_do.md` passes once): `VERSION` 0.2.0, the
+   `CHANGELOG.md` Unreleased section moved under 0.2.0, plan Verification ticked, plan archived.
+
 ## Verification
 
 - [ ] All acceptance IDs A1–A9 checked
@@ -642,6 +664,9 @@ tests and the dev harness; chunk 4 is the first a user would see.
 - [ ] No absolute user home paths in committed fixtures or sample `meta.json`
 
 ## Open questions
+
+- [ ] Licence for the repository (no `LICENSE` file yet; blocks a licence badge)
+- [ ] App icon: keep Tauri's default for 0.2.0, or design one first
 
 - [ ] Single vs spread layout: follow ADR / library defaults
 
