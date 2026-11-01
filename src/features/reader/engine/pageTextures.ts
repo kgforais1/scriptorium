@@ -42,9 +42,9 @@ export interface PageTextureHost {
 
 // A cached texture and the height it was built at, so a bigger target can replace it later.
 type Cached<T> = { tex: T; texH: number };
-// A decode in flight: its generation's signal, the height it will compose to, and a promise that
-// settles when the attempt is over, however it ended.
-type Loading = { signal: AbortSignal; texH: number; done: Promise<void> };
+// A decode in flight: its own controller (aborted with its generation, or alone by a refresh), the
+// height it will compose to, and a promise that settles when the attempt is over, however it ended.
+type Loading = { ac: AbortController; texH: number; done: Promise<void> };
 
 /** LRU of page textures keyed by slot. */
 export class PageTextures<T> {
@@ -97,14 +97,17 @@ export class PageTextures<T> {
    * Rebuilds cached textures that are much smaller than the current target height, for example
    * after the canvas grew from its first tiny layout. The old texture stays on screen until the
    * new one lands, and a failed rebuild keeps the old one. Decodes in flight that would also land
-   * too small are aborted; they start again on demand. Call it after a resize.
+   * too small are aborted on their own; the rest finish. Call it after a resize.
    */
   refresh(): void {
     if (this.suspended) return;
     const target = this.host.texHeight();
     const stale = slotsToReload(this.cache.snapshot().map(([slot, c]) => [slot, c.texH] as const), target);
-    const staleLoads = [...this.loading.values()].some((l) => needsReload(l.texH, target));
-    if (staleLoads) this.restartLoads();
+    for (const [slot, l] of this.loading) {
+      if (!needsReload(l.texH, target)) continue;
+      l.ac.abort();
+      this.loading.delete(slot);
+    }
     for (const slot of stale) this.start(slot, true);
   }
 
@@ -113,7 +116,12 @@ export class PageTextures<T> {
   private start(slot: number, replacing: boolean): void {
     const source = this.host.sourceOf(slot);
     if (this.suspended || !source || this.loading.has(slot)) return;
-    const signal = this.abort.signal;
+    // Its own controller, so a refresh can stop it alone, linked to the generation's.
+    const ac = new AbortController();
+    const generation = this.abort.signal;
+    const onRestart = () => ac.abort(generation.reason);
+    generation.addEventListener("abort", onRestart, { once: true });
+    const signal = ac.signal;
     const texH = this.host.texHeight();
     const target: ComposeTarget = { boxAspect: this.host.boxAspect, texH, paper: this.paperColor };
     const done = this.decode(source, target, signal)
@@ -126,10 +134,11 @@ export class PageTextures<T> {
         if (!signal.aborted && !replacing) this.fail(slot, err);
       })
       .finally(() => {
+        generation.removeEventListener("abort", onRestart);
         // A restart may have begun a newer load of this slot; only clear our own entry.
-        if (this.loading.get(slot)?.signal === signal) this.loading.delete(slot);
+        if (this.loading.get(slot)?.ac === ac) this.loading.delete(slot);
       });
-    this.loading.set(slot, { signal, texH, done });
+    this.loading.set(slot, { ac, texH, done });
   }
 
   /**

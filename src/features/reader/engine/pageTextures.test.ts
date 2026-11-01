@@ -439,6 +439,27 @@ describe("PageTextures", () => {
       expect(t.tex.has(1)).toBe(true);
     });
 
+    it("aborts only the undersized decodes in flight and lets the rest finish", async () => {
+      const signals = new Map<number, AbortSignal>();
+      let n = 0;
+      const t = setup({
+        decode: (_s, target, signal) => {
+          signals.set(n++, signal);
+          return new Promise<DecodedPage>((resolve) => setTimeout(() => resolve(composed(target)), 0));
+        },
+      });
+      t.size.texH = 100;
+      t.tex.load(1);
+      t.size.texH = 780;
+      t.tex.load(2);
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(signals.get(0)?.aborted).toBe(true);
+      expect(signals.get(1)?.aborted).toBe(false);
+      await flush();
+      expect(t.tex.has(2)).toBe(true);
+    });
+
     it("does nothing while suspended", async () => {
       const t = setup();
       await loadTiny(t, [1]);
