@@ -19,8 +19,10 @@ committing.
 
 ## Alternates
 
-Two runners-up from the same design round, kept for later:
+Runners-up from the same design round, kept for later:
 
 - `alternates/quill-below-glow-disc.svg`: the quill lies flat under the book, on the same disc.
 - `alternates/quill-on-page-diffuse-glow.svg`: the chosen layout with a diffuse glow that
   fades out instead of a disc.
+- `alternates/quill-right-flat-book.svg`: a mirror of the chosen layout with the quill on the
+  right page and no turning page.
