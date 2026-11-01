@@ -122,6 +122,29 @@ and `Cargo.toml` when step 2 applied.
 
 Worked example: RUSTSEC-2026-0382/0383, lockfile-only, PR #49.
 
+## Bundled C library CVEs
+
+`cargo audit`, Dependabot and OSV match advisories to crate versions, so they cannot see C
+sources vendored inside `-sys` crates. `ci/scripts/check_bundled_c_cves.py` closes that gap. For
+each library in `ci/bundled-c.toml` it takes the crate version from `src-tauri/Cargo.lock`, reads
+the C version from the crate source in `$CARGO_HOME/registry/src`, and asks the NVD CVE API 2.0
+(`cpeName=...`, which expands version ranges) for CVEs on that exact version. It exits non-zero
+for any CVE not in `ci/bundled-c-exceptions.toml`, for an expired exception, for a missing crate
+source, and when the NVD is unreachable or keeps rate limiting (it fails closed).
+
+The `bundled-c-cves` job in `security.yml` runs weekly, on manual dispatch, and on PRs that change
+`src-tauri/Cargo.lock`, the manifest, the exceptions or the script. An optional `NVD_API_KEY`
+repository secret speeds it up; without one the script sleeps about 7 seconds between requests.
+
+- **Run locally:** `cargo fetch --manifest-path src-tauri/Cargo.toml`, then
+  `python3 ci/scripts/check_bundled_c_cves.py`.
+- **Add a library:** add a `[[library]]` to `ci/bundled-c.toml` with the bundling `crate`, a
+  `version_file` and `version_regex` (capture groups are joined with `.`), and the NVD
+  `cpe_vendor` and `cpe_product`. Check the CPE with the NVD CPE API first, and check the version
+  by hand in `~/.cargo/registry/src`.
+- **Add or extend an exception:** add an `[[exceptions]]` row with `id`, `library`, `reason` and
+  `expires` (`YYYY-MM-DD`). Extend only after re-checking, and keep the reason current.
+
 ## Thresholds
 
 - Source lines: soft **600** / hard **1000** — [`policies/file-size-and-counts.md`](../policies/file-size-and-counts.md)
