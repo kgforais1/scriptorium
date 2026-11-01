@@ -61,8 +61,8 @@ Spec: [`docs/book-format.md`](docs/book-format.md).
 ### Reader screenshots
 
 `pnpm shots` runs the reader in headless Chrome and writes screenshots to gitignored
-`tmp/shots/`. It uses the Dulac corpus in `tmp/fixtures/corpus/dulac-picture-book/jpg/` when present, and the
-fixture book otherwise. `pnpm shots --save` also refreshes [`docs/screenshots/`](docs/screenshots/).
+`tmp/shots/`. It uses the Dulac corpus in `tmp/fixtures/corpus/dulac-picture-book/jpg/` when present.
+Otherwise it uses the fixture book, so run `python3 scripts/generate-fixture-book.py` first. `pnpm shots --save` also refreshes [`docs/screenshots/`](docs/screenshots/).
 The first run needs `pnpm exec playwright install chromium`.
 
 ## Try it
@@ -134,6 +134,6 @@ GitHub hygiene: [`policies/github-repository-hygiene.md`](policies/github-reposi
 ## Licence
 
 Scriptorium is source-available under the [PolyForm Shield License 1.0.0](LICENSE). Anyone,
-companies included, may use, change, and share it for free. Nobody may sell it or offer a
-product that competes with it. The bundled C libraries keep their own licences; see
+companies included, may use, change, and share it for free. Nobody may sell it or use it to
+offer a product that competes with it. The bundled C libraries keep their own licences; see
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

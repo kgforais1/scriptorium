@@ -15,6 +15,7 @@ import contextlib
 import importlib.util
 import io
 import json
+from unittest import mock
 import sys
 import tempfile
 import unittest
@@ -344,6 +345,36 @@ class CheckBundledCvesTests(unittest.TestCase):
         with self.assertRaises(mod.CheckError) as ctx:
             self._query([first, empty])
         self.assertIn("ended at 1 of 3", str(ctx.exception))
+
+    def test_malformed_cve_entry_fails_closed(self) -> None:
+        for item in ("x", {"cve": "x"}, {"cve": {"id": 7}}, {}):
+            body = {"totalResults": 1, "vulnerabilities": [item]}
+            with self.subTest(item=item), self.assertRaises(mod.CheckError):
+                self._query([body])
+
+    def test_duplicate_cves_fail_closed(self) -> None:
+        dup = NVD_BODY["vulnerabilities"] * 2
+        with self.assertRaises(mod.CheckError) as ctx:
+            self._query([{"totalResults": 2, "vulnerabilities": dup}])
+        self.assertIn("duplicate", str(ctx.exception))
+
+    def test_duplicates_beyond_total_fail_closed(self) -> None:
+        dup = NVD_BODY["vulnerabilities"] * 2
+        with self.assertRaises(mod.CheckError) as ctx:
+            self._query([{"totalResults": 1, "vulnerabilities": dup}])
+        self.assertIn("duplicate", str(ctx.exception))
+
+    def test_more_results_than_total_fail_closed(self) -> None:
+        other = {"cve": {"id": "CVE-2025-00002"}}
+        two = NVD_BODY["vulnerabilities"] + [other]
+        with self.assertRaises(mod.CheckError) as ctx:
+            self._query([{"totalResults": 1, "vulnerabilities": two}])
+        self.assertIn("returned 2 results", str(ctx.exception))
+
+    def test_oversized_reply_fails_closed(self) -> None:
+        with mock.patch.object(mod, "MAX_BODY_BYTES", 10), self.assertRaises(mod.CheckError) as ctx:
+            self._query([NVD_BODY])
+        self.assertIn("larger than", str(ctx.exception))
 
     def test_total_that_shrinks_between_pages_fails_closed(self) -> None:
         first = {"totalResults": 3, "vulnerabilities": NVD_BODY["vulnerabilities"]}

@@ -11,7 +11,7 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Scriptorium has its own app icon: an open book with a gold quill, in the Lamplit colours.
-- Scriptorium is licensed under the PolyForm Shield License 1.0.0. Anyone may use it free, including companies, but nobody may sell it or a competing product. See `LICENSE`.
+- Scriptorium is licensed under the PolyForm Shield License 1.0.0. Anyone may use it free, including companies, but nobody may sell it or use it to provide a competing product. See `LICENSE`.
 - Books open in a page-turning reader. A header shows the title, the page indicator, and **Close book**.
 - A bottom bar offers **Previous**, a **Go to page** scrubber, **Next**, and **Notes**.
 - Turn pages with the keyboard.

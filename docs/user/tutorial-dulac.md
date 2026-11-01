@@ -19,7 +19,6 @@ set -euo pipefail
 id=edmunddulacspict00dulauoft; out=tmp/fixtures/corpus/dulac-picture-book
 mkdir -p "$out/source" "$out/jpg"
 curl -fL --retry 3 -o "$out/source/jp2.zip" "https://archive.org/download/$id/${id}_jp2.zip"
-curl -fL --retry 3 -o "$out/source/$id.pdf" "https://archive.org/download/$id/$id.pdf"
 unzip -oq "$out/source/jp2.zip" -d "$out/source"
 test -d "$out/source/${id}_jp2" || { echo "unexpected zip layout"; exit 1; }
 for f in "$out/source/${id}_jp2"/*.jp2; do

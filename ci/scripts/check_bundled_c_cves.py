@@ -61,6 +61,7 @@ NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 RETRY_STATUS = frozenset({403, 429, 503})
 MAX_ATTEMPTS = 5
 TIMEOUT_S = 60
+MAX_BODY_BYTES = 32 * 1024 * 1024  # an NVD page of 2000 CVEs is a few MB
 SLEEP_NO_KEY_S = 7.0  # NVD allows 5 requests per 30 s without a key
 SLEEP_KEY_S = 1.0  # and 50 per 30 s with one
 CANONICAL_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -261,6 +262,18 @@ def _retry_delay(err: urllib.error.HTTPError, attempt: int, base: float) -> floa
     return max(base, 5.0) * (2**attempt)
 
 
+def _read_json(urlopen: UrlOpen, req: urllib.request.Request) -> dict[str, Any]:
+    """Read one bounded reply body and parse it as a JSON object."""
+    with urlopen(req, timeout=TIMEOUT_S) as resp:
+        body = resp.read(MAX_BODY_BYTES + 1)
+    if len(body) > MAX_BODY_BYTES:
+        raise CheckError(f"NVD reply is larger than {MAX_BODY_BYTES} bytes; failing closed")
+    data = json.loads(body)
+    if not isinstance(data, dict):
+        raise CheckError("NVD returned a non-object JSON body")
+    return data
+
+
 def nvd_get(
     url: str,
     api_key: str | None,
@@ -277,11 +290,7 @@ def nvd_get(
     for attempt in range(attempts):
         try:
             req = urllib.request.Request(url, headers=headers)  # noqa: S310 - fixed https host
-            with urlopen(req, timeout=TIMEOUT_S) as resp:
-                data = json.load(resp)
-            if not isinstance(data, dict):
-                raise CheckError("NVD returned a non-object JSON body")
-            return data
+            return _read_json(urlopen, req)
         except urllib.error.HTTPError as err:
             if err.code not in RETRY_STATUS:
                 raise CheckError(f"NVD returned HTTP {err.code} for {url}") from err
@@ -335,6 +344,38 @@ def _fixed_version(cve: dict[str, Any], lib: Library) -> str:
     return "; ".join(dict.fromkeys(notes)) or "not stated"
 
 
+def _page_parts(page: dict[str, Any], lib: Library, version: str) -> tuple[list[Any], int]:
+    """Return a page's items and totalResults, or raise CheckError if either is malformed."""
+    items = page.get("vulnerabilities")
+    total = page.get("totalResults")
+    if not isinstance(items, list) or not isinstance(total, int) or isinstance(total, bool):
+        raise CheckError(
+            f"NVD reply for {lib.name} {version} lacks a list 'vulnerabilities' "
+            "or an integer 'totalResults'; failing closed"
+        )
+    return items, total
+
+
+def _finding(item: Any, lib: Library, version: str) -> Finding:
+    """Turn one NVD vulnerability entry into a Finding, or raise CheckError if malformed."""
+    cve = item.get("cve") if isinstance(item, dict) else None
+    if not isinstance(cve, dict) or not isinstance(cve.get("id"), str):
+        raise CheckError(f"NVD reply for {lib.name} {version} has a malformed CVE entry")
+    return Finding(cve["id"], lib.name, version, _best_metric(cve), _fixed_version(cve, lib))
+
+
+def _finish(found: list[Finding], total: int, lib: Library, version: str) -> list[Finding]:
+    """Require one distinct CVE per reported result, then sort."""
+    if len({f.cve for f in found}) != len(found):
+        raise CheckError(f"NVD pages for {lib.name} {version} held duplicate CVEs; failing closed")
+    if len(found) != total:
+        raise CheckError(
+            f"NVD pages for {lib.name} {version} returned {len(found)} results "
+            f"but totalResults was {total}; failing closed"
+        )
+    return sorted(found, key=lambda f: f.cve)
+
+
 def query_cves(
     lib: Library,
     version: str,
@@ -353,13 +394,7 @@ def query_cves(
         )
         page = nvd_get(f"{NVD_URL}?{query}", api_key, urlopen, sleep)
         sleep(SLEEP_KEY_S if api_key else SLEEP_NO_KEY_S)
-        items = page.get("vulnerabilities")
-        total = page.get("totalResults")
-        if not isinstance(items, list) or not isinstance(total, int) or isinstance(total, bool):
-            raise CheckError(
-                f"NVD reply for {lib.name} {version} lacks a list 'vulnerabilities' "
-                "or an integer 'totalResults'; failing closed"
-            )
+        items, total = _page_parts(page, lib, version)
         # A total that shrinks between pages could end the loop early, so pin the first one.
         if expected is None:
             expected = total
@@ -368,14 +403,10 @@ def query_cves(
                 f"NVD reply for {lib.name} {version} changed totalResults from {expected} "
                 f"to {total} mid-query; failing closed"
             )
-        for item in items:
-            cve = item.get("cve", {})
-            found.append(
-                Finding(cve["id"], lib.name, version, _best_metric(cve), _fixed_version(cve, lib))
-            )
+        found.extend(_finding(item, lib, version) for item in items)
         start += len(items)
         if start >= total:
-            return sorted(found, key=lambda f: f.cve)
+            return _finish(found, total, lib, version)
         if not items:
             raise CheckError(
                 f"NVD pages for {lib.name} {version} ended at {start} of {total} results; "

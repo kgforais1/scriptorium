@@ -97,7 +97,7 @@ Scriptorium copies each new book into its library folder. The folder name is the
 |---|---|
 | macOS | `~/Library/Application Support/dev.scriptorium.app/books/` |
 | Windows | `%APPDATA%\dev.scriptorium.app\books\` |
-| Linux | `~/.local/share/dev.scriptorium.app/books/` |
+| Linux | `$XDG_DATA_HOME/dev.scriptorium.app/books/`, which is `~/.local/share/dev.scriptorium.app/books/` when `XDG_DATA_HOME` is not set |
 
 Each book folder holds a `meta.json` file and the page images. To move or back up a book, copy
 its folder. To open a copy, click **Open…** and choose that folder.

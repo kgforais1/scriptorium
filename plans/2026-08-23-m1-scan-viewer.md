@@ -650,7 +650,10 @@ Phase 3 shipped in #68 and #67 (merged 2026-10-31 and 2026-11-01). Phase 4 runs 
    versions read from `Cargo.lock` and the crates' bundled sources. Bundle it with the app
    (`bundle.resources` in `tauri.conf.json`). Check the bundled OpenJPEG version against
    published advisories and record the result and date in the file.
-4. Release (held until the manual smoke run in `to_do.md` passes once): `VERSION` 0.2.0, the
+4. Release (held until the manual smoke run in `to_do.md` passes once): generate a notices file
+   for the Rust and production npm dependencies at build time (for example `cargo about` and
+   `pnpm licenses list`), run it before Tauri bundling, and ship it with `THIRD_PARTY_NOTICES.md`
+   (CodeRabbit on #73); `VERSION` 0.2.0, the
    `CHANGELOG.md` Unreleased section moved under 0.2.0, plan Verification ticked, plan archived.
 
 ## Verification
