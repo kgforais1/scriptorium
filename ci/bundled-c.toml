@@ -6,6 +6,12 @@
 # version_file   file inside the crate source that states the C version
 # version_regex  regex run over that file; the capture groups are joined with "."
 # cpe_vendor / cpe_product   the NVD CPE names used to look up CVEs
+# canary_version / canary_cve   an older version and a CVE that NVD lists for it
+#                under this exact CPE. The script queries it first and exits 2 if
+#                the CVE is missing, because a wrong CPE returns zero CVEs and
+#                would pass forever. Verify both against the live API. If no
+#                canary exists, set canary = "none" and a canary_note instead
+#                (the script warns on every run).
 #
 # Verified against the registry sources of the versions in Cargo.lock.
 
@@ -16,6 +22,8 @@ version_file = "config/opj_config.h"
 version_regex = '(?s)OPJ_VERSION_MAJOR\s+(\d+).*?OPJ_VERSION_MINOR\s+(\d+).*?OPJ_VERSION_BUILD\s+(\d+)'
 cpe_vendor = "uclouvain"
 cpe_product = "openjpeg"
+canary_version = "2.3.0"
+canary_cve = "CVE-2018-5727"
 
 [[library]]
 name = "Little CMS"
@@ -24,7 +32,9 @@ crate = "lcms2-sys"
 version_file = "README.md"
 version_regex = 'version (\d+\.\d+(?:\.\d+)?)'
 cpe_vendor = "littlecms"
-cpe_product = "little_cms_color_engine"
+cpe_product = "little_cms"
+canary_version = "2.14"
+canary_cve = "CVE-2026-41254"
 
 [[library]]
 name = "AWS-LC"
@@ -33,8 +43,11 @@ version_file = "aws-lc/CMakeLists.txt"
 version_regex = 'set\(SOFTWARE_VERSION "(\d+\.\d+\.\d+)"\)'
 # NVD lists the C library as amazon:aws_libcrypto. Its Rust wrappers
 # (amazon:aws-lc-sys, amazon:aws-lc-fips-sys) are separate CPEs keyed by crate
-# version, and NVD has no amazon:aws-lc entry. Nothing was returned for 5.11.0
-# when this was added; check that aws_libcrypto versions follow the AWS-LC
-# version number before relying on a clean result.
+# version, and NVD has no amazon:aws-lc entry. NVD numbers aws_libcrypto in the
+# 1.x series (CVE-2026-3336 covers 1.41.0 to before 1.69.0), so a clean result
+# for 5.11.0 is weaker evidence than for the other libraries. The canary proves
+# the CPE itself works.
 cpe_vendor = "amazon"
 cpe_product = "aws_libcrypto"
+canary_version = "1.50.0"
+canary_cve = "CVE-2026-3336"

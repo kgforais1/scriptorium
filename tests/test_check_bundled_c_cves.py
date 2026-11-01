@@ -11,6 +11,7 @@ Run:
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import io
 import json
@@ -49,7 +50,17 @@ version_file = "config/opj_config.h"
 version_regex = '(?s)OPJ_VERSION_MAJOR\\s+(\\d+).*?OPJ_VERSION_MINOR\\s+(\\d+).*?OPJ_VERSION_BUILD\\s+(\\d+)'
 cpe_vendor = "uclouvain"
 cpe_product = "openjpeg"
+canary_version = "2.3.0"
+canary_cve = "CVE-2018-5727"
 """
+NO_CANARY_MANIFEST = MANIFEST.replace(
+    'canary_version = "2.3.0"\ncanary_cve = "CVE-2018-5727"\n',
+    'canary = "none"\ncanary_note = "no known CVE under this CPE"\n',
+)
+CANARY_BODY = {
+    "totalResults": 1,
+    "vulnerabilities": [{"cve": {"id": "CVE-2018-5727"}}],
+}
 OPJ_CONFIG = (
     "#define OPJ_VERSION_MAJOR 2\n#define OPJ_VERSION_MINOR 5\n#define OPJ_VERSION_BUILD 3\n"
 )
@@ -97,11 +108,16 @@ class FakeResponse(io.BytesIO):
 class FakeNvd:
     """Callable stand-in for urlopen that replays a script of bodies or HTTP codes."""
 
-    def __init__(self, script: list[Any]) -> None:
+    def __init__(self, script: list[Any], canary: Any = CANARY_BODY) -> None:
         self.script = list(script)
-        self.calls: list[str] = []
+        self.canary = canary
+        self.calls: list[str] = []  # real-version queries only
+        self.canary_calls = 0
 
     def __call__(self, req: Any, timeout: int = 0) -> FakeResponse:
+        if ":2.3.0:" in req.full_url:  # the canary version
+            self.canary_calls += 1
+            return FakeResponse(json.dumps(self.canary).encode())
         self.calls.append(req.full_url)
         step = self.script.pop(0) if len(self.script) > 1 else self.script[0]
         if isinstance(step, int):
@@ -111,10 +127,12 @@ class FakeNvd:
         return FakeResponse(json.dumps(step).encode())
 
 
-def _make_tree(tmp: Path, *, with_source: bool = True) -> dict[str, Path]:
+def _make_tree(
+    tmp: Path, *, with_source: bool = True, manifest_text: str = MANIFEST
+) -> dict[str, Path]:
     """Write manifest, lockfile, exceptions dir and a fake cargo home under tmp."""
     manifest = tmp / "bundled-c.toml"
-    manifest.write_text(MANIFEST, encoding="utf-8")
+    manifest.write_text(manifest_text, encoding="utf-8")
     lock = tmp / "Cargo.lock"
     lock.write_text(LOCK, encoding="utf-8")
     home = tmp / "cargo"
@@ -144,12 +162,17 @@ class CheckBundledCvesTests(unittest.TestCase):
     """Behaviour of the bundled-C CVE check."""
 
     def _run(
-        self, expires: str | None, nvd: Any, *, with_source: bool = True
+        self,
+        expires: str | None,
+        nvd: Any,
+        *,
+        with_source: bool = True,
+        manifest_text: str = MANIFEST,
     ) -> tuple[int, list[float]]:
         sleeps: list[float] = []
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
-            t = _make_tree(tmp, with_source=with_source)
+            t = _make_tree(tmp, with_source=with_source, manifest_text=manifest_text)
             rc = mod.run(
                 t["manifest"],
                 _write_exceptions(tmp, expires),
@@ -235,6 +258,62 @@ class CheckBundledCvesTests(unittest.TestCase):
         rc, _ = self._run("2026-11-29", nvd)
         self.assertEqual(rc, 2)
         self.assertEqual(len(nvd.calls), mod.MAX_ATTEMPTS)
+
+    def test_canary_found_passes(self) -> None:
+        nvd = FakeNvd([NVD_BODY])
+        rc, _ = self._run("2026-11-29", nvd)
+        self.assertEqual(rc, 0)
+        self.assertEqual(nvd.canary_calls, 1)
+
+    def test_canary_missing_exits_2(self) -> None:
+        empty = {"totalResults": 0, "vulnerabilities": []}
+        nvd = FakeNvd([NVD_BODY], canary=empty)
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            rc, _ = self._run("2026-11-29", nvd)
+        self.assertEqual(rc, 2)
+        self.assertIn("probably wrong", buf.getvalue())
+        self.assertEqual(nvd.calls, [])  # the real query never ran
+
+    def test_canary_none_warns(self) -> None:
+        nvd = FakeNvd([NVD_BODY])
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            rc, _ = self._run("2026-11-29", nvd, manifest_text=NO_CANARY_MANIFEST)
+        self.assertEqual(rc, 0)
+        self.assertEqual(nvd.canary_calls, 0)
+        self.assertIn("WARNING", buf.getvalue())
+
+    def test_canary_none_requires_note(self) -> None:
+        bad = NO_CANARY_MANIFEST.replace('canary_note = "no known CVE under this CPE"\n', "")
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "m.toml"
+            path.write_text(bad, encoding="utf-8")
+            with self.assertRaises(mod.CheckError):
+                mod.load_manifest(path)
+
+    def test_manifest_without_canary_rejected(self) -> None:
+        bad = MANIFEST.replace('canary_cve = "CVE-2018-5727"\n', "")
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "m.toml"
+            path.write_text(bad, encoding="utf-8")
+            with self.assertRaises(mod.CheckError):
+                mod.load_manifest(path)
+
+    def test_fixed_version_found_in_nested_nodes(self) -> None:
+        match = {
+            "vulnerable": True,
+            "criteria": "cpe:2.3:a:uclouvain:openjpeg:*:*:*:*:*:*:*:*",
+            "versionEndExcluding": "2.5.4",
+        }
+        cve = {
+            "configurations": [
+                {"nodes": [{"operator": "AND", "nodes": [{"operator": "OR", "cpeMatch": [match]}]}]}
+            ]
+        }
+        with tempfile.TemporaryDirectory() as d:
+            lib = mod.load_manifest(_make_tree(Path(d))["manifest"])[0]
+        self.assertEqual(mod._fixed_version(cve, lib), "fixed in 2.5.4")
 
 
 if __name__ == "__main__":

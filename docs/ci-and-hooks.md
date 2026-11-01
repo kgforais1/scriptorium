@@ -140,8 +140,13 @@ repository secret speeds it up; without one the script sleeps about 7 seconds be
   `python3 ci/scripts/check_bundled_c_cves.py`.
 - **Add a library:** add a `[[library]]` to `ci/bundled-c.toml` with the bundling `crate`, a
   `version_file` and `version_regex` (capture groups are joined with `.`), and the NVD
-  `cpe_vendor` and `cpe_product`. Check the CPE with the NVD CPE API first, and check the version
-  by hand in `~/.cargo/registry/src`.
+  `cpe_vendor` and `cpe_product`. Every entry also needs a canary: a `canary_version` and a
+  `canary_cve` that NVD lists for that version under the same CPE. Verify it live with
+  `cves/2.0?cpeName=cpe:2.3:a:<vendor>:<product>:<canary_version>:*:*:*:*:*:*:*`. The script queries
+  the canary first and exits 2 if the CVE is missing, because a wrong CPE returns zero CVEs and
+  would pass forever (NVD files Little CMS under `little_cms`, not `little_cms_color_engine`). If
+  no canary exists, set `canary = "none"` and a `canary_note`; the script then warns on every run.
+  Check the version by hand in `~/.cargo/registry/src`.
 - **Add or extend an exception:** add an `[[exceptions]]` row with `id`, `library`, `reason` and
   `expires` (`YYYY-MM-DD`). Extend only after re-checking, and keep the reason current.
 

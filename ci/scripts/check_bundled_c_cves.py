@@ -82,6 +82,9 @@ class Library:
     version_regex: str
     cpe_vendor: str
     cpe_product: str
+    canary_version: str | None = None
+    canary_cve: str | None = None
+    canary_note: str | None = None  # set only when the entry declares canary = "none"
 
 
 @dataclass
@@ -152,9 +155,22 @@ def load_manifest(path: Path) -> list[Library]:
                 version_regex=_require_str(row, "version_regex", where),
                 cpe_vendor=_require_str(row, "cpe_vendor", where),
                 cpe_product=_require_str(row, "cpe_product", where),
+                **_load_canary(row, where),
             )
         )
     return libs
+
+
+def _load_canary(row: dict[str, Any], where: str) -> dict[str, str | None]:
+    """Read the canary fields: canary_version + canary_cve, or canary = "none" + canary_note."""
+    if row.get("canary") is not None:
+        if row["canary"] != "none":
+            raise CheckError(f'{where}: canary must be "none" or absent, got {row["canary"]!r}')
+        return {"canary_note": _require_str(row, "canary_note", where)}
+    cve = _require_str(row, "canary_cve", where)
+    if not CVE_ID_RE.fullmatch(cve):
+        raise CheckError(f"{where}: canary_cve {cve!r} is not a CVE id")
+    return {"canary_version": _require_str(row, "canary_version", where), "canary_cve": cve}
 
 
 def load_exceptions(path: Path, library_names: set[str]) -> list[ExceptionRow]:
@@ -278,12 +294,22 @@ def _best_metric(cve: dict[str, Any]) -> str:
     return "unknown"
 
 
+def _walk_matches(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collect cpeMatch entries from nodes and any nested nodes (AND/OR trees)."""
+    out: list[dict[str, Any]] = []
+    for node in nodes:
+        out.extend(node.get("cpeMatch", []))
+        out.extend(_walk_matches(node.get("nodes", [])))
+    return out
+
+
 def _matches_for(cve: dict[str, Any], lib: Library) -> list[dict[str, Any]]:
     """Return vulnerable cpeMatch entries for this library's CPE product."""
     needle = f":{lib.cpe_vendor}:{lib.cpe_product}:"
     nodes = [n for cfg in cve.get("configurations", []) for n in cfg.get("nodes", [])]
-    matches = [m for n in nodes for m in n.get("cpeMatch", [])]
-    return [m for m in matches if m.get("vulnerable") and needle in m.get("criteria", "")]
+    return [
+        m for m in _walk_matches(nodes) if m.get("vulnerable") and needle in m.get("criteria", "")
+    ]
 
 
 def _fixed_version(cve: dict[str, Any], lib: Library) -> str:
@@ -323,6 +349,34 @@ def query_cves(
         start += len(items)
         if not items or start >= int(page.get("totalResults", 0)):
             return sorted(found, key=lambda f: f.cve)
+
+
+def check_canary(
+    lib: Library,
+    api_key: str | None,
+    urlopen: UrlOpen,
+    sleep: Sleep,
+) -> None:
+    """Prove the CPE works: NVD must list the canary CVE for the canary version.
+
+    A wrong CPE vendor or product silently returns zero CVEs, which would pass
+    the check forever. Raises CheckError when the canary CVE is not returned.
+    """
+    if lib.canary_version is None or lib.canary_cve is None:
+        print(
+            f"[bundled-c] WARNING: {lib.name} has no canary ({lib.canary_note}); "
+            "a clean result is weak evidence",
+            file=sys.stderr,
+        )
+        return
+    ids = {f.cve for f in query_cves(lib, lib.canary_version, api_key, urlopen, sleep)}
+    if lib.canary_cve not in ids:
+        raise CheckError(
+            f"{lib.name}: canary failed: NVD did not return {lib.canary_cve} for "
+            f"{lib.cpe_vendor}:{lib.cpe_product}:{lib.canary_version}; the CPE vendor or "
+            "product in the manifest is probably wrong (or NVD changed it)"
+        )
+    print(f"[bundled-c] {lib.name} canary ok ({lib.canary_cve} at {lib.canary_version})")
 
 
 def evaluate(
@@ -381,6 +435,7 @@ def run(
             crate_dir = find_crate_source(cargo_home, lib.crate, crate_version)
             version = extract_c_version(lib, crate_dir)
             print(f"[bundled-c] {lib.name} {version} (via {lib.crate} {crate_version})")
+            check_canary(lib, api_key, urlopen, sleep)
             findings.extend(query_cves(lib, version, api_key, urlopen, sleep))
     except CheckError as err:
         print(f"[bundled-c] ERROR: {err}", file=sys.stderr)
