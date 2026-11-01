@@ -21,6 +21,8 @@ Inputs:
   --manifest PATH    bundled library list (default: ci/bundled-c.toml)
   --exceptions PATH  exceptions (default: ci/bundled-c-exceptions.toml)
   --lockfile PATH    Cargo.lock (default: src-tauri/Cargo.lock)
+  --root PATH        directory that --manifest/--exceptions/--lockfile must stay
+                     under (default: current working directory)
   --today YYYY-MM-DD override "today" for tests
 Environment:
   CARGO_HOME         cargo home (default: ~/.cargo); crates are read from
@@ -121,6 +123,16 @@ def parse_canonical_date(value: str, *, label: str) -> date:
     if not CANONICAL_DATE_RE.fullmatch(value):
         raise ValueError(f"{label} must be YYYY-MM-DD, got {value!r}")
     return date.fromisoformat(value)
+
+
+def resolve_under_root(path: Path, root: Path) -> Path:
+    """Resolve path and require it stays under root (blocks CLI path escape)."""
+    root_resolved = root.resolve()
+    candidate = path if path.is_absolute() else root_resolved / path
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(root_resolved):
+        raise ValueError(f"{path}: must stay under {root_resolved}")
+    return resolved
 
 
 def load_toml(path: Path) -> dict[str, Any]:
@@ -226,12 +238,12 @@ def find_crate_source(cargo_home: Path, crate: str, version: str) -> Path:
 
 def extract_c_version(lib: Library, crate_dir: Path) -> str:
     """Read the C library version from the crate source with the manifest regex."""
-    target = crate_dir / lib.version_file
     try:
+        target = resolve_under_root(Path(lib.version_file), crate_dir)
         text = target.read_text(encoding="utf-8", errors="replace")
         pattern = re.compile(lib.version_regex)
-    except (OSError, re.error) as err:
-        raise CheckError(f"{lib.name}: cannot read version from {target}: {err}") from err
+    except (OSError, ValueError, re.error) as err:
+        raise CheckError(f"{lib.name}: cannot read version from {lib.version_file}: {err}") from err
     match = pattern.search(text)
     if not match or not match.groups():
         raise CheckError(f"{lib.name}: version_regex found no version in {target}")
@@ -340,15 +352,26 @@ def query_cves(
         )
         page = nvd_get(f"{NVD_URL}?{query}", api_key, urlopen, sleep)
         sleep(SLEEP_KEY_S if api_key else SLEEP_NO_KEY_S)
-        items = page.get("vulnerabilities", [])
+        items = page.get("vulnerabilities")
+        total = page.get("totalResults")
+        if not isinstance(items, list) or not isinstance(total, int) or isinstance(total, bool):
+            raise CheckError(
+                f"NVD reply for {lib.name} {version} lacks a list 'vulnerabilities' "
+                "or an integer 'totalResults'; failing closed"
+            )
         for item in items:
             cve = item.get("cve", {})
             found.append(
                 Finding(cve["id"], lib.name, version, _best_metric(cve), _fixed_version(cve, lib))
             )
         start += len(items)
-        if not items or start >= int(page.get("totalResults", 0)):
+        if start >= total:
             return sorted(found, key=lambda f: f.cve)
+        if not items:
+            raise CheckError(
+                f"NVD pages for {lib.name} {version} ended at {start} of {total} results; "
+                "failing closed"
+            )
 
 
 def check_canary(
@@ -456,16 +479,26 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, default=Path("ci/bundled-c.toml"))
     parser.add_argument("--exceptions", type=Path, default=Path("ci/bundled-c-exceptions.toml"))
     parser.add_argument("--lockfile", type=Path, default=Path("src-tauri/Cargo.lock"))
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=Path.cwd(),
+        help="directory that --manifest/--exceptions/--lockfile must stay under",
+    )
     parser.add_argument("--today", type=str, default=None, help="YYYY-MM-DD override")
     args = parser.parse_args()
     try:
         today = parse_canonical_date(args.today, label="--today") if args.today else date.today()
+        root = args.root.resolve()
+        manifest = resolve_under_root(args.manifest, root)
+        exceptions = resolve_under_root(args.exceptions, root)
+        lockfile = resolve_under_root(args.lockfile, root)
     except ValueError as err:
         print(f"[bundled-c] ERROR: {err}", file=sys.stderr)
         return 2
     cargo_home = Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo")
     api_key = os.environ.get("NVD_API_KEY") or None
-    return run(args.manifest, args.exceptions, args.lockfile, cargo_home, today, api_key)
+    return run(manifest, exceptions, lockfile, cargo_home, today, api_key)
 
 
 if __name__ == "__main__":

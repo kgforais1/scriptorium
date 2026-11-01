@@ -18,6 +18,7 @@ import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 import urllib.error
 from datetime import date
 from pathlib import Path
@@ -314,6 +315,81 @@ class CheckBundledCvesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             lib = mod.load_manifest(_make_tree(Path(d))["manifest"])[0]
         self.assertEqual(mod._fixed_version(cve, lib), "fixed in 2.5.4")
+
+    def _query(self, pages: list[Any]) -> list[Any]:
+        with tempfile.TemporaryDirectory() as d:
+            lib = mod.load_manifest(_make_tree(Path(d))["manifest"])[0]
+        return mod.query_cves(lib, "2.5.3", None, FakeNvd(pages), lambda _s: None)
+
+    def test_reply_missing_vulnerabilities_fails_closed(self) -> None:
+        with self.assertRaises(mod.CheckError):
+            self._query([{"totalResults": 0}])
+
+    def test_reply_missing_total_results_fails_closed(self) -> None:
+        with self.assertRaises(mod.CheckError):
+            self._query([{"vulnerabilities": []}])
+
+    def test_reply_wrong_types_fail_closed(self) -> None:
+        for body in (
+            {"totalResults": "1", "vulnerabilities": []},
+            {"totalResults": 0, "vulnerabilities": {}},
+            {"totalResults": True, "vulnerabilities": []},
+        ):
+            with self.subTest(body=body), self.assertRaises(mod.CheckError):
+                self._query([body])
+
+    def test_early_empty_page_fails_closed(self) -> None:
+        first = {"totalResults": 3, "vulnerabilities": NVD_BODY["vulnerabilities"]}
+        empty = {"totalResults": 3, "vulnerabilities": []}
+        with self.assertRaises(mod.CheckError) as ctx:
+            self._query([first, empty])
+        self.assertIn("ended at 1 of 3", str(ctx.exception))
+
+    def test_multi_page_reply_is_read_to_the_end(self) -> None:
+        other = {"cve": {"id": "CVE-2025-00002"}}
+        first = {"totalResults": 2, "vulnerabilities": NVD_BODY["vulnerabilities"]}
+        second = {"totalResults": 2, "vulnerabilities": [other]}
+        found = self._query([first, second])
+        self.assertEqual([f.cve for f in found], ["CVE-2025-00002", CVE])
+
+    def test_path_outside_root_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "root"
+            root.mkdir()
+            for bad in (Path("../outside.toml"), Path(d) / "outside.toml"):
+                with self.subTest(path=str(bad)), self.assertRaises(ValueError):
+                    mod.resolve_under_root(bad, root)
+            inside = mod.resolve_under_root(Path("ci/x.toml"), root)
+            self.assertEqual(inside, (root / "ci" / "x.toml").resolve())
+
+    def test_symlink_escape_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "root"
+            root.mkdir()
+            (Path(d) / "secret.toml").write_text("x = 1\n", encoding="utf-8")
+            (root / "link.toml").symlink_to(Path(d) / "secret.toml")
+            with self.assertRaises(ValueError):
+                mod.resolve_under_root(Path("link.toml"), root)
+
+    def test_main_rejects_cli_path_outside_root(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            argv = ["prog", "--root", d, "--manifest", "/etc/passwd"]
+            buf = io.StringIO()
+            with (
+                unittest.mock.patch.object(sys, "argv", argv),
+                contextlib.redirect_stderr(buf),
+            ):
+                rc = mod.main()
+        self.assertEqual(rc, 2)
+        self.assertIn("must stay under", buf.getvalue())
+
+    def test_version_file_escaping_crate_dir_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            t = _make_tree(Path(d))
+            lib = mod.load_manifest(t["manifest"])[0]
+            bad = mod.Library(**{**lib.__dict__, "version_file": "../../../../Cargo.lock"})
+            with self.assertRaises(mod.CheckError):
+                mod.extract_c_version(bad, t["src"])
 
 
 if __name__ == "__main__":

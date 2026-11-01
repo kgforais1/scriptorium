@@ -5,5 +5,5 @@
 [[exceptions]]
 id = "CVE-2025-54874"
 library = "OpenJPEG"
-reason = "not reachable through jpeg2k, which passes a null-initialised image while the sink needs an uninitialised one; fixed upstream in f809b80c (OpenJPEG 2.5.4), but no openjpeg-sys release bundles 2.5.4 yet; tracked in to_do.md"
+reason = "not reachable through jpeg2k: the write needs an uninitialised *p_image and jpeg2k passes a null-initialised one; fixed upstream in f809b80c (OpenJPEG 2.5.4), but no openjpeg-sys release bundles 2.5.4 yet; tracked in to_do.md"
 expires = "2026-11-29"
