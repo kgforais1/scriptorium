@@ -268,7 +268,10 @@ def _read_json(urlopen: UrlOpen, req: urllib.request.Request) -> dict[str, Any]:
         body = resp.read(MAX_BODY_BYTES + 1)
     if len(body) > MAX_BODY_BYTES:
         raise CheckError(f"NVD reply is larger than {MAX_BODY_BYTES} bytes; failing closed")
-    data = json.loads(body)
+    try:
+        data = json.loads(body)
+    except (ValueError, RecursionError) as err:  # ValueError covers JSON and UTF-8 decode errors
+        raise CheckError(f"NVD reply is not valid JSON ({err}); failing closed") from err
     if not isinstance(data, dict):
         raise CheckError("NVD returned a non-object JSON body")
     return data
@@ -359,9 +362,16 @@ def _page_parts(page: dict[str, Any], lib: Library, version: str) -> tuple[list[
 def _finding(item: Any, lib: Library, version: str) -> Finding:
     """Turn one NVD vulnerability entry into a Finding, or raise CheckError if malformed."""
     cve = item.get("cve") if isinstance(item, dict) else None
-    if not isinstance(cve, dict) or not isinstance(cve.get("id"), str):
-        raise CheckError(f"NVD reply for {lib.name} {version} has a malformed CVE entry")
-    return Finding(cve["id"], lib.name, version, _best_metric(cve), _fixed_version(cve, lib))
+    bad = f"NVD reply for {lib.name} {version} has a malformed CVE entry; failing closed"
+    if not isinstance(cve, dict):
+        raise CheckError(bad)
+    cve_id = cve.get("id")
+    if not isinstance(cve_id, str) or not CVE_ID_RE.fullmatch(cve_id):
+        raise CheckError(bad)
+    try:
+        return Finding(cve_id, lib.name, version, _best_metric(cve), _fixed_version(cve, lib))
+    except (AttributeError, TypeError) as err:
+        raise CheckError(f"{bad} ({err})") from err
 
 
 def _finish(found: list[Finding], total: int, lib: Library, version: str) -> list[Finding]:

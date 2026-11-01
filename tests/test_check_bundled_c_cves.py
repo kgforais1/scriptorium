@@ -100,6 +100,11 @@ NVD_BODY = {
 class FakeResponse(io.BytesIO):
     """A urlopen result usable as a context manager."""
 
+    def read(self, size: int | None = -1) -> bytes:
+        if size is None or size < 0:
+            raise AssertionError("reads must be bounded")
+        return super().read(size)
+
     def __enter__(self) -> FakeResponse:
         return self
 
@@ -347,7 +352,15 @@ class CheckBundledCvesTests(unittest.TestCase):
         self.assertIn("ended at 1 of 3", str(ctx.exception))
 
     def test_malformed_cve_entry_fails_closed(self) -> None:
-        for item in ("x", {"cve": "x"}, {"cve": {"id": 7}}, {}):
+        nested_bad = {"cve": {"id": CVE, "metrics": []}}
+        for item in (
+            "x",
+            {"cve": "x"},
+            {"cve": {"id": 7}},
+            {},
+            {"cve": {"id": "nope"}},
+            nested_bad,
+        ):
             body = {"totalResults": 1, "vulnerabilities": [item]}
             with self.subTest(item=item), self.assertRaises(mod.CheckError):
                 self._query([body])
@@ -357,6 +370,18 @@ class CheckBundledCvesTests(unittest.TestCase):
         with self.assertRaises(mod.CheckError) as ctx:
             self._query([{"totalResults": 2, "vulnerabilities": dup}])
         self.assertIn("duplicate", str(ctx.exception))
+
+    def test_duplicates_across_pages_fail_closed(self) -> None:
+        page = {"totalResults": 2, "vulnerabilities": NVD_BODY["vulnerabilities"]}
+        with self.assertRaises(mod.CheckError) as ctx:
+            self._query([page, page])
+        self.assertIn("duplicate", str(ctx.exception))
+
+    def test_undecodable_reply_fails_closed(self) -> None:
+        for body in (b"\xff\xfe\xfa", b"[" * 100000):
+            nvd = mock.Mock(side_effect=lambda req, timeout=0, b=body: FakeResponse(b))
+            with self.subTest(body=body[:4]), self.assertRaises(mod.CheckError):
+                mod.nvd_get("https://x", None, nvd, lambda _s: None)
 
     def test_duplicates_beyond_total_fail_closed(self) -> None:
         dup = NVD_BODY["vulnerabilities"] * 2
