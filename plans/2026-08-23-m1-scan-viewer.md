@@ -639,8 +639,7 @@ Phase 3 shipped in #68 and #67 (merged 2026-10-31 and 2026-11-01). Phase 4 runs 
 0. Bookkeeping: this chunk list, `to_do.md` Active row, roadmap status line.
 1. README: replace the Phase 2 "Try it" with the reader (keys, scrubber, notes, where books
    live), add the four `docs/screenshots/` images (regenerated with `pnpm shots --save` on
-   `main`), and CI and SonarCloud badges. No licence badge: the repo has no `LICENSE` yet, and
-   choosing one is the owner's call. The app icon is still Tauri's default; a real icon is an
+   `main`), and CI and SonarCloud badges. The licence badge came later, with `LICENSE` (PolyForm Shield). The app icon is still Tauri's default; a real icon is an
    open question below.
 2. User docs in `docs/user/`: `getting-started.md` (install a build, open a folder of scans,
    the confirm dialog, reading with mouse, keys and touch, where books live, progress) and
@@ -665,7 +664,7 @@ Phase 3 shipped in #68 and #67 (merged 2026-10-31 and 2026-11-01). Phase 4 runs 
 
 ## Open questions
 
-- [ ] Licence for the repository (no `LICENSE` file yet; blocks a licence badge)
+- [x] Licence for the repository: PolyForm Shield 1.0.0 (2026-11-01). Anyone may use it free, including companies; nobody may sell a competing product.
 - [ ] App icon: keep Tauri's default for 0.2.0, or design one first
 
 - [ ] Single vs spread layout: follow ADR / library defaults

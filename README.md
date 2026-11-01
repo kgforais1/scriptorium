@@ -1,6 +1,7 @@
 # Scriptorium
 
 [![CI](https://github.com/kgforais1/scriptorium/actions/workflows/ci.yml/badge.svg)](https://github.com/kgforais1/scriptorium/actions/workflows/ci.yml)
+[![License: PolyForm Shield 1.0.0](https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-b8873f)](LICENSE)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=kgforais1_scriptorium&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=kgforais1_scriptorium)
 
 Last reviewed: 2026-11-01
@@ -129,3 +130,10 @@ Full contents: see [`inventory/README.md`](inventory/README.md) and [`AGENTS.md`
 
 Changelogs: [`CHANGELOG.md`](CHANGELOG.md) / [`CHANGELOG.dev.md`](CHANGELOG.dev.md).
 GitHub hygiene: [`policies/github-repository-hygiene.md`](policies/github-repository-hygiene.md).
+
+## Licence
+
+Scriptorium is source-available under the [PolyForm Shield License 1.0.0](LICENSE). Anyone,
+companies included, may use, change, and share it for free. Nobody may sell it or offer a
+product that competes with it. The bundled C libraries keep their own licences; see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
