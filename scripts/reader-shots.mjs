@@ -78,9 +78,10 @@ function pagesDir(input) {
 
 function loadBook(dir) {
   const files = readdirSync(dir).filter((f) => /\.(jpe?g|png)$/i.test(f)).sort();
-  // Vite's /@fs/ route decodes with decodeURI, which leaves %23 and %3F alone: it cannot serve these.
-  const bad = files.map((f) => join(dir, f)).find((f) => /[#?]/.test(f));
-  if (bad) throw new Error(`scan paths cannot contain # or ? (Vite cannot serve them): ${bad}`);
+  // Vite's /@fs/ route cannot serve these: decodeURI leaves %23 and %3F alone, and it answers 403
+  // for a colon anywhere but a Windows drive letter.
+  const bad = files.map((f) => join(dir, f)).find((f) => /[#?]/.test(f) || f.replace(/^[A-Za-z]:/, "").includes(":"));
+  if (bad) throw new Error(`scan paths cannot contain #, ? or : (Vite cannot serve them): ${bad}`);
   if (files.length === 0) throw new Error(`${dir}: no JPEG or PNG scans`);
   const pages = files.map((f) => ({ path: join(dir, f), ...imageSize(join(dir, f)) }));
   const title = dir.includes("dulac") ? "Edmund Dulac's Picture-Book" : "Fixture book";
@@ -101,9 +102,10 @@ function stubTauri(book) {
     convertFileSrc: (p) => {
       // A Windows path (C:\...) becomes C:/...; a POSIX path keeps any backslash in a file name.
       const posix = /^[A-Za-z]:\\/.test(p) ? p.replaceAll("\\", "/") : p;
-      const path = posix.split("/").map(encodeURIComponent).join("/");
-      // Vite wants /@fs/C:/...; keep the drive colon literal, since decodeURI leaves %3A alone.
-      return path.startsWith("/") ? `/@fs${path}` : `/@fs/${path.replace(/^([A-Za-z])%3A/, "$1:")}`;
+      // Vite decodes /@fs/ with decodeURI, so encodeURI is its exact inverse: it escapes spaces,
+      // % and non-ASCII, and keeps / and the drive colon literal. #, ? and other colons are refused earlier.
+      const path = encodeURI(posix);
+      return path.startsWith("/") ? `/@fs${path}` : `/@fs/${path}`;
     },
     invoke: async (cmd, a) => {
       if (cmd === "last_book") return book;
