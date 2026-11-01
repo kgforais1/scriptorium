@@ -345,6 +345,13 @@ class CheckBundledCvesTests(unittest.TestCase):
             self._query([first, empty])
         self.assertIn("ended at 1 of 3", str(ctx.exception))
 
+    def test_total_that_shrinks_between_pages_fails_closed(self) -> None:
+        first = {"totalResults": 3, "vulnerabilities": NVD_BODY["vulnerabilities"]}
+        shrunk = {"totalResults": 1, "vulnerabilities": []}
+        with self.assertRaises(mod.CheckError) as ctx:
+            self._query([first, shrunk])
+        self.assertIn("changed totalResults from 3 to 1", str(ctx.exception))
+
     def test_multi_page_reply_is_read_to_the_end(self) -> None:
         other = {"cve": {"id": "CVE-2025-00002"}}
         first = {"totalResults": 2, "vulnerabilities": NVD_BODY["vulnerabilities"]}

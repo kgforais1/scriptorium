@@ -346,6 +346,7 @@ def query_cves(
     cpe = f"cpe:2.3:a:{lib.cpe_vendor}:{lib.cpe_product}:{version}:*:*:*:*:*:*:*"
     found: list[Finding] = []
     start = 0
+    expected: int | None = None
     while True:
         query = urllib.parse.urlencode(
             {"cpeName": cpe, "isVulnerable": "", "startIndex": start}, safe=":*"
@@ -358,6 +359,14 @@ def query_cves(
             raise CheckError(
                 f"NVD reply for {lib.name} {version} lacks a list 'vulnerabilities' "
                 "or an integer 'totalResults'; failing closed"
+            )
+        # A total that shrinks between pages could end the loop early, so pin the first one.
+        if expected is None:
+            expected = total
+        elif total != expected:
+            raise CheckError(
+                f"NVD reply for {lib.name} {version} changed totalResults from {expected} "
+                f"to {total} mid-query; failing closed"
             )
         for item in items:
             cve = item.get("cve", {})
