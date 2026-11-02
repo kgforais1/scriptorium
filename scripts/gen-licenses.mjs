@@ -5,7 +5,7 @@
 //   node scripts/gen-licenses.mjs           write the file
 //   node scripts/gen-licenses.mjs --check   fail if the file on disk is stale
 //
-// Needs cargo-about: `cargo install cargo-about --locked --version 0.9.3 --features cli`.
+// Needs the cargo-about version in package.json `config.cargoAboutVersion`; CI reads the same field.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -40,8 +40,9 @@ function mustRun(cmd, args, cwd) {
   return r;
 }
 
-// Keep in step with the cargo-about version in ci.yml; another version may format the file differently.
-const CARGO_ABOUT_VERSION = "0.9.3";
+// One pin for local runs and CI; another cargo-about version may format the file differently.
+const CARGO_ABOUT_VERSION = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).config
+  .cargoAboutVersion;
 const INSTALL = `cargo install cargo-about --locked --version ${CARGO_ABOUT_VERSION} --features cli`;
 
 /** Rust crates: cargo-about renders src-tauri/about.hbs under src-tauri/about.toml. */

@@ -24,6 +24,9 @@
     "licenses:check": "node scripts/gen-licenses.mjs --check",
     "shots": "node scripts/reader-shots.mjs"
   },
+  "config": {
+    "cargoAboutVersion": "0.9.3"
+  },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "2.8.3",

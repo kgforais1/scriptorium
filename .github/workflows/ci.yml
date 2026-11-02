@@ -343,11 +343,15 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
+      - name: cargo-about version (package.json config.cargoAboutVersion)
+        id: cargo-about-version
+        run: echo "version=$(node -p "require('./package.json').config.cargoAboutVersion")" >> "$GITHUB_OUTPUT"
+
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cargo-about-bin
         with:
           path: ~/.cargo/bin/cargo-about
-          key: cargo-about-${{ runner.os }}-0.9.3
+          key: cargo-about-${{ runner.os }}-${{ steps.cargo-about-version.outputs.version }}
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -360,7 +364,9 @@ jobs:
 
       - name: Install cargo-about
         if: steps.cargo-about-bin.outputs.cache-hit != 'true'
-        run: cargo install cargo-about --locked --version 0.9.3 --features cli
+        env:
+          CARGO_ABOUT_VERSION: ${{ steps.cargo-about-version.outputs.version }}
+        run: cargo install cargo-about --locked --version "$CARGO_ABOUT_VERSION" --features cli
 
       - name: Notices are current
         run: pnpm licenses:check
