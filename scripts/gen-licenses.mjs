@@ -41,8 +41,9 @@ function mustRun(cmd, args, cwd) {
 }
 
 // One pin for local runs and CI; another cargo-about version may format the file differently.
-const CARGO_ABOUT_VERSION = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).config
-  .cargoAboutVersion;
+const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const CARGO_ABOUT_VERSION = pkg.config?.cargoAboutVersion;
+if (!CARGO_ABOUT_VERSION) fail("package.json is missing config.cargoAboutVersion, the cargo-about version to use");
 const INSTALL = `cargo install cargo-about --locked --version ${CARGO_ABOUT_VERSION} --features cli`;
 
 /** Rust crates: cargo-about renders src-tauri/about.hbs under src-tauri/about.toml. */

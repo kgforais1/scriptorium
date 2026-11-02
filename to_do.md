@@ -8,6 +8,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
 - [M1 follow-ups](plans/2026-11-02-m1-followups.md) — the exhaustive manual pass (main flows passed 2026-11-02), engine gate, A10–A13, CI `cargo build`
+- [Upgrade bundled OpenJPEG](#unplanned--small) — the CVE-2025-54874 exception expires 2026-11-29; the weekly check fails after that
 - [M0.5 harness follow-ups](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri--remaining-quality) — Rust coverage, Python `fail_under`, Dependabot, S9–S11
 
 ## Active plans

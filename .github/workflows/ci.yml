@@ -345,7 +345,13 @@ jobs:
 
       - name: cargo-about version (package.json config.cargoAboutVersion)
         id: cargo-about-version
-        run: echo "version=$(node -p "require('./package.json').config.cargoAboutVersion")" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(node -p 'require("./package.json").config?.cargoAboutVersion ?? ""')
+          if [ -z "$version" ]; then
+            echo "::error::package.json is missing config.cargoAboutVersion"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cargo-about-bin
