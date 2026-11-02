@@ -2,7 +2,7 @@
   "name": "scriptorium",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "packageManager": "pnpm@11.17.0",
   "engines": {
@@ -20,7 +20,12 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "licenses:gen": "node scripts/gen-licenses.mjs",
+    "licenses:check": "node scripts/gen-licenses.mjs --check",
     "shots": "node scripts/reader-shots.mjs"
+  },
+  "config": {
+    "cargoAboutVersion": "0.9.3"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

@@ -83,6 +83,8 @@ IGNORE_FRAGMENTS = [
     # Throwaway look-and-feel prototypes and their screenshots; only the
     # 5 MB hard limit applies to ignored paths.
     "design/mockups/",
+    # Generated licence texts (scripts/gen-licenses.mjs); only the 5 MB hard limit applies.
+    "THIRD_PARTY_LICENSES.generated.md",
 ]
 
 

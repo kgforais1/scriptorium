@@ -9,7 +9,10 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-02
+
 ### Added
+- The app bundle now ships `THIRD_PARTY_LICENSES.generated.md`, which lists the licences of the Rust and npm packages Scriptorium uses, next to `THIRD_PARTY_NOTICES.md` and `LICENSE`.
 - Scriptorium has its own app icon: an open book with a gold quill, in the Lamplit colours.
 - Scriptorium is licensed under the PolyForm Shield License 1.0.0. Anyone may use it free, including companies, but nobody may use it to provide a product that competes with it or with any product the licensor provides using it. See `LICENSE`.
 - Books open in a page-turning reader. A header shows the title, the page indicator, and **Close book**.

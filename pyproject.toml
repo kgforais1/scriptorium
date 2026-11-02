@@ -1,6 +1,6 @@
 [project]
 name = "scriptorium"
-version = "0.1.2"
+version = "0.2.0"
 description = "Virtual book reader — harness + Tauri application"
 readme = "README.md"
 requires-python = ">=3.11"

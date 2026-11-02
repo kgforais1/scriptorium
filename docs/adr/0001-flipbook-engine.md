@@ -185,4 +185,4 @@ panel. The engine's `stats()` reports the texture height, but no screen shows it
 
 - [Pre-M1 spike plan](../../plans/archive/completed/2026-08-23-pre-m1-flipbook-spike.md)
 - [Reader design and skin model](../../design/DESIGN.md)
-- [M1 scan viewer plan](../../plans/2026-08-23-m1-scan-viewer.md)
+- [M1 scan viewer plan](../../plans/archive/completed/2026-08-23-m1-scan-viewer.md)

@@ -6,7 +6,7 @@ Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
 Status: complete (2026-10-28) — ADR: [`docs/adr/0001-flipbook-engine.md`](../../../docs/adr/0001-flipbook-engine.md)
 Linked issue/PR: n/a
 Depends on: [`archive/completed/2026-08-23-m0-tauri-foundation.md`](2026-08-23-m0-tauri-foundation.md) Phase 1 window exists (minimal shell OK)
-Blocks: [`2026-08-23-m1-scan-viewer.md`](../../2026-08-23-m1-scan-viewer.md)
+Blocks: [`2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md)
 
 ## Goal
 
@@ -149,5 +149,5 @@ need. Hotspot items are verified in M6, when hotspots exist:
 
 ## Related
 
-- Blocks: [`2026-08-23-m1-scan-viewer.md`](../../2026-08-23-m1-scan-viewer.md)
+- Blocks: [`2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md)
 - After: M0 foundation may run in parallel for scaffold/schema, but M1 I/O waits on this ADR

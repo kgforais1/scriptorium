@@ -10,8 +10,8 @@ for readers who open them.
 
 There is no download yet. For now you build the app from source.
 
-1. Install the tools listed under "Tauri prerequisites" in the
-   [README](../../README.md#tauri-prerequisites): Rust, Node, and pnpm.
+1. Install the tools listed under "Prerequisites" in
+   [Developing Scriptorium](../development.md#prerequisites): Rust, Node, pnpm, and cargo-about.
 2. Run `pnpm install`.
 3. Run `pnpm tauri build`.
 4. The build prints the path of the finished app. Open that app.
