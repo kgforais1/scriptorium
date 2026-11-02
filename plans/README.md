@@ -23,6 +23,7 @@ Do **not** delete archived plans. Move them; do not rewrite history in place.
 | Plan | Role |
 |---|---|
 | [`2026-08-23-product-roadmap.md`](2026-08-23-product-roadmap.md) | Product roadmap M0–M8 (stays active) |
+| [`2026-11-02-m1-followups.md`](2026-11-02-m1-followups.md) | Open M1 checks after the 0.2.0 release |
 
 Completed: [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md),
 [`archive/completed/2026-08-23-m1-scan-viewer.md`](archive/completed/2026-08-23-m1-scan-viewer.md),

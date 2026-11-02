@@ -48,7 +48,7 @@ const INSTALL = `cargo install cargo-about --locked --version ${CARGO_ABOUT_VERS
 function rustSection() {
   const v = run("cargo", ["about", "--version"], root);
   if (v.missing || v.status !== 0) fail(`cargo-about is not installed. Run: ${INSTALL}`);
-  const found = v.out.trim().split(/\s+/).at(-1);
+  const found = /^cargo-about\s+(\S+)/m.exec(v.out)?.[1] ?? v.out.trim();
   if (found !== CARGO_ABOUT_VERSION) {
     fail(`cargo-about ${found} is installed, but the notices need ${CARGO_ABOUT_VERSION}. Run: ${INSTALL}`);
   }
@@ -66,9 +66,9 @@ function spdxFallback(name, dir, stub) {
   const spdx = readFileSync(join(dir, stub), "utf8");
   // A declared licence may be an expression such as "MIT OR Apache-2.0"; load every id in it.
   const declared = [...spdx.matchAll(/^PackageLicenseDeclared:(.*)$/gm)].map((m) => m[1]);
-  // A WITH clause names an exception to its licence, not a licence, so drop it.
-  const terms = declared.flatMap((d) => d.replaceAll(/\bWITH\s+\S+/g, " ").replaceAll(/[()]/g, " ").split(/\s+/));
-  const ids = [...new Set(terms)].filter((id) => id && id !== "AND" && id !== "OR");
+  // A WITH exception id stays in, so it needs a text file too and cannot vanish from the notice.
+  const terms = declared.flatMap((d) => d.replaceAll(/[()]/g, " ").split(/\s+/));
+  const ids = [...new Set(terms)].filter((id) => id && !["AND", "OR", "WITH"].includes(id));
   const copyright = spdx.match(/^PackageCopyrightText:(.*)$/m)?.[1]?.trim();
   if (!ids.length || !copyright) fail(`npm package ${name}: ${stub} lacks a licence or copyright line`);
   const texts = ids.toSorted(byCodePoint).map((id) => {
@@ -94,7 +94,10 @@ function licenseTexts(name, dir) {
 /** Licence notes and texts for every installed version of a package, without repeats. */
 function packageTexts(p) {
   if (!p.paths?.length) fail(`pnpm listed npm package ${p.name} without an install path`);
-  const found = p.paths.map((dir) => licenseTexts(p.name, dir));
+  const found = p.paths.map((dir) => {
+    if (!existsSync(dir)) fail(`npm package ${p.name} is not installed at ${dir}; run pnpm install`);
+    return licenseTexts(p.name, dir);
+  });
   const notes = [...new Set(found.map((f) => f.note).filter(Boolean))];
   return { notes, texts: [...new Set(found.flatMap((f) => f.texts))] };
 }

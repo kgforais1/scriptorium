@@ -39,7 +39,7 @@ run on 2026-11-02. These items are the rest. Section links point at the archived
 
 ### Hardening ([M0 review follow-ups](archive/completed/2026-08-23-m1-scan-viewer.md#follow-ups-from-m0-senior-reviews-2026-08-25))
 
-- [ ] Confirm A10–A13 have tests, and tick them.
+- [ ] Confirm A10–A12 have tests, and re-check the A13 CSP in a release build.
 - [ ] Add a debug `cargo build` to CI (LC-M2).
 - [ ] Consider a `pageLabel` `maxLength` (LC-T11).
 
