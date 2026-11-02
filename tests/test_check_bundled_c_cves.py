@@ -353,6 +353,8 @@ class CheckBundledCvesTests(unittest.TestCase):
 
     def test_malformed_cve_entry_fails_closed(self) -> None:
         nested_bad = {"cve": {"id": CVE, "metrics": []}}
+        score = {"cvssMetricV31": [{"cvssData": {"baseScore": "7"}}]}
+        bad_score = {"cve": {"id": CVE, "metrics": score}}
         for item in (
             "x",
             {"cve": "x"},
@@ -360,6 +362,7 @@ class CheckBundledCvesTests(unittest.TestCase):
             {},
             {"cve": {"id": "nope"}},
             nested_bad,
+            bad_score,
         ):
             body = {"totalResults": 1, "vulnerabilities": [item]}
             with self.subTest(item=item), self.assertRaises(mod.CheckError):

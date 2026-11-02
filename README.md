@@ -135,5 +135,6 @@ GitHub hygiene: [`policies/github-repository-hygiene.md`](policies/github-reposi
 
 Scriptorium is source-available under the [PolyForm Shield License 1.0.0](LICENSE). Anyone,
 companies included, may use, change, and share it for free. Nobody may use it to offer a
-product that competes with it. The bundled C libraries keep their own licences; see
+product that competes with it, or with any product the licensor or its affiliates provide
+using it. The bundled C libraries keep their own licences; see
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

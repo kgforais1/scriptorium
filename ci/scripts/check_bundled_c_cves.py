@@ -313,8 +313,11 @@ def _best_metric(cve: dict[str, Any]) -> str:
             data = entry.get("cvssData", {})
             score = data.get("baseScore")
             severity = data.get("baseSeverity") or entry.get("baseSeverity")
-            if score is not None:
-                return f"{severity or 'UNRATED'} {score} ({key.removeprefix('cvssMetric')})"
+            if score is None:
+                continue
+            if isinstance(score, bool) or not isinstance(score, (int, float)):
+                raise TypeError(f"baseScore {score!r} is not a number")
+            return f"{severity or 'UNRATED'} {score} ({key.removeprefix('cvssMetric')})"
     return "unknown"
 
 
