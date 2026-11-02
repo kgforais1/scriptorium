@@ -258,6 +258,15 @@ class CheckBundledCvesTests(unittest.TestCase):
         rc, _ = self._run("2026-11-29", FakeNvd([http.client.IncompleteRead(b"")]))
         self.assertEqual(rc, 2)
 
+    def test_broken_body_read_fails_closed(self) -> None:
+        class BrokenBody(FakeResponse):
+            def read(self, size: int | None = -1) -> bytes:
+                raise http.client.IncompleteRead(b"")
+
+        nvd = mock.Mock(side_effect=lambda req, timeout=0: BrokenBody())
+        with self.assertRaises(mod.CheckError):
+            mod.nvd_get("https://x", None, nvd, lambda _s: None)
+
     def test_rate_limit_is_retried_then_succeeds(self) -> None:
         nvd = FakeNvd([429, 503, NVD_BODY])
         rc, sleeps = self._run("2026-11-29", nvd)
@@ -360,6 +369,8 @@ class CheckBundledCvesTests(unittest.TestCase):
         nested_bad = {"cve": {"id": CVE, "metrics": []}}
         score = {"cvssMetricV31": [{"cvssData": {"baseScore": "7"}}]}
         bad_score = {"cve": {"id": CVE, "metrics": score}}
+        bool_metrics = {"cvssMetricV31": [{"cvssData": {"baseScore": True}}]}
+        bool_score = {"cve": {"id": CVE, "metrics": bool_metrics}}
         for item in (
             "x",
             {"cve": "x"},
@@ -368,6 +379,7 @@ class CheckBundledCvesTests(unittest.TestCase):
             {"cve": {"id": "nope"}},
             nested_bad,
             bad_score,
+            bool_score,
         ):
             body = {"totalResults": 1, "vulnerabilities": [item]}
             with self.subTest(item=item), self.assertRaises(mod.CheckError):
