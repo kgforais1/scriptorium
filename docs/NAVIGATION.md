@@ -36,7 +36,8 @@ Quick navigation guide for this template's documentation. Use this to find what 
 
 ### Core Navigation (Read These First)
 - [`AGENTS.md`](../AGENTS.md) - Single source of truth for AI agents
-- [`README.md`](../README.md) - Project overview and directory map
+- [`README.md`](../README.md) - Project overview
+- [`development.md`](development.md) - Build from source, tools, and the directory map
 - [`inventory/README.md`](../inventory/README.md) - Tool/skill menu (not a checklist)
 
 ### Using the app
