@@ -5,7 +5,7 @@
 //   node scripts/gen-licenses.mjs           write the file
 //   node scripts/gen-licenses.mjs --check   fail if the file on disk is stale
 //
-// Needs cargo-about: `cargo install cargo-about --locked --features cli`.
+// Needs cargo-about: `cargo install cargo-about --locked --version 0.9.3 --features cli`.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -40,12 +40,19 @@ function mustRun(cmd, args, cwd) {
   return r;
 }
 
+// Keep in step with the cargo-about version in ci.yml; another version may format the file differently.
+const CARGO_ABOUT_VERSION = "0.9.3";
+const INSTALL = `cargo install cargo-about --locked --version ${CARGO_ABOUT_VERSION} --features cli`;
+
 /** Rust crates: cargo-about renders src-tauri/about.hbs under src-tauri/about.toml. */
 function rustSection() {
-  const r = run("cargo", ["about", "generate", "-c", "about.toml", "about.hbs"], join(root, "src-tauri"));
-  if (r.missing || /no such (sub)?command/i.test(r.err + r.out)) {
-    fail("cargo-about is not installed. Run: cargo install cargo-about --locked --features cli");
+  const v = run("cargo", ["about", "--version"], root);
+  if (v.missing || v.status !== 0) fail(`cargo-about is not installed. Run: ${INSTALL}`);
+  const found = v.out.trim().split(/\s+/).at(-1);
+  if (found !== CARGO_ABOUT_VERSION) {
+    fail(`cargo-about ${found} is installed, but the notices need ${CARGO_ABOUT_VERSION}. Run: ${INSTALL}`);
   }
+  const r = run("cargo", ["about", "generate", "-c", "about.toml", "about.hbs"], join(root, "src-tauri"));
   if (r.status !== 0) fail(`\`cargo about generate\` failed:\n${r.err}`);
   // Licence texts carry CRLF and trailing blanks; normalise so the file is stable.
   return r.out.split(/\r?\n/).map((l) => l.trimEnd()).join("\n").trim();

@@ -16,7 +16,7 @@ Agents start at [`AGENTS.md`](../AGENTS.md).
   - Windows: WebView2 (ships with modern Windows; Evergreen bootstrapper otherwise)
 - **cargo-about** — `pnpm tauri build` first checks that `THIRD_PARTY_LICENSES.generated.md` is
   current, and fails with a clear message without cargo-about. After a dependency change, run
-  `pnpm licenses:gen` and commit the file. Install: `cargo install cargo-about --locked --features cli`.
+  `pnpm licenses:gen` and commit the file. Install: `cargo install cargo-about --locked --version 0.9.3 --features cli`.
   `pnpm tauri dev` does not need it.
 - **direnv (optional)** — `cp .envrc.example .envrc && direnv allow` to auto-load
   project env vars. `.envrc.example` documents the available variables.
