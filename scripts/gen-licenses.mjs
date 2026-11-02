@@ -57,7 +57,11 @@ const LICENSE_FILE = /^(licen[cs]e|copying)([._-]|$)/i;
 /** Standard texts in scripts/license-texts/ for a package that ships only an SPDX stub. */
 function spdxFallback(name, dir, stub) {
   const spdx = readFileSync(join(dir, stub), "utf8");
-  const ids = [...spdx.matchAll(/^PackageLicenseDeclared:\s*(\S+)/gm)].map((m) => m[1]);
+  // A declared licence may be an expression such as "MIT OR Apache-2.0"; load every id in it.
+  const declared = [...spdx.matchAll(/^PackageLicenseDeclared:(.*)$/gm)].map((m) => m[1]);
+  const ids = [...new Set(declared.flatMap((d) => d.replaceAll(/[()]/g, " ").split(/\s+/)))].filter(
+    (id) => id && !["AND", "OR", "WITH"].includes(id),
+  );
   const copyright = spdx.match(/^PackageCopyrightText:(.*)$/m)?.[1]?.trim();
   if (!ids.length || !copyright) fail(`npm package ${name}: ${stub} lacks a licence or copyright line`);
   const texts = ids.toSorted(byCodePoint).map((id) => {
@@ -73,7 +77,7 @@ function licenseTexts(name, dir) {
   const files = readdirSync(dir).sort(byCodePoint).filter((f) => LICENSE_FILE.test(f));
   const texts = files.filter((f) => !/\.spdx$/i.test(f));
   if (texts.length) return texts.map((f) => normalise(readFileSync(join(dir, f), "utf8")));
-  if (files.length) return spdxFallback(name, dir, files[0]);
+  if (files.length) return files.flatMap((f) => spdxFallback(name, dir, f));
   return fail(`npm package ${name} ships no LICENSE file in ${dir}; add its text by hand`);
 }
 
