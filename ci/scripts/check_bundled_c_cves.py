@@ -42,6 +42,7 @@ Requirements:
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import re
@@ -300,7 +301,7 @@ def nvd_get(
             last = f"HTTP {err.code}"
             if attempt + 1 < attempts:
                 sleep(_retry_delay(err, attempt, base))
-        except (OSError, json.JSONDecodeError) as err:
+        except (OSError, http.client.HTTPException, json.JSONDecodeError) as err:
             raise CheckError(f"NVD unreachable or unreadable ({err}); failing closed") from err
     raise CheckError(f"NVD still rate limiting after {attempts} attempts ({last}); failing closed")
 

@@ -12,6 +12,7 @@ Run:
 from __future__ import annotations
 
 import contextlib
+import http.client
 import importlib.util
 import io
 import json
@@ -251,6 +252,10 @@ class CheckBundledCvesTests(unittest.TestCase):
 
     def test_feed_unreachable_fails_closed(self) -> None:
         rc, _ = self._run("2026-11-29", FakeNvd([urllib.error.URLError("down")]))
+        self.assertEqual(rc, 2)
+
+    def test_broken_read_fails_closed(self) -> None:
+        rc, _ = self._run("2026-11-29", FakeNvd([http.client.IncompleteRead(b"")]))
         self.assertEqual(rc, 2)
 
     def test_rate_limit_is_retried_then_succeeds(self) -> None:
