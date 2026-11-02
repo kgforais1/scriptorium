@@ -722,7 +722,7 @@ limitations under the License.
 
 ~~~~
 
-### BSD 2-Clause &quot;Simplified&quot; License
+### BSD 2-Clause "Simplified" License
 
 Used by:
 - openjpeg-sys 1.0.12
@@ -788,7 +788,7 @@ ihdrbox_param_t * gene_ihdrbox(metadatalist_param_t *metadatalist,
 
 ~~~~
 
-### BSD 2-Clause &quot;Simplified&quot; License
+### BSD 2-Clause "Simplified" License
 
 Used by:
 - openjpeg-sys 1.0.12
@@ -836,7 +836,7 @@ Byte_t * j2k_to_pnm(const char *fn, ihdrbox_param_t **ihdrbox);
 
 ~~~~
 
-### BSD 2-Clause &quot;Simplified&quot; License
+### BSD 2-Clause "Simplified" License
 
 Used by:
 - openjpeg-sys 1.0.12
@@ -889,7 +889,7 @@ ihdrbox_param_t * get_SIZ_from_jpipstream(Byte_t *jpipstream,
 
 ~~~~
 
-### BSD 2-Clause &quot;Simplified&quot; License
+### BSD 2-Clause "Simplified" License
 
 Used by:
 - openjpeg-sys 1.0.12
@@ -935,7 +935,7 @@ Used by:
 
 ~~~~
 
-### BSD 2-Clause &quot;Simplified&quot; License
+### BSD 2-Clause "Simplified" License
 
 Used by:
 - openjpeg-sys 1.0.12
@@ -991,7 +991,7 @@ Used by:
 
 ~~~~
 
-### BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License
+### BSD 3-Clause "New" or "Revised" License
 
 Used by:
 - alloc-no-stdlib 3.0.0
@@ -1013,7 +1013,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 ~~~~
 
-### BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License
+### BSD 3-Clause "New" or "Revised" License
 
 Used by:
 - subtle 2.6.1
@@ -1051,7 +1051,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ~~~~
 
-### BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License
+### BSD 3-Clause "New" or "Revised" License
 
 Used by:
 - alloc-stdlib 0.3.0
@@ -8297,9 +8297,7 @@ SOFTWARE.
 
 Licence: MIT OR Apache-2.0 (https://github.com/tauri-apps/plugins-workspace#readme)
 
-```text
 The package ships only LICENSE.spdx. These are the standard texts of its licences.
-```
 
 ```text
 Apache License

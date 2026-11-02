@@ -7,7 +7,7 @@ before M1 is called done. Tick each box as you go. Record the run in the Results
 the end.
 
 The acceptance IDs (A4, A5, A6, A7, A9, A13) come from
-[`plans/2026-08-23-m1-scan-viewer.md`](../plans/archive/completed/2026-08-23-m1-scan-viewer.md). The book view
+[the M1 plan](../plans/archive/completed/2026-08-23-m1-scan-viewer.md). The book view
 is the flipbook reader. It draws the open book on a WebGL2 canvas, with a header and a bottom
 bar over it. Sections 1 to 8 are the Phase 2 checks, updated for the reader. Section 9 holds the
 Phase 3 checks.

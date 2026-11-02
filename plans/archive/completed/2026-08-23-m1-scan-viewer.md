@@ -3,7 +3,7 @@
 Last reviewed: 2026-10-30
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
-Status: complete (approved 2026-10-29; released as 0.2.0 on 2026-11-02; the exhaustive manual pass moved to `to_do.md`)
+Status: complete (approved 2026-10-29; released as 0.2.0 on 2026-11-02; open items moved to [`2026-11-02-m1-followups.md`](../../2026-11-02-m1-followups.md))
 Linked issue/PR: n/a
 Depends on:
 - [`archive/completed/2026-08-23-m0-tauri-foundation.md`](2026-08-23-m0-tauri-foundation.md) **complete**

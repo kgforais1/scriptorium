@@ -7,8 +7,8 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
-- [M1 exhaustive manual pass](docs/manual-test-m1.md) — 0.2.0 shipped after the main flows; the full list, A9 measurements and Windows/WebView2 run remain (see Unplanned)
-- [M1 Phase 0 engine gate](plans/archive/completed/2026-08-23-m1-scan-viewer.md#phase-0--integration-gate-adr-already-done) — ADR-0001 open items: Windows/Linux webviews, real touch, WKWebView fps, RSS
+- [M1 exhaustive manual pass](plans/2026-11-02-m1-followups.md#manual-verification) — 0.2.0 shipped after the main flows; the full list, A9 measurements and Windows/WebView2 run remain (see Unplanned)
+- [M1 follow-ups](plans/2026-11-02-m1-followups.md) — engine gate and ADR-0001 open items, A10–A13, CI `cargo build`
 - [M0.5 harness follow-ups](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri--remaining-quality) — Rust coverage, Python `fail_under`, Dependabot, S9–S11
 
 ## Active plans
@@ -46,7 +46,7 @@ Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to
   [roadmap M0.5](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri--remaining-quality)
 - **M1 format/load hardening** — **A10–A13**, CI `cargo build` (**LC-M2**), CSP tracking (**LC-M3**),
   optional `pageLabel` maxLength (**LC-T11**) →
-  [M1 plan follow-ups](plans/archive/completed/2026-08-23-m1-scan-viewer.md#follow-ups-from-m0-senior-reviews-2026-08-25)
+  [M1 follow-ups](plans/2026-11-02-m1-followups.md#hardening-m0-review-follow-ups)
 - **Second skin (Gallery Daylight, mockup B) + skin picker** — M7 →
   [`design/DESIGN.md`](design/DESIGN.md#skins)
 - **Later product (M1.5–M8)** — PDF import, OCR and curator-supplied text (M2), bookshelf

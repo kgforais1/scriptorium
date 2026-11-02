@@ -31,7 +31,7 @@ function run(cmd, args, cwd) {
   const shell = process.platform === "win32";
   const r = spawnSync(cmd, args, { cwd, shell, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
   if (r.error?.code === "ENOENT") return { missing: true };
-  return { status: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
+  return { status: r.status, out: r.stdout ?? "", err: r.stderr || r.error?.message || "" };
 }
 
 function mustRun(cmd, args, cwd) {
@@ -59,26 +59,37 @@ function spdxFallback(name, dir, stub) {
   const spdx = readFileSync(join(dir, stub), "utf8");
   // A declared licence may be an expression such as "MIT OR Apache-2.0"; load every id in it.
   const declared = [...spdx.matchAll(/^PackageLicenseDeclared:(.*)$/gm)].map((m) => m[1]);
-  const ids = [...new Set(declared.flatMap((d) => d.replaceAll(/[()]/g, " ").split(/\s+/)))].filter(
-    (id) => id && !["AND", "OR", "WITH"].includes(id),
-  );
+  // A WITH clause names an exception to its licence, not a licence, so drop it.
+  const terms = declared.flatMap((d) => d.replaceAll(/\bWITH\s+\S+/g, " ").replaceAll(/[()]/g, " ").split(/\s+/));
+  const ids = [...new Set(terms)].filter((id) => id && id !== "AND" && id !== "OR");
   const copyright = spdx.match(/^PackageCopyrightText:(.*)$/m)?.[1]?.trim();
   if (!ids.length || !copyright) fail(`npm package ${name}: ${stub} lacks a licence or copyright line`);
   const texts = ids.toSorted(byCodePoint).map((id) => {
     const file = join(root, "scripts", "license-texts", `${id}.txt`);
     if (!existsSync(file)) fail(`npm package ${name}: add the ${id} text as ${file}`);
-    return normalise(readFileSync(file, "utf8").replace("{{copyright}}", copyright));
+    return normalise(readFileSync(file, "utf8").replace("{{copyright}}", () => copyright));
   });
-  return [`The package ships only ${stub}. These are the standard texts of its licences.`, ...texts];
+  return { note: `The package ships only ${stub}. These are the standard texts of its licences.`, texts };
 }
 
 /** Every licence text a package ships (LICENSE, LICENSE-MIT, COPYING, ...); SPDX stubs fall back. */
 function licenseTexts(name, dir) {
   const files = readdirSync(dir).sort(byCodePoint).filter((f) => LICENSE_FILE.test(f));
   const texts = files.filter((f) => !/\.spdx$/i.test(f));
-  if (texts.length) return texts.map((f) => normalise(readFileSync(join(dir, f), "utf8")));
-  if (files.length) return files.flatMap((f) => spdxFallback(name, dir, f));
+  if (texts.length) return { texts: texts.map((f) => normalise(readFileSync(join(dir, f), "utf8"))) };
+  if (files.length) {
+    const parts = files.map((f) => spdxFallback(name, dir, f));
+    return { note: parts.map((p) => p.note).join(" "), texts: parts.flatMap((p) => p.texts) };
+  }
   return fail(`npm package ${name} ships no LICENSE file in ${dir}; add its text by hand`);
+}
+
+/** Licence notes and texts for every installed version of a package, without repeats. */
+function packageTexts(p) {
+  if (!p.paths?.length) fail(`pnpm listed npm package ${p.name} without an install path`);
+  const found = p.paths.map((dir) => licenseTexts(p.name, dir));
+  const notes = [...new Set(found.map((f) => f.note).filter(Boolean))];
+  return { notes, texts: [...new Set(found.flatMap((f) => f.texts))] };
 }
 
 /** Production npm packages with their licence texts, from `pnpm licenses list --prod --json`. */
@@ -91,12 +102,14 @@ function npmSection() {
   const lines = [];
   for (const p of pkgs.toSorted((a, b) => byCodePoint(a.name, b.name))) {
     const home = p.homepage ? ` (${p.homepage})` : "";
+    const { notes, texts } = packageTexts(p);
     lines.push(
       `### ${p.name} ${p.versions.join(", ")}`,
       "",
       `Licence: ${p.license}${home}`,
       "",
-      ...licenseTexts(p.name, p.paths[0]).flatMap((t) => ["```text", t, "```", ""]),
+      ...notes.flatMap((n) => [n, ""]),
+      ...texts.flatMap((t) => ["```text", t, "```", ""]),
     );
   }
   return lines.join("\n").trim();
