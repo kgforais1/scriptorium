@@ -1,0 +1,9 @@
+# Time-bound exceptions for ci/scripts/check_bundled_c_cves.py.
+# Each row needs id (CVE), library (name from bundled-c.toml), reason, and
+# expires (YYYY-MM-DD). The check fails once an exception has expired.
+
+[[exceptions]]
+id = "CVE-2025-54874"
+library = "OpenJPEG"
+reason = "not reachable through jpeg2k: the write needs an uninitialised *p_image and jpeg2k passes a null-initialised one; fixed upstream in f809b80c (OpenJPEG 2.5.4), but no openjpeg-sys release bundles 2.5.4 yet; tracked in to_do.md"
+expires = "2026-11-29"

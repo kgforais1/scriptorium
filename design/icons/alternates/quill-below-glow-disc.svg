@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="wood" cx="50%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#4a3322"/>
+      <stop offset="0.6" stop-color="#24180f"/>
+      <stop offset="1" stop-color="#0b0705"/>
+    </radialGradient>
+    <linearGradient id="pageL" x1="0" x2="1">
+      <stop offset="0" stop-color="#e9dcc2"/>
+      <stop offset="1" stop-color="#c9b48e"/>
+    </linearGradient>
+    <linearGradient id="pageR" x1="0" x2="1">
+      <stop offset="0" stop-color="#cdb893"/>
+      <stop offset="1" stop-color="#f2e8d6"/>
+    </linearGradient>
+    <linearGradient id="curl" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fbf4e6"/>
+      <stop offset="1" stop-color="#d9c7a3"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f6dc9a"/>
+      <stop offset="0.55" stop-color="#d9b36e"/>
+      <stop offset="1" stop-color="#9c7031"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#wood)"/>
+  <!-- soft lamplight disc behind the book -->
+  <circle cx="512" cy="520" r="370" fill="#fed786" opacity="0.14"/>
+  <g transform="translate(102 40) scale(0.8)">
+  <!-- board -->
+  <path d="M190 330 Q512 280 834 330 L834 760 Q512 712 190 760 Z" fill="#6b1f1a"/>
+  <!-- left page -->
+  <path d="M220 350 Q370 310 506 352 L506 728 Q370 690 220 732 Z" fill="url(#pageL)"/>
+  <!-- right page -->
+  <path d="M518 352 Q654 310 804 350 L804 732 Q654 690 518 728 Z" fill="url(#pageR)"/>
+  <!-- turning leaf, lifting from the right -->
+  <path d="M518 352 Q600 300 690 250 Q700 480 660 690 Q600 700 518 728 Z" fill="url(#curl)"/>
+  <path d="M690 250 Q700 480 660 690" fill="none" stroke="#b8873f" stroke-width="10" opacity="0.55"/>
+  <!-- gutter -->
+  <path d="M512 350 L512 730" stroke="#8a6a44" stroke-width="12"/>
+  <!-- ribbon -->
+  <path d="M500 720 L500 850 L524 826 L548 850 L548 718 Z" fill="#a3272a"/>
+  </g>
+  <g transform="translate(512 760) rotate(-90) scale(0.82)">
+    <path d="M0 -250 C44 -170 46 30 9 140 L-9 140 C-46 30 -44 -170 0 -250 Z" fill="url(#gold)" stroke="#3a2614" stroke-width="9" stroke-linejoin="round"/>
+    <path d="M0 -90 L-28 -116 M0 -90 L28 -116 M0 -10 L-30 -36 M0 -10 L30 -36" stroke="#6e4f28" stroke-width="10" stroke-linecap="round"/>
+    <path d="M0 -236 L0 200" stroke="#7a5526" stroke-width="9" stroke-linecap="round"/>
+    <path d="M-9 190 L9 190 L0 250 Z" fill="#3a2614"/>
+  </g>
+</svg>

@@ -1,6 +1,6 @@
 # Documentation Navigation
 
-Last reviewed: 2026-10-30
+Last reviewed: 2026-11-01
 
 Quick navigation guide for this template's documentation. Use this to find what you need without loading everything.
 
@@ -38,6 +38,10 @@ Quick navigation guide for this template's documentation. Use this to find what 
 - [`AGENTS.md`](../AGENTS.md) - Single source of truth for AI agents
 - [`README.md`](../README.md) - Project overview and directory map
 - [`inventory/README.md`](../inventory/README.md) - Tool/skill menu (not a checklist)
+
+### Using the app
+- [`docs/user/getting-started.md`](user/getting-started.md) — install, make a book from scans, read it, where books live, common errors
+- [`docs/user/tutorial-dulac.md`](user/tutorial-dulac.md) — build and read the public-domain Dulac sample
 
 ### Domain
 - [`docs/book-format.md`](../docs/book-format.md) — book package format spec (formatVersion 2, reads 1); schema + ingest rules
@@ -135,6 +139,7 @@ Quick navigation guide for this template's documentation. Use this to find what 
 
 | Task | Documentation |
 |---|---|
+| **Learn to use the app** | `docs/user/getting-started.md` |
 | **Start new project** | `prompts/bootstrap-project.md` + `scripts/setup.sh` |
 | **Add pre-commit hooks** | `hooks/README.md` |
 | **Set up CI** | `ci/README.md` + `ci/examples/` |

@@ -1,6 +1,6 @@
 # Scriptorium backlog
 
-Last reviewed: 2026-10-28
+Last reviewed: 2026-11-01
 
 Agents: start at **Next Up** (3–5 pointer lines). Detail lives in linked plans, not here.
 Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
@@ -16,7 +16,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 | Plan | Status | Note |
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
-| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | in-progress | Phase 0 gate open; Phases 1–2 done (manual checks pending); Phase 3 reader in progress on `m1/phase3-reader` |
+| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | in-progress | Phases 1–3 done (manual checks pending); Phase 4 docs on `m1/phase4-docs` |
 
 ## Unplanned / small
 
@@ -25,13 +25,13 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
   Phase 3 checks: A4 with a 1-page book, mouse and touch turns, reduced motion, the glass chrome,
   A6 with a moved library, the A9 measurements on the Dulac corpus (open to first turn, RSS with
   texture height, fps), and a WebView2 run. Does not block merging PRs.
+- **Trim jsonschema's network stack** — `jsonschema` 0.51 with default features pulls `reqwest`, `rustls` and AWS-LC (C) into the app only to resolve remote `$ref`s, which the embedded book schemas never use. Try `default-features = false` and drop AWS-LC from `THIRD_PARTY_NOTICES.md` if it goes.
+- **Upgrade bundled OpenJPEG to 2.5.4+** — `openjpeg-sys` 1.0.12 bundles 2.5.3, which has CVE-2025-54874 (heap write on a truncated JP2 via `opj_read_header`). Watch for a newer `openjpeg-sys`, or use a `[patch.crates-io]` with a 2.5.4 vendor tree. Until then, `ci/bundled-c-exceptions.toml` excepts the CVE until 2026-11-29 so the weekly check fails again if nothing moves; extend it only with a re-check. Reading the C source shows the write is not reachable through `jpeg2k`: the write needs an uninitialised `*p_image` and `jpeg2k` passes a null-initialised one (every failure path in 2.5.3's `opj_j2k_read_header` leaves it null). The upstream fix is commit f809b80c (`if (ret && p_image && *p_image)`). Rejecting short JP2 input is then optional hardening. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 - **Reader notes follow-up** — Reader notes: clear a page's failure note when it later loads (after a context restore), and the engine note after a successful resize or scene update; and cap concurrent texture rebuilds in refresh() — CodeRabbit #67.
 - **Cap decoded scan size** — Cap decoded scan size (createImageBitmap resize) so huge scans don't spike memory — CodeRabbit #68.
 - **Sonar backlog (22 local issues)** — all in template hook and CI scripts (complexity, regexes, duplicated literals). See
   `tmp/sonar-latest-issues.md` after a scan.
-- **README polish** — update and polish `README.md` for the reader: badges (CI, SonarCloud,
-  licence), an app icon, and screenshots from `docs/screenshots/` (regenerate with
-  `pnpm shots --save`). Do it after Phase 3 merges, so the shots show the final chrome.
+
 - **Grey+alpha JPEG 2000 fixture** — the transparency refusal test depends on macOS `sips`
   writing two components. Generate a two-component JP2 in-test (or check in a tiny fixture)
   so it runs on every OS. From CodeRabbit on PR #65.

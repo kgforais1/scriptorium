@@ -105,6 +105,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../LICENSE": "LICENSE"
+    },
     "macOS": {
       "minimumSystemVersion": "13.3"
     }
