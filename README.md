@@ -1,10 +1,22 @@
-# Scriptorium
+<!-- markdownlint-disable MD033 MD041 -->
+<p align="center">
+  <img src="design/icons/app-icon.svg" alt="The Scriptorium icon: an open book with a gold quill." width="128" height="128">
+</p>
+
+<h1 align="center">Scriptorium</h1>
+
+<p align="center">Turn folders of scanned pages into books you can page through.</p>
+
+<p align="center">
 
 [![CI](https://github.com/kgforais1/scriptorium/actions/workflows/ci.yml/badge.svg)](https://github.com/kgforais1/scriptorium/actions/workflows/ci.yml)
 [![License: PolyForm Shield 1.0.0](https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-b8873f)](LICENSE)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=kgforais1_scriptorium&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=kgforais1_scriptorium)
 
-Last reviewed: 2026-11-01
+</p>
+<!-- markdownlint-enable MD033 MD041 -->
+
+Last reviewed: 2026-11-02
 
 Tauri-first app for assembling scanned page folders into textured virtual books
 (page-turn reading, faithful page images, curator hotspots with lore popups) and
@@ -33,6 +45,9 @@ Local agent profile (gitignored): `.context/project-profile.md`.
   - macOS: built-in WKWebView (no extra install)
   - Linux: `webkit2gtk` (distro package, e.g. `libwebkit2gtk-4.1-dev`)
   - Windows: WebView2 (ships with modern Windows; Evergreen bootstrapper otherwise)
+- **cargo-about** — `pnpm tauri build` regenerates `THIRD_PARTY_LICENSES.generated.md` and fails with
+  a clear message without it. Install: `cargo install cargo-about --locked --features cli`.
+  `pnpm tauri dev` does not need it.
 - **direnv (optional)** — `cp .envrc.example .envrc && direnv allow` to auto-load
   project env vars. `.envrc.example` documents the available variables.
 
@@ -137,4 +152,5 @@ Scriptorium is source-available under the [PolyForm Shield License 1.0.0](LICENS
 companies included, may use, change, and share it for free. Nobody may use it to offer a
 product that competes with it, or with any product the licensor or its affiliates provide
 using it. The bundled C libraries keep their own licences; see
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). The licences of the Rust and npm
+dependencies are listed in the generated [`THIRD_PARTY_LICENSES.generated.md`](THIRD_PARTY_LICENSES.generated.md).

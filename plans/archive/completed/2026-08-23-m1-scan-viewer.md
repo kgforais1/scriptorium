@@ -3,11 +3,11 @@
 Last reviewed: 2026-10-30
 Date: 2026-08-23
 Author: bootstrap session (revised after Hy3 + ox-alpha plan reviews)
-Status: in-progress (approved 2026-10-29)
+Status: complete (approved 2026-10-29; released as 0.2.0 on 2026-11-02; the exhaustive manual pass moved to `to_do.md`)
 Linked issue/PR: n/a
 Depends on:
-- [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md) **complete**
-- [`archive/completed/2026-08-23-pre-m1-flipbook-spike.md`](archive/completed/2026-08-23-pre-m1-flipbook-spike.md) **complete** (ADR gates G1–G6 pass): [ADR-0001](../docs/adr/0001-flipbook-engine.md)
+- [`archive/completed/2026-08-23-m0-tauri-foundation.md`](2026-08-23-m0-tauri-foundation.md) **complete**
+- [`archive/completed/2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md) **complete** (ADR gates G1–G6 pass): [ADR-0001](../../../docs/adr/0001-flipbook-engine.md)
 Follows: product roadmap M1
 
 ## Goal
@@ -30,7 +30,7 @@ last-read page. Priorities: reliability and correctness over polish.
 
 ## Approach
 
-**Image-first reader** using the engine chosen in [ADR-0001](../docs/adr/0001-flipbook-engine.md): our own WebGL2 port of mockup E, pad-to-uniform aspect. Start from the spike in `src/spike/flipbook/` and follow the ADR's rewrite scope.
+**Image-first reader** using the engine chosen in [ADR-0001](../../../docs/adr/0001-flipbook-engine.md): our own WebGL2 port of mockup E, pad-to-uniform aspect. Start from the spike in `src/spike/flipbook/` and follow the ADR's rewrite scope.
 Ingest per M0 decisions: natural-sort → **atomic copy** into app-data `books/<id>/` with
 **relative paths only** in `meta.json`. Resolve to absolute paths only in Rust at load time for
 `convertFileSrc`.
@@ -161,7 +161,7 @@ Known limits, each `UnreadableFile` unless noted:
 
 Originals need a book-level `sources[]` list and a per-page `source` reference, so M1 writes
 `formatVersion` 2. See
-[`docs/book-format.md`](../docs/book-format.md#originals-formatversion-2).
+[`docs/book-format.md`](../../../docs/book-format.md#originals-formatversion-2).
 
 ### Natural-sort specification (normative for M1)
 
@@ -211,7 +211,7 @@ on another class, amend this plan before claiming A9.
 `edmunddulacspict00dulauoft`: **202 pages**, JPEG quality 92, about 450 MB total. 196 pages
 are 2808 × 3906 (about 11 MP). The covers and a few plates differ (2924 × 4218, 3048 × 4198,
 and four at 936 × 1292), which also exercises mixed page sizes. Fetch it with the recipe in
-[`tests/fixtures/README.md`](../tests/fixtures/README.md#public-domain-test-corpora).
+[`tests/fixtures/README.md`](../../../tests/fixtures/README.md#public-domain-test-corpora).
 Pixel count drives decode time and memory (about 44 MB per decoded RGBA page), so the gate
 is set by pixels, not file size. Do not upscale pages to inflate file size.
 
@@ -433,7 +433,7 @@ build opens a book and shows its pages.
 
 Manual verification (release build opens a book, A5–A7, A13) is pending and tracked in
 `to_do.md`. It does not block merging Phase 2 or starting Phase 3. See
-[`docs/manual-test-m1.md`](../docs/manual-test-m1.md). It needs one run on Windows too,
+[`docs/manual-test-m1.md`](../../../docs/manual-test-m1.md). It needs one run on Windows too,
 because only a real webview shows whether page paths load there.
 
 Known limits after Phase 2:
@@ -452,7 +452,7 @@ Known limits after Phase 2:
 ### Phase 3 — Reader
 
 Spec fleshed out 2026-10-30 on branch `m1/phase3-reader`, from the
-[ADR-0001 rewrite scope](../docs/adr/0001-flipbook-engine.md#m1-rewrite-scope), and revised
+[ADR-0001 rewrite scope](../../../docs/adr/0001-flipbook-engine.md#m1-rewrite-scope), and revised
 after a qoder review. Phase 3 replaces Phase 2's plain `<img>` page view with the WebGL2
 flipbook and mockup E's chrome.
 
@@ -623,15 +623,15 @@ tests and the dev harness; chunk 4 is the first a user would see.
 
 ### Phase 4 — Docs & release
 
-- [ ] `docs/manual-test-m1.md` + README try-it
-- [ ] User docs, first pass: a getting-started guide for curators (install, build a book from a
+- [x] `docs/manual-test-m1.md` + README try-it
+- [x] User docs, first pass: a getting-started guide for curators (install, build a book from a
       folder, read it, where books live) and a short tutorial using a public-domain sample book.
       Keep them in `docs/user/` so later in-app help can reuse the same text
-- [ ] Third-party notices file for statically linked C libraries (OpenJPEG BSD-2, LittleCMS
+- [x] Third-party notices file for statically linked C libraries (OpenJPEG BSD-2, LittleCMS
       MIT) shipped with the app bundle; re-check the bundled OpenJPEG version (2.5.3) for advisories,
       since `cargo audit` cannot see C code
-- [ ] `VERSION` → **0.2.0**; `CHANGELOG.md` user-facing
-- [ ] Update roadmap / `to_do.md`; archive this plan when verified
+- [x] `VERSION` → **0.2.0**; `CHANGELOG.md` user-facing
+- [x] Update roadmap / `to_do.md`; archive this plan when verified
 
 Phase 3 shipped in #68 and #67 (merged 2026-10-31 and 2026-11-01). Phase 4 runs on
 `m1/phase4-docs`, one PR, in chunks:
@@ -650,19 +650,27 @@ Phase 3 shipped in #68 and #67 (merged 2026-10-31 and 2026-11-01). Phase 4 runs 
    versions read from `Cargo.lock` and the crates' bundled sources. Bundle it with the app
    (`bundle.resources` in `tauri.conf.json`). Check the bundled OpenJPEG version against
    published advisories and record the result and date in the file.
-4. Release (held until the manual smoke run in `to_do.md` passes once): generate a notices file
+4. Release (done 2026-11-02; the user ran the main flows of the manual smoke test first and the app ran as expected): generate a notices file
    for the Rust and production npm dependencies at build time (for example `cargo about` and
    `pnpm licenses list`), run it before Tauri bundling, and ship it with `THIRD_PARTY_NOTICES.md`
    (CodeRabbit on #73); `VERSION` 0.2.0, the
    `CHANGELOG.md` Unreleased section moved under 0.2.0, plan Verification ticked, plan archived.
+   Shipped as `scripts/gen-licenses.mjs` (`cargo about` plus `pnpm licenses list --prod --json`),
+   written to the committed `THIRD_PARTY_LICENSES.generated.md`, regenerated by
+   `beforeBuildCommand`, bundled via `bundle.resources`, and checked by the `Third-party licences`
+   CI job. `VERSION`, `package.json`, `Cargo.toml` and `tauri.conf.json` are all 0.2.0.
 
 ## Verification
 
 - [ ] All acceptance IDs A1–A9 checked
+      Blocked on the exhaustive manual pass (A9 measurements); see `to_do.md`.
 - [ ] Keyboard, accessible-name, and reduced-motion checks above pass in the manual script
-- [ ] `cargo test` / `clippy` / `fmt` green in CI
+      Blocked on the exhaustive manual pass; see `to_do.md`.
+- [x] `cargo test` / `clippy` / `fmt` green in CI
 - [ ] Manual script executed once on reference machine; results noted in PR or README
-- [ ] No absolute user home paths in committed fixtures or sample `meta.json`
+      Partial: the main flows were run on 2026-11-02 and the app worked as expected. The
+      exhaustive pass (full list, Windows/WebView2, A9 measurements) is tracked in `to_do.md`.
+- [x] No absolute user home paths in committed fixtures or sample `meta.json`
 
 ## Open questions
 
@@ -707,7 +715,7 @@ Harness/docs (not M1 product):
 |---|---|---|
 | S9 | Archived M0 plan checklist still unticked; roadmap “app-data library root” is a decision, not delivered code | M0.5 / docs hygiene |
 | S10 | README hedge; centralize or test slug regex triplication (Rust/Python/schema lockstep tests now exist) | M0.5 |
-| S11 | `tsc -b` for project references; ESLint/Prettier for TS | [roadmap M0.5](2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri-scaffold--when-app-code-exists) |
+| S11 | `tsc -b` for project references; ESLint/Prettier for TS | [roadmap M0.5](../../2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri-scaffold--when-app-code-exists) |
 | LC-L3 | Raise pytest `fail_under` from 0 (LongCat L3) | M0.5 |
 | LC-T11 | Consider `pageLabel` `maxLength` (schema + Rust) to match title/rights/attribution (LongCat post-Qodo T11) | M1 format hardening |
 
@@ -723,6 +731,6 @@ Sources: `tmp/2026-08-25-m0-tauri-foundation-senior-review.md`,
 
 ## Related
 
-- [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md)
-- [`2026-08-23-pre-m1-flipbook-spike.md`](archive/completed/2026-08-23-pre-m1-flipbook-spike.md)
-- [`2026-08-23-product-roadmap.md`](2026-08-23-product-roadmap.md)
+- [`archive/completed/2026-08-23-m0-tauri-foundation.md`](2026-08-23-m0-tauri-foundation.md)
+- [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md)
+- [`2026-08-23-product-roadmap.md`](../../2026-08-23-product-roadmap.md)

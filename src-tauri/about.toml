@@ -1,0 +1,17 @@
+# Licences accepted for the Rust crates in Cargo.lock. cargo-about fails on any
+# other licence, so a new dependency with a new licence needs a decision here.
+# Run `pnpm licenses:gen` to regenerate THIRD_PARTY_LICENSES.generated.md.
+accepted = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Zlib",
+  "MIT-0",
+  "CDLA-Permissive-2.0",
+]
+ignore-dev-dependencies = true
+ignore-build-dependencies = true

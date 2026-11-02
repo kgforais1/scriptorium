@@ -106,5 +106,5 @@ and `pnpm build` run the builder too.
 ## Related
 
 - Engine choice and the pre-M1 spike plan: [`../plans/2026-08-23-pre-m1-flipbook-spike.md`](../plans/archive/completed/2026-08-23-pre-m1-flipbook-spike.md) · [ADR-0001](../docs/adr/0001-flipbook-engine.md)
-- First use in the app: [`../plans/2026-08-23-m1-scan-viewer.md`](../plans/2026-08-23-m1-scan-viewer.md)
+- First use in the app: [`../plans/archive/completed/2026-08-23-m1-scan-viewer.md`](../plans/archive/completed/2026-08-23-m1-scan-viewer.md)
 - Roadmap: [`../plans/2026-08-23-product-roadmap.md`](../plans/2026-08-23-product-roadmap.md)

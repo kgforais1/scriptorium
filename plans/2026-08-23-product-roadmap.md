@@ -11,7 +11,7 @@ Linked issue/PR: n/a
 Single source of truth for **all** planned product phases and features. Immediate work lives in
 [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md) (M0 complete) →
 [`2026-08-23-pre-m1-flipbook-spike.md`](archive/completed/2026-08-23-pre-m1-flipbook-spike.md) (complete) →
-[`2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md). Later milestones stay here and in
+[`2026-08-23-m1-scan-viewer.md`](archive/completed/2026-08-23-m1-scan-viewer.md). Later milestones stay here and in
 [`to_do.md`](../to_do.md) until promoted. Combined draft:
 [`archive/superseded/2026-08-23-mvp-scaffold.md`](archive/superseded/2026-08-23-mvp-scaffold.md).
 
@@ -76,7 +76,7 @@ Promote when starting. Tracked in [`to_do.md`](../to_do.md).
 
 ### M1 — Scan viewer (MVP core)
 
-**Active plan:** [`2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md) (after M0 + flipbook spike ADR)
+**Plan:** [`2026-08-23-m1-scan-viewer.md`](archive/completed/2026-08-23-m1-scan-viewer.md) (complete; released as 0.2.0 on 2026-11-02)
 
 - [ ] Atomic folder ingest → book package (relative paths, checksums); reject non-slug `id` at ingest
 - [ ] Page-turn reader per ADR (not assumed StPageFlip)

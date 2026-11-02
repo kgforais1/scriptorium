@@ -81,7 +81,7 @@ Every v1 field below is unchanged in v2. v2 adds the optional `sources[]` and pa
 M1 ingest accepts formats the webview cannot show, such as TIFF and JPEG 2000, and converts
 some JPEG, PNG, and WebP inputs. `file` stays the display image. When a display image was
 converted, the untouched original is kept. Input formats and conversion rules are in the
-[M1 plan](../plans/2026-08-23-m1-scan-viewer.md#input-formats-normative-for-m1).
+[M1 plan](../plans/archive/completed/2026-08-23-m1-scan-viewer.md#input-formats-normative-for-m1).
 
 - Originals live under `originals/`, numbered by position among the kept originals and keeping
   the input's lowercase extension (`originals/0000.tif`). Input names may hold spaces or

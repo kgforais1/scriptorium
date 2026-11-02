@@ -1,6 +1,7 @@
 ignores:
   - ".windsurf/**"
   - ".devin/**"
+  - "THIRD_PARTY_LICENSES.generated.md"
 
 config:
   MD004: false # Existing lists consistently use both dash and plus markers.

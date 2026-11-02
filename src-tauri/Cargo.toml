@@ -1,6 +1,6 @@
 [package]
 name = "scriptorium"
-version = "0.1.0"
+version = "0.2.0"
 description = "Scriptorium — Tauri-first app for scanned-page virtual books"
 authors = ["kgforais1"]
 # PolyForm Shield 1.0.0 has no SPDX identifier, so cargo points at the file.

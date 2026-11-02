@@ -1,14 +1,14 @@
 # Scriptorium backlog
 
-Last reviewed: 2026-11-01
+Last reviewed: 2026-11-02
 
 Agents: start at **Next Up** (3–5 pointer lines). Detail lives in linked plans, not here.
 Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
-- [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) — engine per [ADR-0001](docs/adr/0001-flipbook-engine.md); acceptance A1–A13
-- [M1 Phase 0 engine gate](plans/2026-08-23-m1-scan-viewer.md#phase-0--integration-gate-adr-already-done) — ADR-0001 open items: Windows/Linux webviews, real touch, WKWebView fps, RSS
+- [M1 exhaustive manual pass](docs/manual-test-m1.md) — 0.2.0 shipped after the main flows; the full list, A9 measurements and Windows/WebView2 run remain (see Unplanned)
+- [M1 Phase 0 engine gate](plans/archive/completed/2026-08-23-m1-scan-viewer.md#phase-0--integration-gate-adr-already-done) — ADR-0001 open items: Windows/Linux webviews, real touch, WKWebView fps, RSS
 - [M0.5 harness follow-ups](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri-scaffold--when-app-code-exists) — Rust coverage, Python `fail_under`, Dependabot, S9–S11
 
 ## Active plans
@@ -16,15 +16,15 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 | Plan | Status | Note |
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
-| [M1 scan viewer](plans/2026-08-23-m1-scan-viewer.md) | in-progress | Phases 1–3 done (manual checks pending); Phase 4 docs on `m1/phase4-docs` |
 
 ## Unplanned / small
 
-- **M1 manual smoke (non-blocking)** — run [`docs/manual-test-m1.md`](docs/manual-test-m1.md):
-  release build under the production CSP (A13), A5–A7, and one Windows release run. Add the
-  Phase 3 checks: A4 with a 1-page book, mouse and touch turns, reduced motion, the glass chrome,
-  A6 with a moved library, the A9 measurements on the Dulac corpus (open to first turn, RSS with
-  texture height, fps), and a WebView2 run. Does not block merging PRs.
+- **M1 exhaustive manual pass (non-blocking)** — go through [`docs/manual-test-m1.md`](docs/manual-test-m1.md)
+  top to bottom and fill its Results table. The main flows were checked on 2026-11-02 and the
+  app ran as expected (0.2.0 shipped on that basis). Still open: the full list, including the
+  release build under the production CSP (A13), A4 with a 1-page book, A5–A7, A6 with a moved
+  library, touch, reduced motion, the glass chrome, the A9 measurements on the Dulac corpus
+  (open to first turn, RSS with texture height, fps), and a WebView2 run on Windows.
 - **Trim jsonschema's network stack** — `jsonschema` 0.51 with default features pulls `reqwest`, `rustls` and AWS-LC (C) into the app only to resolve remote `$ref`s, which the embedded book schemas never use. Try `default-features = false` and drop AWS-LC from `THIRD_PARTY_NOTICES.md` if it goes.
 - **Upgrade bundled OpenJPEG to 2.5.4+** — `openjpeg-sys` 1.0.12 bundles 2.5.3, which has CVE-2025-54874 (heap write on a truncated JP2 via `opj_read_header`). Watch for a newer `openjpeg-sys`, or use a `[patch.crates-io]` with a 2.5.4 vendor tree. Until then, `ci/bundled-c-exceptions.toml` excepts the CVE until 2026-11-29 so the weekly check fails again if nothing moves; extend it only with a re-check. Reading the C source shows the write is not reachable through `jpeg2k`: the write needs an uninitialised `*p_image` and `jpeg2k` passes a null-initialised one (every failure path in 2.5.3's `opj_j2k_read_header` leaves it null). The upstream fix is commit f809b80c (`if (ret && p_image && *p_image)`). Rejecting short JP2 input is then optional hardening. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 - **Reader notes follow-up** — Reader notes: clear a page's failure note when it later loads (after a context restore), and the engine note after a successful resize or scene update; and cap concurrent texture rebuilds in refresh() — CodeRabbit #67.
@@ -46,7 +46,7 @@ Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to
   [roadmap M0.5](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri-scaffold--when-app-code-exists)
 - **M1 format/load hardening** — **A10–A13**, CI `cargo build` (**LC-M2**), CSP tracking (**LC-M3**),
   optional `pageLabel` maxLength (**LC-T11**) →
-  [M1 plan follow-ups](plans/2026-08-23-m1-scan-viewer.md#follow-ups-from-m0-senior-reviews-2026-08-25)
+  [M1 plan follow-ups](plans/archive/completed/2026-08-23-m1-scan-viewer.md#follow-ups-from-m0-senior-reviews-2026-08-25)
 - **Second skin (Gallery Daylight, mockup B) + skin picker** — M7 →
   [`design/DESIGN.md`](design/DESIGN.md#skins)
 - **Later product (M1.5–M8)** — PDF import, OCR and curator-supplied text (M2), bookshelf
