@@ -51,11 +51,30 @@ function rustSection() {
   return r.out.split(/\r?\n/).map((l) => l.trimEnd()).join("\n").trim();
 }
 
-/** The text of a package's LICENSE / LICENCE / COPYING file; fail if it has none. */
-function licenseText(name, dir) {
-  const file = readdirSync(dir).sort(byCodePoint).find((f) => /^(licen[cs]e|copying)(\.|$)/i.test(f));
-  if (!file) fail(`npm package ${name} ships no LICENSE file in ${dir}; add its text by hand`);
-  return readFileSync(join(dir, file), "utf8").split(/\r?\n/).map((l) => l.trimEnd()).join("\n").trim();
+const normalise = (text) => text.split(/\r?\n/).map((l) => l.trimEnd()).join("\n").trim();
+const LICENSE_FILE = /^(licen[cs]e|copying)([._-]|$)/i;
+
+/** Standard texts in scripts/license-texts/ for a package that ships only an SPDX stub. */
+function spdxFallback(name, dir, stub) {
+  const spdx = readFileSync(join(dir, stub), "utf8");
+  const ids = [...spdx.matchAll(/^PackageLicenseDeclared:\s*(\S+)/gm)].map((m) => m[1]);
+  const copyright = spdx.match(/^PackageCopyrightText:(.*)$/m)?.[1]?.trim();
+  if (!ids.length || !copyright) fail(`npm package ${name}: ${stub} lacks a licence or copyright line`);
+  const texts = ids.toSorted(byCodePoint).map((id) => {
+    const file = join(root, "scripts", "license-texts", `${id}.txt`);
+    if (!existsSync(file)) fail(`npm package ${name}: add the ${id} text as ${file}`);
+    return normalise(readFileSync(file, "utf8").replace("{{copyright}}", copyright));
+  });
+  return [`The package ships only ${stub}. These are the standard texts of its licences.`, ...texts];
+}
+
+/** Every licence text a package ships (LICENSE, LICENSE-MIT, COPYING, ...); SPDX stubs fall back. */
+function licenseTexts(name, dir) {
+  const files = readdirSync(dir).sort(byCodePoint).filter((f) => LICENSE_FILE.test(f));
+  const texts = files.filter((f) => !/\.spdx$/i.test(f));
+  if (texts.length) return texts.map((f) => normalise(readFileSync(join(dir, f), "utf8")));
+  if (files.length) return spdxFallback(name, dir, files[0]);
+  return fail(`npm package ${name} ships no LICENSE file in ${dir}; add its text by hand`);
 }
 
 /** Production npm packages with their licence texts, from `pnpm licenses list --prod --json`. */
@@ -73,10 +92,7 @@ function npmSection() {
       "",
       `Licence: ${p.license}${home}`,
       "",
-      "```text",
-      licenseText(p.name, p.paths[0]),
-      "```",
-      "",
+      ...licenseTexts(p.name, p.paths[0]).flatMap((t) => ["```text", t, "```", ""]),
     );
   }
   return lines.join("\n").trim();
