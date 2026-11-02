@@ -7,7 +7,7 @@
 //
 // Needs cargo-about: `cargo install cargo-about --locked --features cli`.
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,37 +20,64 @@ function fail(message) {
   process.exit(1);
 }
 
+// Byte order, not locale order, so every machine writes the same file.
+function byCodePoint(a, b) {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
 function run(cmd, args, cwd) {
-  const r = spawnSync(cmd, args, { cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+  // pnpm is a .cmd shim on Windows, which spawnSync only finds through a shell.
+  const shell = process.platform === "win32";
+  const r = spawnSync(cmd, args, { cwd, shell, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
   if (r.error?.code === "ENOENT") return { missing: true };
-  if (r.status !== 0) fail(`\`${cmd} ${args.join(" ")}\` failed:\n${r.stderr}`);
-  return { out: r.stdout };
+  return { status: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
+}
+
+function mustRun(cmd, args, cwd) {
+  const r = run(cmd, args, cwd);
+  if (!r.missing && r.status !== 0) fail(`\`${cmd} ${args.join(" ")}\` failed:\n${r.err}`);
+  return r;
 }
 
 /** Rust crates: cargo-about renders src-tauri/about.hbs under src-tauri/about.toml. */
 function rustSection() {
   const r = run("cargo", ["about", "generate", "-c", "about.toml", "about.hbs"], join(root, "src-tauri"));
-  if (r.missing || /no such command/i.test(r.out ?? "")) {
+  if (r.missing || /no such (sub)?command/i.test(r.err + r.out)) {
     fail("cargo-about is not installed. Run: cargo install cargo-about --locked --features cli");
   }
+  if (r.status !== 0) fail(`\`cargo about generate\` failed:\n${r.err}`);
   // Licence texts carry CRLF and trailing blanks; normalise so the file is stable.
   return r.out.split(/\r?\n/).map((l) => l.trimEnd()).join("\n").trim();
 }
 
-/** Production npm packages, grouped by licence, from `pnpm licenses list --prod --json`. */
+/** The text of a package's LICENSE / LICENCE / COPYING file; fail if it has none. */
+function licenseText(name, dir) {
+  const file = readdirSync(dir).sort(byCodePoint).find((f) => /^(licen[cs]e|copying)(\.|$)/i.test(f));
+  if (!file) fail(`npm package ${name} ships no LICENSE file in ${dir}; add its text by hand`);
+  return readFileSync(join(dir, file), "utf8").split(/\r?\n/).map((l) => l.trimEnd()).join("\n").trim();
+}
+
+/** Production npm packages with their licence texts, from `pnpm licenses list --prod --json`. */
 function npmSection() {
-  const r = run("pnpm", ["licenses", "list", "--prod", "--json"], root);
+  const r = mustRun("pnpm", ["licenses", "list", "--prod", "--json"], root);
   if (r.missing) fail("pnpm is not installed. Run: corepack enable");
-  const byLicense = JSON.parse(r.out);
+  const pkgs = Object.entries(JSON.parse(r.out)).flatMap(([license, list]) =>
+    list.map((p) => ({ ...p, license })),
+  );
   const lines = [];
-  for (const license of Object.keys(byLicense).sort((a, b) => a.localeCompare(b))) {
-    lines.push(`### ${license}`, "");
-    const pkgs = [...byLicense[license]].sort((a, b) => a.name.localeCompare(b.name));
-    for (const p of pkgs) {
-      const home = p.homepage ? ` (${p.homepage})` : "";
-      lines.push(`- ${p.name} ${p.versions.join(", ")}${home}`);
-    }
-    lines.push("");
+  for (const p of pkgs.toSorted((a, b) => byCodePoint(a.name, b.name))) {
+    const home = p.homepage ? ` (${p.homepage})` : "";
+    lines.push(
+      `### ${p.name} ${p.versions.join(", ")}`,
+      "",
+      `Licence: ${p.license}${home}`,
+      "",
+      "```text",
+      licenseText(p.name, p.paths[0]),
+      "```",
+      "",
+    );
   }
   return lines.join("\n").trim();
 }
@@ -70,7 +97,7 @@ function render() {
     "",
     "## npm packages (production)",
     "",
-    "Licence names come from each package's manifest. Package licence files ship in its npm tarball.",
+    "Each package's licence text is copied from the LICENSE file it ships.",
     "",
     npmSection(),
     "",
