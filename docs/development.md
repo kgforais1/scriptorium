@@ -8,7 +8,7 @@ Agents start at [`AGENTS.md`](../AGENTS.md).
 ## Prerequisites
 
 - **Rust** — install via [rustup](https://rustup.rs); `cargo` and `rustc` must be on `PATH`.
-- **Node LTS + pnpm** — Node 24 (pinned in `engines` and `.nvmrc`);
+- **Node + pnpm** — Node 24.15.0 or later (`engines` in `package.json`; `.nvmrc` selects Node 24);
   enable pnpm with `corepack enable` (preferred) or `npm i -g pnpm`.
 - **Webview** — the OS-native webview Tauri renders into:
   - macOS: built-in WKWebView (no extra install)
@@ -29,7 +29,7 @@ pnpm tauri dev
 ```
 
 Scaffold generated with `create-tauri-app@4.6.2` (template `react-ts`, pnpm).
-Tauri 2 + Vite 7 + React 19 + TypeScript 5.8. Node pinned to v24 (`engines` / `.nvmrc`).
+Tauri 2 + Vite 7 + React 19 + TypeScript 5.8.
 
 ## Book fixtures
 
