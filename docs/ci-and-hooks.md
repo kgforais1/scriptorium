@@ -128,7 +128,8 @@ Worked example: RUSTSEC-2026-0382/0383, lockfile-only, PR #49.
 `cargo audit`, Dependabot and OSV match advisories to crate versions, so they cannot see C
 sources vendored inside `-sys` crates. `ci/scripts/check_bundled_c_cves.py` closes that gap. For
 each library in `ci/bundled-c.toml` it takes the crate version from `src-tauri/Cargo.lock`, reads
-the C version from the crate source in `$CARGO_HOME/registry/src`, and asks the NVD CVE API 2.0
+the C version from the crate source (`$CARGO_HOME/registry/src`, or `$CARGO_HOME/git/checkouts`
+for a crate patched to a git source), and asks the NVD CVE API 2.0
 (`cpeName=...`, which expands version ranges) for CVEs on that exact version. It exits non-zero
 for any CVE not in `ci/bundled-c-exceptions.toml`, for an expired exception, for a missing crate
 source, and when the NVD is unreachable or keeps rate limiting (it fails closed).
@@ -147,7 +148,10 @@ repository secret speeds it up; without one the script sleeps about 7 seconds be
   the canary first and exits 2 if the CVE is missing, because a wrong CPE returns zero CVEs and
   would pass forever (NVD files Little CMS under `little_cms`, not `little_cms_color_engine`). If
   no canary exists, set `canary = "none"` and a `canary_note`; the script then warns on every run.
-  Check the version by hand in `~/.cargo/registry/src`.
+  Check the version by hand in `~/.cargo/registry/src` (or `~/.cargo/git/checkouts` for a git patch).
+- **Git-patched crates:** `cargo audit` cannot match a crate patched to a git source, and
+  Dependabot does not move a pinned `rev`. For `openjpeg-sys` (patched to OpenJPEG 2.5.4), this
+  check is the only CVE tripwire. Drop the patch per `to_do.md` once a release bundles 2.5.4.
 - **Add or extend an exception:** add an `[[exceptions]]` row with `id`, `library`, `reason` and
   `expires` (`YYYY-MM-DD`). Extend only after re-checking, and keep the reason current.
 

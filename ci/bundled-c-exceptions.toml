@@ -2,4 +2,4 @@
 # Each row needs id (CVE), library (name from bundled-c.toml), reason, and
 # expires (YYYY-MM-DD). The check fails once an exception has expired.
 
-exceptions = []
+# No exceptions. Add [[exceptions]] rows below when one is needed.

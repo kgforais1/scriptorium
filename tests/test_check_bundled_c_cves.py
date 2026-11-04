@@ -203,9 +203,9 @@ class CheckBundledCvesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             home = Path(d)
             sha = "1e04bc79c120ca63b2fcc53a0f20166316234edd"
-            checkout = home / "git" / "checkouts" / "openjpeg-sys-9eff85236be6bfae" / sha[:7]
+            checkout = home / "git" / "checkouts" / "ojs-fork-9eff85236be6bfae" / sha[:7]
             checkout.mkdir(parents=True)
-            source = f"git+https://github.com/x/openjpeg-sys?rev={sha}#{sha}"
+            source = f"git+https://github.com/x/ojs-fork.git?rev={sha}#{sha}"
             found = mod.find_crate_source(home, "openjpeg-sys", "1.0.12", source)
             self.assertEqual(found, checkout)
             lock = home / "Cargo.lock"

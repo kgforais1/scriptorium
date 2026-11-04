@@ -26,7 +26,8 @@ Inputs:
   --today YYYY-MM-DD override "today" for tests
 Environment:
   CARGO_HOME         cargo home (default: ~/.cargo); crates are read from
-                     registry/src/*/<crate>-<version> after `cargo fetch`
+                     registry/src/*/<crate>-<version>, or for a git [patch]
+                     from git/checkouts/<repo>-*/<short sha>, after `cargo fetch`
   NVD_API_KEY        optional; raises the NVD rate limit (sleep drops to ~1s)
 
 Outputs:
@@ -235,9 +236,11 @@ def locked_version(lockfile: Path, crate: str) -> str:
 def find_crate_source(cargo_home: Path, crate: str, version: str, source: str = "") -> Path:
     """Find the crate's source after `cargo fetch`: a git checkout or registry/src/*/<crate>-<version>."""
     if source.startswith("git+"):
-        # A [patch] git source: cargo checks it out under git/checkouts/<crate>-<hash>/<short sha>.
-        sha = source.rpartition("#")[2]
-        matches = sorted((cargo_home / "git" / "checkouts").glob(f"{crate}-*/{sha[:7]}"))
+        # A [patch] git source. Cargo checks it out under git/checkouts/<repo>-<hash>/<short id>,
+        # where <repo> is the URL's last path segment and the short id is the first 7 hex digits.
+        url, _, sha = source.removeprefix("git+").partition("#")
+        repo = url.partition("?")[0].rstrip("/").rpartition("/")[2].removesuffix(".git")
+        matches = sorted((cargo_home / "git" / "checkouts").glob(f"{repo}-*/{sha[:7]}"))
     else:
         matches = sorted((cargo_home / "registry" / "src").glob(f"*/{crate}-{version}"))
     if not matches:
