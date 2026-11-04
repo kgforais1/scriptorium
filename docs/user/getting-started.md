@@ -10,8 +10,9 @@ for readers who open them.
 
 On a Mac with Apple silicon, download the `.dmg` file from the
 [latest release](https://github.com/kgforais1/scriptorium/releases/latest). Open it and drag
-Scriptorium to your Applications folder. The app is not signed yet, so macOS blocks the first
-launch. Right-click the app, choose **Open**, and then confirm.
+Scriptorium to your Applications folder. The app is not notarized yet, so macOS blocks the first
+launch. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**.
+Then confirm. On macOS 14 and earlier you can instead right-click the app and choose **Open**.
 
 On Windows, Linux, or an Intel Mac, build the app from source:
 

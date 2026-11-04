@@ -5,6 +5,10 @@ Internal / developer-facing changes that do not belong in the public
 
 ## [Unreleased]
 
+### Changed
+- macOS bundles are ad-hoc signed (`bundle.macOS.signingIdentity: "-"`), so `codesign --verify --deep --strict` passes and Gatekeeper offers **Open Anyway** instead of reporting the app as damaged. The v0.2.0 DMG was rebuilt this way.
+- `pnpm-workspace.yaml` overrides `minimatch` to 11 (Dependabot #23).
+
 ## [0.2.0] - 2026-11-02
 
 ### Added
