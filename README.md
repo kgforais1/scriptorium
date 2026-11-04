@@ -47,8 +47,11 @@ people who read them.
 
 ## Get started
 
-Scriptorium is in early development, and there are no downloadable builds yet. To try it, build
-it from source as described in [Developing Scriptorium](docs/development.md). Then:
+Scriptorium is in early development. Download the macOS build for Apple silicon (macOS 13.3 or
+later) from the [latest release](https://github.com/kgforais1/scriptorium/releases/latest). The
+app is not notarized yet, so macOS blocks the first launch. After it does, open **System
+Settings → Privacy & Security** and click **Open Anyway**. On Windows, Linux, or an Intel Mac,
+build it from source as described in [Developing Scriptorium](docs/development.md). Then:
 
 1. Click **Open…** and choose a folder of scanned pages.
 2. Check the title in the dialog and press **Create**.

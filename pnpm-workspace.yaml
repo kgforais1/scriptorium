@@ -1,2 +1,6 @@
 allowBuilds:
   esbuild: true
+
+# minimatch <11.0.1 has a glob DoS (Dependabot #23). ESLint pins 10.x; it is dev-only. 11.0.3 is the first fixed release.
+overrides:
+  minimatch@<11.0.3: ^11.0.3

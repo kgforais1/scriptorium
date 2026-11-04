@@ -8,7 +8,18 @@ for readers who open them.
 
 ## Install
 
-There is no download yet. For now you build the app from source.
+On a Mac with Apple silicon and macOS 13.3 or later, download the `.dmg` file from the
+[latest release](https://github.com/kgforais1/scriptorium/releases/latest). Open it and drag
+Scriptorium to your Applications folder. The app is not notarized yet, so macOS blocks the first
+launch:
+
+1. Open Scriptorium. macOS says it cannot check the app, and you close the message.
+2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**.
+3. Confirm. Scriptorium opens, and later launches work normally.
+
+On macOS 14 and earlier you can instead right-click the app and choose **Open**.
+
+On Windows, Linux, or an Intel Mac, build the app from source:
 
 1. Install the tools listed under "Prerequisites" in
    [Developing Scriptorium](../development.md#prerequisites): Rust, Node, pnpm, and cargo-about.
