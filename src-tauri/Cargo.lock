@@ -2629,8 +2629,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "openjpeg-sys"
 version = "1.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92682cb92e7b01e2c020cf8ec12f3374558924bb24621df1112d8a7c93d419ef"
+source = "git+https://github.com/kgrizz-git/openjpeg-sys?rev=1e04bc79c120ca63b2fcc53a0f20166316234edd#1e04bc79c120ca63b2fcc53a0f20166316234edd"
 dependencies = [
  "cc",
  "libc",

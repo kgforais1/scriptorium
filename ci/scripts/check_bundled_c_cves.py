@@ -214,25 +214,35 @@ def load_exceptions(path: Path, library_names: set[str]) -> list[ExceptionRow]:
     return out
 
 
-def locked_version(lockfile: Path, crate: str) -> str:
-    """Return the version of `crate` in Cargo.lock; fail if absent or ambiguous."""
+def locked_package(lockfile: Path, crate: str) -> tuple[str, str]:
+    """Return (version, source) of `crate` in Cargo.lock; fail if absent or ambiguous."""
     packages = load_toml(lockfile).get("package", [])
-    versions = sorted({p["version"] for p in packages if p.get("name") == crate})
-    if not versions:
+    rows = sorted({(p["version"], p.get("source", "")) for p in packages if p.get("name") == crate})
+    if not rows:
         raise CheckError(f"{lockfile}: crate {crate} is not locked (remove it from the manifest?)")
-    if len(versions) > 1:
+    if len(rows) > 1:
         raise CheckError(
-            f"{lockfile}: {crate} is locked at several versions {versions}; the check needs one"
+            f"{lockfile}: {crate} is locked at several versions {rows}; the check needs one"
         )
-    return versions[0]
+    return rows[0]
 
 
-def find_crate_source(cargo_home: Path, crate: str, version: str) -> Path:
-    """Find registry/src/*/<crate>-<version> or tell the user to run cargo fetch."""
-    matches = sorted((cargo_home / "registry" / "src").glob(f"*/{crate}-{version}"))
+def locked_version(lockfile: Path, crate: str) -> str:
+    """Return the version of `crate` in Cargo.lock."""
+    return locked_package(lockfile, crate)[0]
+
+
+def find_crate_source(cargo_home: Path, crate: str, version: str, source: str = "") -> Path:
+    """Find the crate's source after `cargo fetch`: a git checkout or registry/src/*/<crate>-<version>."""
+    if source.startswith("git+"):
+        # A [patch] git source: cargo checks it out under git/checkouts/<crate>-<hash>/<short sha>.
+        sha = source.rpartition("#")[2]
+        matches = sorted((cargo_home / "git" / "checkouts").glob(f"{crate}-*/{sha[:7]}"))
+    else:
+        matches = sorted((cargo_home / "registry" / "src").glob(f"*/{crate}-{version}"))
     if not matches:
         raise CheckError(
-            f"source for {crate} {version} not found under {cargo_home}/registry/src; "
+            f"source for {crate} {version} not found under {cargo_home}; "
             "run `cargo fetch --manifest-path src-tauri/Cargo.toml` first"
         )
     return matches[0]
@@ -508,8 +518,8 @@ def run(
         exceptions = load_exceptions(exceptions_path, {lib.name for lib in libs})
         findings: list[Finding] = []
         for lib in libs:
-            crate_version = locked_version(lockfile, lib.crate)
-            crate_dir = find_crate_source(cargo_home, lib.crate, crate_version)
+            crate_version, source = locked_package(lockfile, lib.crate)
+            crate_dir = find_crate_source(cargo_home, lib.crate, crate_version, source)
             version = extract_c_version(lib, crate_dir)
             print(f"[bundled-c] {lib.name} {version} (via {lib.crate} {crate_version})")
             check_canary(lib, api_key, urlopen, sleep)

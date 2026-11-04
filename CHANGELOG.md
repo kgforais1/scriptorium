@@ -15,6 +15,9 @@ uses [Semantic Versioning](https://semver.org/).
 ### Fixed
 - The macOS app is now signed ad hoc. macOS no longer calls the downloaded app damaged, and lets you open it through **Privacy & Security → Open Anyway**.
 
+### Security
+- JPEG 2000 decoding now uses OpenJPEG 2.5.4, which fixes CVE-2025-54874.
+
 ## [0.2.0] - 2026-11-02
 
 ### Added

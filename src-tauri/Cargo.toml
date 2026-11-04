@@ -42,3 +42,9 @@ libc = "0.2"
 # `missing_docs` is set in src/lib.rs so it covers the lib crate only (not build.rs or main.rs).
 [lints.clippy]
 cognitive_complexity = "warn"
+
+# OpenJPEG 2.5.3, bundled by openjpeg-sys 1.0.12, has CVE-2025-54874. Until an openjpeg-sys
+# release bundles 2.5.4, build from a fork commit that bumps only the vendored C sources.
+# Upstream PR: Enet4/openjpeg-sys. Drop this patch once that release lands.
+[patch.crates-io]
+openjpeg-sys = { git = "https://github.com/kgrizz-git/openjpeg-sys", rev = "1e04bc79c120ca63b2fcc53a0f20166316234edd" }

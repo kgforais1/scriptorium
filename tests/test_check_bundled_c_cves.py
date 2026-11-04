@@ -199,6 +199,22 @@ class CheckBundledCvesTests(unittest.TestCase):
             lib = mod.load_manifest(t["manifest"])[0]
             self.assertEqual(mod.extract_c_version(lib, t["src"]), "2.5.3")
 
+    def test_git_patched_crate_is_read_from_its_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            home = Path(d)
+            sha = "1e04bc79c120ca63b2fcc53a0f20166316234edd"
+            checkout = home / "git" / "checkouts" / "openjpeg-sys-9eff85236be6bfae" / sha[:7]
+            checkout.mkdir(parents=True)
+            source = f"git+https://github.com/x/openjpeg-sys?rev={sha}#{sha}"
+            found = mod.find_crate_source(home, "openjpeg-sys", "1.0.12", source)
+            self.assertEqual(found, checkout)
+            lock = home / "Cargo.lock"
+            lock.write_text(
+                f'[[package]]\nname = "openjpeg-sys"\nversion = "1.0.12"\nsource = "{source}"\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(mod.locked_package(lock, "openjpeg-sys"), ("1.0.12", source))
+
     def test_extract_fails_when_regex_misses(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             t = _make_tree(Path(d))
