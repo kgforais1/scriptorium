@@ -8,7 +8,12 @@ for readers who open them.
 
 ## Install
 
-There is no download yet. For now you build the app from source.
+On a Mac with Apple silicon, download the `.dmg` file from the
+[latest release](https://github.com/kgforais1/scriptorium/releases/latest). Open it and drag
+Scriptorium to your Applications folder. The app is not signed yet, so macOS blocks the first
+launch. Right-click the app, choose **Open**, and then confirm.
+
+On Windows, Linux, or an Intel Mac, build the app from source:
 
 1. Install the tools listed under "Prerequisites" in
    [Developing Scriptorium](../development.md#prerequisites): Rust, Node, pnpm, and cargo-about.

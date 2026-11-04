@@ -47,7 +47,9 @@ people who read them.
 
 ## Get started
 
-Scriptorium is in early development, and there are no downloadable builds yet. To try it, build
+Scriptorium is in early development. Download the macOS build for Apple silicon from the
+[latest release](https://github.com/kgforais1/scriptorium/releases/latest). The app is not signed
+yet, so the first time, right-click it, choose **Open**, and confirm. On Windows or Linux, build
 it from source as described in [Developing Scriptorium](docs/development.md). Then:
 
 1. Click **Open…** and choose a folder of scanned pages.
