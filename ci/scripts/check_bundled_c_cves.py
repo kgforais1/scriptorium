@@ -27,7 +27,8 @@ Inputs:
 Environment:
   CARGO_HOME         cargo home (default: ~/.cargo); crates are read from
                      registry/src/*/<crate>-<version>, or for a git [patch]
-                     from git/checkouts/<repo>-*/<short sha>, after `cargo fetch`
+                     from git/checkouts/<repo>-*/<short sha> whose HEAD is
+                     the locked commit, after `cargo fetch`
   NVD_API_KEY        optional; raises the NVD rate limit (sleep drops to ~1s)
 
 Outputs:
@@ -235,7 +236,10 @@ def locked_version(lockfile: Path, crate: str) -> str:
 
 
 def _checkout_head(checkout: Path) -> str:
-    """Return the commit a cargo git checkout is at, following a `ref:` HEAD, or ""."""
+    """Return the commit a cargo git checkout is at, following a `ref:` HEAD, or "".
+
+    Cargo writes a real .git directory; a gitfile (worktree) checkout reads as "" and fails closed.
+    """
     git_dir = checkout / ".git"
     try:
         head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
@@ -247,7 +251,7 @@ def _checkout_head(checkout: Path) -> str:
             packed = (git_dir / "packed-refs").read_text(encoding="utf-8").splitlines()
             return next((ln.split()[0] for ln in packed if ln.endswith(f" {ref}")), "")
         return head
-    except OSError:
+    except (OSError, ValueError):  # ValueError covers a non-UTF-8 HEAD or packed-refs
         return ""
 
 
@@ -259,9 +263,14 @@ def find_crate_source(cargo_home: Path, crate: str, version: str, source: str = 
         url, _, sha = source.removeprefix("git+").partition("#")
         repo = url.partition("?")[0].rstrip("/").rpartition("/")[2].removesuffix(".git")
         pattern = f"{glob.escape(repo)}-*/{glob.escape(sha[:7])}"
-        candidates = (cargo_home / "git" / "checkouts").glob(pattern)
+        candidates = sorted((cargo_home / "git" / "checkouts").glob(pattern))
         # Keep only checkouts of the locked commit, so a stale or colliding one cannot answer.
-        matches = sorted(c for c in candidates if _checkout_head(c) == sha)
+        matches = [c for c in candidates if _checkout_head(c) == sha]
+        if candidates and not matches:
+            raise CheckError(
+                f"{crate}: no checkout of {sha} under {cargo_home}; {len(candidates)} checkout(s) "
+                "are at other commits. Remove them and run `cargo fetch` again"
+            )
         if len(matches) > 1:
             raise CheckError(f"{crate}: several checkouts of {sha} under {cargo_home}: {matches}")
     else:

@@ -129,7 +129,7 @@ Worked example: RUSTSEC-2026-0382/0383, lockfile-only, PR #49.
 sources vendored inside `-sys` crates. `ci/scripts/check_bundled_c_cves.py` closes that gap. For
 each library in `ci/bundled-c.toml` it takes the crate version from `src-tauri/Cargo.lock`, reads
 the C version from the crate source (`$CARGO_HOME/registry/src`, or `$CARGO_HOME/git/checkouts`
-for a crate patched to a git source), and asks the NVD CVE API 2.0
+for a crate patched to a git source, where the checkout's HEAD must be the locked commit), and asks the NVD CVE API 2.0
 (`cpeName=...`, which expands version ranges) for CVEs on that exact version. It exits non-zero
 for any CVE not in `ci/bundled-c-exceptions.toml`, for an expired exception, for a missing crate
 source, and when the NVD is unreachable or keeps rate limiting (it fails closed).
