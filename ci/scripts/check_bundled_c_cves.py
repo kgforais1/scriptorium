@@ -43,6 +43,7 @@ Requirements:
 from __future__ import annotations
 
 import argparse
+import glob
 import http.client
 import json
 import os
@@ -233,6 +234,23 @@ def locked_version(lockfile: Path, crate: str) -> str:
     return locked_package(lockfile, crate)[0]
 
 
+def _checkout_head(checkout: Path) -> str:
+    """Return the commit a cargo git checkout is at, following a `ref:` HEAD, or ""."""
+    git_dir = checkout / ".git"
+    try:
+        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+        if head.startswith("ref: "):
+            ref = head.removeprefix("ref: ")
+            loose = git_dir / ref
+            if loose.is_file():
+                return loose.read_text(encoding="utf-8").strip()
+            packed = (git_dir / "packed-refs").read_text(encoding="utf-8").splitlines()
+            return next((ln.split()[0] for ln in packed if ln.endswith(f" {ref}")), "")
+        return head
+    except OSError:
+        return ""
+
+
 def find_crate_source(cargo_home: Path, crate: str, version: str, source: str = "") -> Path:
     """Find the crate's source after `cargo fetch`: a git checkout or registry/src/*/<crate>-<version>."""
     if source.startswith("git+"):
@@ -240,7 +258,12 @@ def find_crate_source(cargo_home: Path, crate: str, version: str, source: str = 
         # where <repo> is the URL's last path segment and the short id is the first 7 hex digits.
         url, _, sha = source.removeprefix("git+").partition("#")
         repo = url.partition("?")[0].rstrip("/").rpartition("/")[2].removesuffix(".git")
-        matches = sorted((cargo_home / "git" / "checkouts").glob(f"{repo}-*/{sha[:7]}"))
+        pattern = f"{glob.escape(repo)}-*/{glob.escape(sha[:7])}"
+        candidates = (cargo_home / "git" / "checkouts").glob(pattern)
+        # Keep only checkouts of the locked commit, so a stale or colliding one cannot answer.
+        matches = sorted(c for c in candidates if _checkout_head(c) == sha)
+        if len(matches) > 1:
+            raise CheckError(f"{crate}: several checkouts of {sha} under {cargo_home}: {matches}")
     else:
         matches = sorted((cargo_home / "registry" / "src").glob(f"*/{crate}-{version}"))
     if not matches:

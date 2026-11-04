@@ -204,7 +204,16 @@ class CheckBundledCvesTests(unittest.TestCase):
             home = Path(d)
             sha = "1e04bc79c120ca63b2fcc53a0f20166316234edd"
             checkout = home / "git" / "checkouts" / "ojs-fork-9eff85236be6bfae" / sha[:7]
-            checkout.mkdir(parents=True)
+            (checkout / ".git").mkdir(parents=True)
+            # Cargo leaves HEAD on a branch ref, so the commit is one hop away.
+            (checkout / ".git" / "refs" / "heads").mkdir(parents=True)
+            (checkout / ".git" / "HEAD").write_text("ref: refs/heads/master\n", encoding="utf-8")
+            (checkout / ".git" / "refs" / "heads" / "master").write_text(
+                sha + "\n", encoding="utf-8"
+            )
+            stale = home / "git" / "checkouts" / "ojs-fork-0000000000000000" / sha[:7]
+            (stale / ".git").mkdir(parents=True)
+            (stale / ".git" / "HEAD").write_text("1e04bc7" + "0" * 33 + "\n", encoding="utf-8")
             source = f"git+https://github.com/x/ojs-fork.git?rev={sha}#{sha}"
             found = mod.find_crate_source(home, "openjpeg-sys", "1.0.12", source)
             self.assertEqual(found, checkout)
