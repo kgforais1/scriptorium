@@ -222,6 +222,31 @@ jobs:
       - name: cargo check
         run: cargo check
 
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Enable corepack (pnpm)
+        working-directory: .
+        run: corepack enable
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: pnpm install
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm build
+        working-directory: .
+        run: pnpm build
+
+      - name: cargo build (embed frontendDist; LC-M2)
+        run: cargo build --features tauri/custom-protocol
+
   rust-cross:
     # Windows and macOS run the crate's tests too. Windows catches path and case-folding
     # behaviour; macOS runs the sips-based ingest fixtures (CMYK with a profile, JPEG 2000)

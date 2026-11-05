@@ -3,7 +3,7 @@
 Last reviewed: 2026-11-05
 Date: 2026-11-05
 Author: planning pass (branch `chore/m1-hardening`)
-Status: draft
+Status: in-progress
 Linked issue/PR: n/a
 Follows: [M1 follow-ups](2026-11-02-m1-followups.md)
 
@@ -235,7 +235,7 @@ Files: `.github/workflows/ci.yml`, `docs/ci-and-hooks.md`,
 
 Steps:
 
-- [ ] On the existing `rust` job only (ubuntu, after `cargo test` and `cargo check`),
+- [x] On the existing `rust` job only (ubuntu, after `cargo test` and `cargo check`),
       add Node the same way `typecheck-ts` does. Pin every new `uses` step to a full
       SHA plus a version comment, copying the SHAs already in `ci.yml`. Do not add a
       new action and do not use a floating tag. The pins are
@@ -243,30 +243,30 @@ Steps:
       `actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9` (`# v6.1.0`).
       `node-version: 24`. Cache `~/.local/share/pnpm/store` with key
       `pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}`.
-- [ ] `run` steps inherit `working-directory: src-tauri`. Set `working-directory: .`
+- [x] `run` steps inherit `working-directory: src-tauri`. Set `working-directory: .`
       on `corepack enable`, `pnpm install --frozen-lockfile`, and `pnpm build`.
       Do not set `working-directory` on `cargo build --features tauri/custom-protocol`.
       Do not pass `--release`. Do not run `pnpm tauri build`.
-- [ ] Leave `cargo fmt`, `clippy`, `test`, and `check` without that feature, so they
+- [x] Leave `cargo fmt`, `clippy`, `test`, and `check` without that feature, so they
       keep passing when `dist/` is absent. Do not add the step to `rust-cross`.
-- [ ] Document the step in the Rust row of `docs/ci-and-hooks.md`, including the
+- [x] Document the step in the Rust row of `docs/ci-and-hooks.md`, including the
       `tauri/custom-protocol` reason.
-- [ ] Tick the follow-ups line "Add a debug `cargo build` to CI (LC-M2)".
-- [ ] Tick only the roadmap M0.5 line "Add `cargo build` to CI Rust job (**LC-M2**)".
+- [x] Tick the follow-ups line "Add a debug `cargo build` to CI (LC-M2)".
+- [x] Tick only the roadmap M0.5 line "Add `cargo build` to CI Rust job (**LC-M2**)".
       Leave the M1 "Close remaining M0 review…" box alone.
-- [ ] `CHANGELOG.dev.md` `## [Unreleased]`: the Rust CI job embeds the production
+- [x] `CHANGELOG.dev.md` `## [Unreleased]`: the Rust CI job embeds the production
       frontend with `cargo build --features tauri/custom-protocol` after `pnpm build`.
 
 Tests: none. The job is the test.
 
 Verification:
 
-- [ ] Locally, with `dist/` absent, `cargo build --features tauri/custom-protocol` in
+- [x] Locally, with `dist/` absent, `cargo build --features tauri/custom-protocol` in
       `src-tauri` fails because `frontendDist` does not exist. Restore `dist/` with
       `pnpm build` and the same command succeeds. Do not commit `dist/`.
-- [ ] `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test` in
+- [x] `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test` in
       `src-tauri` still pass without the feature.
-- [ ] PR note for the workflow change, per [`policies/github-actions-usage.md`](../policies/github-actions-usage.md):
+- [x] PR note for the workflow change, per [`policies/github-actions-usage.md`](../policies/github-actions-usage.md):
       same `pull_request` and `push` to `main` triggers; one extra Linux leg on the
       existing `rust` job; about 5–12 minutes on a warm cargo cache (a feature-flipped
       Tauri compile plus `pnpm build`); no new artifact; public-repo minutes are not

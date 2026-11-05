@@ -47,7 +47,7 @@ After the first green `CI` run, set default-branch ruleset required checks to:
 - `Tests & coverage`
 - `Secret scan (gitleaks)`
 - `SAST — Semgrep` (from Security workflow)
-- `Rust (src-tauri)` — **required from M0** once `src-tauri/` exists (`cargo fmt` / `clippy` / `test` / `check`; exact job name must match `ci.yml`)
+- `Rust (src-tauri)` — **required from M0** once `src-tauri/` exists (`cargo fmt` / `clippy` / `test` / `check`, then `pnpm build` and `cargo build --features tauri/custom-protocol`; exact job name must match `ci.yml`). Plain `cargo build` without that feature does not embed `frontendDist` on Tauri 2.12 (dev builds use `devUrl`), so the extra step fails when `dist/` is missing — the gap **LC-M2** called out after M0 review.
 - `Rust (windows-latest)` and `Rust (macos-latest)` — the `rust-cross` matrix (`clippy --all-targets`, `test`). Not required yet; make them required once they have been green on a few PRs
 - `Type check (TypeScript)` — `pnpm install` + `pnpm typecheck` (app and config files)
 - `Lint & test (TypeScript)` — `pnpm install` + `pnpm lint` (ESLint) + `pnpm skin:check` (step "Skin CSS is current": the committed `src/styles/skin-<id>.css` matches `design/skins/<id>/tokens.json`; fix with `pnpm skin:css`) + `pnpm skin:lint` (step "Skin literals": no colour, font-family, radius, or filter literals in `src/features/reader/` CSS and TSX outside `engine/`) + `pnpm test:coverage` (Vitest, lines ≥ 80 on `src/lib/**`)
