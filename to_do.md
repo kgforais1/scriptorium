@@ -22,7 +22,6 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Unplanned / small
 
-- **Trim jsonschema's network stack** — `jsonschema` 0.51 with default features pulls `reqwest`, `rustls` and AWS-LC (C) into the app only to resolve remote `$ref`s, which the embedded book schemas never use. Try `default-features = false` and drop AWS-LC from `THIRD_PARTY_NOTICES.md` if it goes.
 - **Drop the openjpeg-sys patch** — `src-tauri/Cargo.toml` patches `openjpeg-sys` 1.0.12 to a fork commit that bundles OpenJPEG 2.5.4 (fixes CVE-2025-54874). Upstream PR [Enet4/openjpeg-sys#5](https://github.com/Enet4/openjpeg-sys/pull/5) asks for a release with 2.5.4. When one ships, bump the crate, delete the `[patch.crates-io]` block, and update `THIRD_PARTY_NOTICES.md`.
 - **Reader notes follow-up** — Reader notes: clear a page's failure note when it later loads (after a context restore), and the engine note after a successful resize or scene update; and cap concurrent texture rebuilds in refresh() — CodeRabbit #67.
 - **Cap decoded scan size** — Cap decoded scan size (createImageBitmap resize) so huge scans don't spike memory — CodeRabbit #68.

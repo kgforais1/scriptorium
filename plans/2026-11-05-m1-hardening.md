@@ -404,39 +404,39 @@ Tick nothing on the follow-ups plan; this item lived under **Unplanned / small**
 
 Steps:
 
-- [ ] Change the dependency to
+- [x] Change the dependency to
       `jsonschema = { version = "0.51.0", default-features = false }`
       with no `features` list.
-- [ ] Let Cargo rewrite `Cargo.lock` by building or testing. Do not hand-edit the lockfile.
-- [ ] Confirm the host graph no longer contains `reqwest`, `rustls`, `aws-lc-rs`, or
+- [x] Let Cargo rewrite `Cargo.lock` by building or testing. Do not hand-edit the lockfile.
+- [x] Confirm the host graph no longer contains `reqwest`, `rustls`, `aws-lc-rs`, or
       `aws-lc-sys` (`cargo tree -i <crate> -e normal,build` from `src-tauri` exits
       because the package is absent). If any of them still has a parent other than
       `jsonschema`, stop and report that parent. Do not keep `tls-ring` as a substitute.
-- [ ] Delete the `## AWS-LC` section of `THIRD_PARTY_NOTICES.md` (heading, bullets, and
+- [x] Delete the `## AWS-LC` section of `THIRD_PARTY_NOTICES.md` (heading, bullets, and
       the fenced licence text) and the AWS-LC bullet under `## Advisory check`.
-- [ ] Delete the AWS-LC `[[library]]` from `ci/bundled-c.toml`. Update the
+- [x] Delete the AWS-LC `[[library]]` from `ci/bundled-c.toml`. Update the
       `bundled-c-cves` comment in `.github/workflows/security.yml` so it names OpenJPEG
       and Little CMS only.
-- [ ] Regenerate notices: `pnpm licenses:gen`, then `pnpm licenses:check`. Commit the
+- [x] Regenerate notices: `pnpm licenses:gen`, then `pnpm licenses:check`. Commit the
       generated licence file. `about.toml` does not need a new accepted licence; crates
       are leaving, not arriving.
-- [ ] Remove the **Trim jsonschema's network stack** bullet from `to_do.md`
+- [x] Remove the **Trim jsonschema's network stack** bullet from `to_do.md`
       **Unplanned / small**.
-- [ ] `CHANGELOG.md` `## [Unreleased]` `### Security`: the app no longer links an HTTP
+- [x] `CHANGELOG.md` `## [Unreleased]` `### Security`: the app no longer links an HTTP
       client or AWS-LC. Book schemas are compiled from files embedded in the binary.
-- [ ] `CHANGELOG.dev.md` `## [Unreleased]`: `jsonschema` is built with
+- [x] `CHANGELOG.dev.md` `## [Unreleased]`: `jsonschema` is built with
       `default-features = false`; the bundled-C manifest and the generated licence file
       dropped the AWS-LC crates.
 
 Verification:
 
-- [ ] `cargo test --manifest-path src-tauri/Cargo.toml` (schema compile and `date-time`
+- [x] `cargo test --manifest-path src-tauri/Cargo.toml` (schema compile and `date-time`
       validation still pass with no network).
-- [ ] `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings`.
-- [ ] The four `cargo tree -i` checks above.
-- [ ] `pnpm licenses:check`.
-- [ ] `cargo audit` in `src-tauri` (expect exit 0; do not add an ignore).
-- [ ] `python3 ci/scripts/check_bundled_c_cves.py` still runs for OpenJPEG and Little CMS.
+- [x] `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings`.
+- [x] The four `cargo tree -i` checks above.
+- [x] `pnpm licenses:check`.
+- [x] `cargo audit` in `src-tauri` (expect exit 0; do not add an ignore).
+- [x] `python3 ci/scripts/check_bundled_c_cves.py` still runs for OpenJPEG and Little CMS.
       It must not look up `aws-lc-sys`.
 
 ## Verification

@@ -35,19 +35,3 @@ cpe_vendor = "littlecms"
 cpe_product = "little_cms"
 canary_version = "2.14"
 canary_cve = "CVE-2026-41254"
-
-[[library]]
-name = "AWS-LC"
-crate = "aws-lc-sys"
-version_file = "aws-lc/CMakeLists.txt"
-version_regex = 'set\(SOFTWARE_VERSION "(\d+\.\d+\.\d+)"\)'
-# NVD lists the C library as amazon:aws_libcrypto. Its Rust wrappers
-# (amazon:aws-lc-sys, amazon:aws-lc-fips-sys) are separate CPEs keyed by crate
-# version, and NVD has no amazon:aws-lc entry. NVD numbers aws_libcrypto in the
-# 1.x series (CVE-2026-3336 covers 1.41.0 to before 1.69.0), so a clean result
-# for 5.11.0 is weaker evidence than for the other libraries. The canary proves
-# the CPE itself works.
-cpe_vendor = "amazon"
-cpe_product = "aws_libcrypto"
-canary_version = "1.50.0"
-canary_cve = "CVE-2026-3336"

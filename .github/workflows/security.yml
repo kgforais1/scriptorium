@@ -100,8 +100,8 @@ jobs:
         working-directory: src-tauri
         run: cargo audit
 
-  # Flags CVEs in C libraries that -sys crates vendor (OpenJPEG, Little CMS,
-  # AWS-LC), which cargo audit, Dependabot and OSV cannot see. Runs weekly and
+  # Flags CVEs in C libraries that -sys crates vendor (OpenJPEG, Little CMS),
+  # which cargo audit, Dependabot and OSV cannot see. Runs weekly and
   # on manual dispatch always; on PRs only when the lockfile, the manifest, the
   # exceptions or the script changed (the "scope" step), so unrelated PRs pay
   # only for checkout. See docs/ci-and-hooks.md.

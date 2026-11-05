@@ -19,6 +19,7 @@ uses [Semantic Versioning](https://semver.org/).
 - The macOS app is now signed ad hoc. macOS no longer calls the downloaded app damaged, and lets you open it through **Privacy & Security → Open Anyway**.
 
 ### Security
+- JSON Schema validation no longer links an HTTP client or AWS-LC. Book schemas are compiled from files embedded in the binary. Desktop builds do not link `reqwest`. Android and iOS still link Tauri's `reqwest` (no `rustls`, no AWS-LC).
 - JPEG 2000 decoding now uses OpenJPEG 2.5.4, which fixes CVE-2025-54874.
 
 ## [0.2.0] - 2026-11-02
