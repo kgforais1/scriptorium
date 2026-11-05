@@ -6,7 +6,7 @@ Internal / developer-facing changes that do not belong in the public
 ## [Unreleased]
 
 ### Added
-- `tests/test_tauri_csp.py` locks the production CSP object, empty runtime asset scope, and default capability permissions. A10–A12 were already covered in Rust tests; the release-build console CSP check remains manual (`docs/manual-test-m1.md` section 8).
+- `tests/test_tauri_csp.py` locks the production CSP object, empty runtime asset scope, and default capability permissions. `img-src` and `connect-src` must equal the approved source sets, and a source that only `devCsp` allows cannot appear on the production directive. A10–A12 were already covered in Rust tests; the release-build console CSP check remains manual (`docs/manual-test-m1.md` section 8).
 
 ### Changed
 - `jsonschema` is built with `default-features = false` (no remote schema fetch stack); `ci/bundled-c.toml`, `THIRD_PARTY_NOTICES.md`, and the generated licence file no longer list AWS-LC.
