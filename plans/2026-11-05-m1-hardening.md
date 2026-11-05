@@ -323,17 +323,17 @@ Files: `plans/2026-11-02-m1-followups.md` only.
 
 Steps:
 
-- [ ] Tick "Verify the asset-protocol checklist … and tick each item that holds."
+- [x] Tick "Verify the asset-protocol checklist … and tick each item that holds."
       In the same bullet, point at the findings table in this plan. State that eight
       items hold with no code change, and that the Windows `https://asset.localhost`
       runtime check remains the existing manual WebView2 bullet (do not tick that
       bullet).
-- [ ] Do not edit the archived M1 plan.
-- [ ] No changelog entry. The verdict is this plan plus the ticked follow-up.
+- [x] Do not edit the archived M1 plan.
+- [x] No changelog entry. The verdict is this plan plus the ticked follow-up.
 
 Verification:
 
-- [ ] `python ci/scripts/check_doc_links.py --internal-only --strict plans/2026-11-02-m1-followups.md plans/2026-11-05-m1-hardening.md`
+- [x] `python ci/scripts/check_doc_links.py --internal-only --strict plans/2026-11-02-m1-followups.md plans/2026-11-05-m1-hardening.md`
       Pass those paths. With no paths the script `rglob`s the repo, and `SKIP_DIRS`
       does not include `.venv` or `.context`, so a bare run walks both. The new
       pointer must resolve.
