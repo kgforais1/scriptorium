@@ -348,50 +348,50 @@ Files: both book-format schemas, `docs/book-format.md`,
 
 Steps:
 
-- [ ] In both schemas, set `pageLabel` to `type: string`, `maxLength: 256`, and a
+- [x] In both schemas, set `pageLabel` to `type: string`, `maxLength: 256`, and a
       description that says the cap is 256 Unicode characters. Leave it optional.
       Do not add `minLength`.
-- [ ] Add `pub const PAGE_LABEL_MAX_LEN: usize = 256` next to `TITLE_MAX_LEN`, with a
+- [x] Add `pub const PAGE_LABEL_MAX_LEN: usize = 256` next to `TITLE_MAX_LEN`, with a
       doc comment that it matches both schemas and is a Unicode scalar count.
-- [ ] In `PageEntry::validate`, if `page_label` is `Some` and
+- [x] In `PageEntry::validate`, if `page_label` is `Some` and
       `chars().count()` exceeds `PAGE_LABEL_MAX_LEN`, return
       `TextFieldTooLong { field: "pageLabel", len, max: PAGE_LABEL_MAX_LEN }`.
-- [ ] Update the `TextFieldTooLong` doc comment so it names `pageLabel` as well as
+- [x] Update the `TextFieldTooLong` doc comment so it names `pageLabel` as well as
       `rights` and `attribution`.
-- [ ] In `docs/book-format.md`, note the cap on the `pageLabel` row and add a loader-table
+- [x] In `docs/book-format.md`, note the cap on the `pageLabel` row and add a loader-table
       row: `pages[].pageLabel` must be at most 256 characters when present.
-- [ ] In `tests_v2.rs` (279 lines; keep the new test short):
+- [x] In `tests_v2.rs` (279 lines; keep the new test short):
       - Both schemas' `pageLabel.maxLength` equals `PAGE_LABEL_MAX_LEN`.
       - A label of 256 `"é"` scalars passes `BookMeta::validate` and both schema
         validators. 257 fails both. `"é"` is one scalar and two UTF-8 bytes; if the
         schema and Rust disagree, stop and report it. Do not switch the count to bytes.
       - The existing `"Cover"` round-trip in `tests.rs` stays as it is.
-- [ ] In `scripts/generate-fixture-book.py`, add `PAGE_LABEL_MAX_LEN = 256` next to
+- [x] In `scripts/generate-fixture-book.py`, add `PAGE_LABEL_MAX_LEN = 256` next to
       `TITLE_MAX_LEN`, under the same lockstep comment. Leave the written label as
       `"Cover"`. Do not add a CLI flag.
-- [ ] In `tests/test_generate_fixture_book.py` `test_book_id_pattern_matches_schema`,
+- [x] In `tests/test_generate_fixture_book.py` `test_book_id_pattern_matches_schema`,
       assert `PAGE_LABEL_MAX_LEN` equals `pageLabel.maxLength` on both
       `docs/book-format.v1.schema.json` and `docs/book-format.v2.schema.json`
       (`$defs.pageEntry.properties.pageLabel`). That test currently reads only v2;
       load v1 for this assert as well.
-- [ ] `CHANGELOG.md` `## [Unreleased]` `### Changed`: a page label may be at most 256
+- [x] `CHANGELOG.md` `## [Unreleased]` `### Changed`: a page label may be at most 256
       characters; a longer one is rejected.
-- [ ] `CHANGELOG.dev.md` `## [Unreleased]`: `PAGE_LABEL_MAX_LEN` is locked to both
+- [x] `CHANGELOG.dev.md` `## [Unreleased]`: `PAGE_LABEL_MAX_LEN` is locked to both
       schemas in `tests_v2.rs` and in `tests/test_generate_fixture_book.py`.
-- [ ] Tick the follow-ups `pageLabel` bullet, and name 256 and the "no formatVersion
+- [x] Tick the follow-ups `pageLabel` bullet, and name 256 and the "no formatVersion
       bump" reason in that bullet.
 
 Verification:
 
-- [ ] `cargo fmt --check` and `cargo test --manifest-path src-tauri/Cargo.toml`
+- [x] `cargo fmt --check` and `cargo test --manifest-path src-tauri/Cargo.toml`
       (the schema and validate tests, including the new one).
-- [ ] `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`.
+- [x] `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`.
       `tests_v2.rs` is `#[cfg(test)]`. `cargo clippy` without `--all-targets` does not
       lint it. `rust-cross` already passes `--all-targets`; this local command matches
       that.
-- [ ] `python -m pytest tests/test_generate_fixture_book.py -q` (the new lockstep
+- [x] `python -m pytest tests/test_generate_fixture_book.py -q` (the new lockstep
       assert). `ruff check` on the two Python files this chunk edits.
-- [ ] Public item doc comments stay in place (`missing_docs`), including the updated
+- [x] Public item doc comments stay in place (`missing_docs`), including the updated
       `TextFieldTooLong` comment. The new branch in `PageEntry::validate` stays under
       the cognitive complexity limit of 15.
 

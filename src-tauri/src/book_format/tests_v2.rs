@@ -277,3 +277,72 @@ fn v1_and_v2_schemas_share_id_and_file_patterns() {
         "page file pattern drifted between v1 and v2"
     );
 }
+
+#[test]
+fn page_label_max_length_matches_schema_and_validators() {
+    let page_label_max = |v: u32| -> u64 {
+        let path = format!(
+            "{}/../docs/book-format.v{v}.schema.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+        let schema: Value = serde_json::from_str(&text).expect("schema is JSON");
+        schema["$defs"]["pageEntry"]["properties"]["pageLabel"]["maxLength"]
+            .as_u64()
+            .expect("pageLabel maxLength")
+    };
+    assert_eq!(page_label_max(1), PAGE_LABEL_MAX_LEN as u64);
+    assert_eq!(page_label_max(2), PAGE_LABEL_MAX_LEN as u64);
+
+    let ok_label = "é".repeat(PAGE_LABEL_MAX_LEN);
+    assert_eq!(ok_label.chars().count(), PAGE_LABEL_MAX_LEN);
+
+    let mut v1_book = BookMeta::sample_v1();
+    v1_book.pages[0].page_label = Some(ok_label.clone());
+    v1_book.validate().expect("256 scalars must validate");
+    let v1_json = serde_json::to_value(&v1_book).unwrap();
+    assert!(
+        schema(1).is_valid(&v1_json),
+        "v1 schema must accept 256-scalar label"
+    );
+
+    let mut v2_book = BookMeta::sample();
+    v2_book.pages[0].page_label = Some(ok_label);
+    v2_book.validate().expect("256 scalars must validate");
+    let v2_json = serde_json::to_value(&v2_book).unwrap();
+    assert!(
+        schema(2).is_valid(&v2_json),
+        "v2 schema must accept 256-scalar label"
+    );
+
+    let long = "é".repeat(PAGE_LABEL_MAX_LEN + 1);
+    v1_book.pages[0].page_label = Some(long.clone());
+    assert_eq!(
+        v1_book.validate(),
+        Err(BookMetaError::TextFieldTooLong {
+            field: "pageLabel",
+            len: PAGE_LABEL_MAX_LEN + 1,
+            max: PAGE_LABEL_MAX_LEN,
+        })
+    );
+    let v1_json = serde_json::to_value(&v1_book).unwrap();
+    assert!(
+        !schema(1).is_valid(&v1_json),
+        "v1 schema must reject 257-scalar label"
+    );
+
+    v2_book.pages[0].page_label = Some(long);
+    assert_eq!(
+        v2_book.validate(),
+        Err(BookMetaError::TextFieldTooLong {
+            field: "pageLabel",
+            len: PAGE_LABEL_MAX_LEN + 1,
+            max: PAGE_LABEL_MAX_LEN,
+        })
+    );
+    let v2_json = serde_json::to_value(&v2_book).unwrap();
+    assert!(
+        !schema(2).is_valid(&v2_json),
+        "v2 schema must reject 257-scalar label"
+    );
+}

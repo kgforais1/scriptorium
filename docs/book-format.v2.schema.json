@@ -136,8 +136,9 @@
           "pattern": "^[a-f0-9]{64}$"
         },
         "pageLabel": {
-          "description": "Optional human label.",
-          "type": "string"
+          "description": "Optional human label (at most 256 Unicode characters).",
+          "type": "string",
+          "maxLength": 256
         },
         "storage": {
           "description": "How the page is stored. \"copied\" default; \"referenced\" reserved, not implemented in M1.",

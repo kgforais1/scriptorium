@@ -47,7 +47,7 @@ run on 2026-11-02. These items are the rest. Section links point at the archived
 - [x] Static pytest locks production CSP, empty asset scope, and default capabilities (`tests/test_tauri_csp.py`).
 - [ ] Re-check A13 CSP in a release build (manual script section 8; Windows WebView2 bullet above).
 - [x] Add a debug `cargo build` to CI (LC-M2).
-- [ ] Consider a `pageLabel` `maxLength` (LC-T11).
+- [x] Cap optional `pageLabel` at 256 Unicode characters in v1/v2 schema and Rust (**LC-T11**); no `formatVersion` bump (field already existed).
 
 ## Verification
 

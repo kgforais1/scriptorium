@@ -12,6 +12,9 @@ uses [Semantic Versioning](https://semver.org/).
 ### Added
 - A macOS download for Apple silicon (macOS 13.3 or later) is on the [v0.2.0 release](https://github.com/kgforais1/scriptorium/releases/tag/v0.2.0). The README and the getting-started guide explain how to open it.
 
+### Changed
+- A page label (`pageLabel`) may be at most 256 characters; longer labels are rejected when a package is validated or opened.
+
 ### Fixed
 - The macOS app is now signed ad hoc. macOS no longer calls the downloaded app damaged, and lets you open it through **Privacy & Security → Open Anyway**.
 
