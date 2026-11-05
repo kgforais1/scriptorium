@@ -27,7 +27,7 @@ Inputs:
 Environment:
   CARGO_HOME         cargo home (default: ~/.cargo); crates are read from
                      registry/src/*/<crate>-<version>, or for a git [patch]
-                     from git/checkouts/<repo>-*/<short sha> whose HEAD is
+                     from git/checkouts/<repo>-*/<short sha>* whose HEAD is
                      the locked commit, after `cargo fetch`
   NVD_API_KEY        optional; raises the NVD rate limit (sleep drops to ~1s)
 
@@ -259,10 +259,11 @@ def find_crate_source(cargo_home: Path, crate: str, version: str, source: str = 
     """Find the crate's source after `cargo fetch`: a git checkout or registry/src/*/<crate>-<version>."""
     if source.startswith("git+"):
         # A [patch] git source. Cargo checks it out under git/checkouts/<repo>-<hash>/<short id>,
-        # where <repo> is the URL's last path segment and the short id is the first 7 hex digits.
+        # where <repo> is the URL's last path segment and the short id starts with the commit's
+        # first 7 hex digits (git lengthens it when 7 are ambiguous). The HEAD check pins the commit.
         url, _, sha = source.removeprefix("git+").partition("#")
         repo = url.partition("?")[0].rstrip("/").rpartition("/")[2].removesuffix(".git")
-        pattern = f"{glob.escape(repo)}-*/{glob.escape(sha[:7])}"
+        pattern = f"{glob.escape(repo)}-*/{glob.escape(sha[:7])}*"
         candidates = sorted((cargo_home / "git" / "checkouts").glob(pattern))
         # Keep only checkouts of the locked commit, so a stale or colliding one cannot answer.
         matches = [c for c in candidates if _checkout_head(c) == sha]

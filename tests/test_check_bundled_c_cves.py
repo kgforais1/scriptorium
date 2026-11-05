@@ -225,8 +225,10 @@ class CheckBundledCvesTests(unittest.TestCase):
             )
             self.assertEqual(mod.locked_package(lock, "openjpeg-sys"), ("1.0.12", source))
 
-    def _checkout(self, home: Path, bucket: str, head: str, packed: str = "") -> Path:
-        path = home / "git" / "checkouts" / bucket / SHA[:7]
+    def _checkout(
+        self, home: Path, bucket: str, head: str, packed: str = "", short: str = SHA[:7]
+    ) -> Path:
+        path = home / "git" / "checkouts" / bucket / short
         (path / ".git").mkdir(parents=True)
         (path / ".git" / "HEAD").write_text(head + "\n", encoding="utf-8")
         if packed:
@@ -257,6 +259,12 @@ class CheckBundledCvesTests(unittest.TestCase):
             with self.assertRaises(mod.CheckError) as ctx:
                 mod.find_crate_source(Path(d), "c", "1", source)
             self.assertIn("other commits", str(ctx.exception))
+
+    def test_git_checkout_with_longer_short_id(self) -> None:
+        source = f"git+https://github.com/x/fork?rev={SHA}#{SHA}"
+        with tempfile.TemporaryDirectory() as d:
+            want = self._checkout(Path(d), "fork-1", SHA, short=SHA[:9])
+            self.assertEqual(mod.find_crate_source(Path(d), "c", "1", source), want)
 
     def test_git_repo_name_is_glob_escaped(self) -> None:
         source = f"git+https://github.com/x/a[1]?rev={SHA}#{SHA}"
