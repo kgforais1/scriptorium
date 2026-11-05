@@ -279,14 +279,14 @@ Files: `tests/test_tauri_csp.py` (new), `plans/2026-11-02-m1-followups.md`,
 
 Steps:
 
-- [ ] Do not add Rust tests for A10, A11, or A12. The findings table is the confirmation.
-- [ ] Split the follow-ups hardening bullet into three:
+- [x] Do not add Rust tests for A10, A11, or A12. The findings table is the confirmation.
+- [x] Split the follow-ups hardening bullet into three:
       - A10–A12 have the tests named above. Tick it.
       - A static test locks the production CSP and the empty asset scope. Tick it when
         the pytest is in.
       - A release build still has to be opened by hand (manual script section 8, and
         the Windows WebView2 bullet). Leave that unchecked.
-- [ ] Add `tests/test_tauri_csp.py`. Stdlib `json` and `pathlib` only. Read
+- [x] Add `tests/test_tauri_csp.py`. Stdlib `json` and `pathlib` only. Read
       `src-tauri/tauri.conf.json` and `src-tauri/capabilities/default.json`. Assert all
       of the following, and fail with the field name when one drifts:
       - `app.security.csp` is an object. It is not `null` and not a string.
@@ -304,17 +304,17 @@ Steps:
       - `app.security.assetProtocol.enable` is true and `scope` is `[]`.
       - `capabilities/default.json` `permissions` is exactly `core:default` and
         `dialog:allow-open`.
-- [ ] `CHANGELOG.dev.md` `## [Unreleased]`: A10–A12 were already covered; a pytest now
+- [x] `CHANGELOG.dev.md` `## [Unreleased]`: A10–A12 were already covered; a pytest now
       locks the CSP object. The release-build console check is still manual.
 
 Verification:
 
-- [ ] From the repo root, with the project venv if one exists:
+- [x] From the repo root, with the project venv if one exists:
       `python -m pytest tests/test_tauri_csp.py -q`
-- [ ] Temporarily set `csp` to `null` in a throwaway edit, confirm the test fails, and
+- [x] Temporarily set `csp` to `null` in a throwaway edit, confirm the test fails, and
       restore the file before committing. Do not leave that edit in the diff.
-- [ ] `ruff check tests/test_tauri_csp.py` and `ruff format --check tests/test_tauri_csp.py`.
-- [ ] `basedpyright` (same as the `Type check (Python)` job; `pyrightconfig.json`
+- [x] `ruff check tests/test_tauri_csp.py` and `ruff format --check tests/test_tauri_csp.py`.
+- [x] `basedpyright` (same as the `Type check (Python)` job; `pyrightconfig.json`
       `include` already covers `tests/`, so the new file is in that run).
 
 ### Chunk 3: Record the asset-protocol verdict
