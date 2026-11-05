@@ -1,13 +1,14 @@
 # Scriptorium backlog
 
-Last reviewed: 2026-11-02
+Last reviewed: 2026-11-05
 
 Agents: start at **Next Up** (3–5 pointer lines). Detail lives in linked plans, not here.
 Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
-- [M1 follow-ups](plans/2026-11-02-m1-followups.md) — the exhaustive manual pass (main flows passed 2026-11-02), engine gate, A10–A13, CI `cargo build`
+- [M1 hardening](plans/2026-11-05-m1-hardening.md) — CI embed build (LC-M2), A10–A12 confirmation and static CSP test, asset-protocol verdict, `pageLabel` cap, trim `jsonschema` HTTP stack
+- [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default, `rust-cross` ruleset
 - [Drop the openjpeg-sys patch](#unplanned--small) — when an `openjpeg-sys` release bundles OpenJPEG 2.5.4
 - [M0.5 harness follow-ups](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri--remaining-quality) — Rust coverage, Python `fail_under`, Dependabot, S9–S11
 
@@ -16,7 +17,8 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 | Plan | Status | Note |
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
-| [M1 follow-ups](plans/2026-11-02-m1-followups.md) | in-progress | Open M1 checks after 0.2.0 |
+| [M1 follow-ups](plans/2026-11-02-m1-followups.md) | in-progress | Manual and platform remainder after 0.2.0 |
+| [M1 hardening](plans/2026-11-05-m1-hardening.md) | draft | Agent-doable hardening (CI, CSP pytest, label cap, jsonschema) |
 
 ## Unplanned / small
 
