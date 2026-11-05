@@ -11,7 +11,7 @@ Internal / developer-facing changes that do not belong in the public
 ### Changed
 - `jsonschema` is built with `default-features = false` (no remote schema fetch stack); `ci/bundled-c.toml`, `THIRD_PARTY_NOTICES.md`, and the generated licence file no longer list AWS-LC.
 - `PAGE_LABEL_MAX_LEN` (256 Unicode scalars) is enforced in `PageEntry::validate`, both book-format schemas, and the fixture generator; `tests_v2.rs` and `tests/test_generate_fixture_book.py` lock the constant to schema `pageLabel.maxLength`.
-- The `Rust (src-tauri)` CI job runs `pnpm build`, then `cargo build --features tauri/custom-protocol`, so the production frontend must embed (a Tauri 2.12 debug build without that feature does not require `../dist`).
+- The `Rust (src-tauri)` CI job runs `pnpm build`, then `cargo build --locked --features tauri/custom-protocol`, so the production frontend must embed from the committed lockfile (a Tauri 2.12 debug build without that feature does not require `../dist`).
 - macOS bundles are ad-hoc signed (`bundle.macOS.signingIdentity: "-"`), so `codesign --verify --deep --strict` passes and Gatekeeper offers **Open Anyway** instead of reporting the app as damaged. The v0.2.0 DMG was rebuilt this way.
 - `pnpm-workspace.yaml` overrides `minimatch` to 11 (Dependabot #23).
 - `openjpeg-sys` is patched (`[patch.crates-io]`) to a fork commit bundling OpenJPEG 2.5.4. The CVE-2025-54874 exception is removed. `check_bundled_c_cves.py` reads git-patched crates from `$CARGO_HOME/git/checkouts`, accepting only a checkout whose `.git/HEAD` is the locked commit.

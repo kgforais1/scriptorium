@@ -245,7 +245,7 @@ jobs:
         run: pnpm build
 
       - name: cargo build (embed frontendDist; LC-M2)
-        run: cargo build --features tauri/custom-protocol
+        run: cargo build --locked --features tauri/custom-protocol
 
   rust-cross:
     # Windows and macOS run the crate's tests too. Windows catches path and case-folding
