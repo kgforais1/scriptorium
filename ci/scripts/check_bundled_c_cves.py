@@ -26,7 +26,9 @@ Inputs:
   --today YYYY-MM-DD override "today" for tests
 Environment:
   CARGO_HOME         cargo home (default: ~/.cargo); crates are read from
-                     registry/src/*/<crate>-<version> after `cargo fetch`
+                     registry/src/*/<crate>-<version>, or for a git [patch]
+                     from git/checkouts/<repo>-*/<short sha>* whose HEAD is
+                     the locked commit, after `cargo fetch`
   NVD_API_KEY        optional; raises the NVD rate limit (sleep drops to ~1s)
 
 Outputs:
@@ -42,6 +44,7 @@ Requirements:
 from __future__ import annotations
 
 import argparse
+import glob
 import http.client
 import json
 import os
@@ -214,25 +217,68 @@ def load_exceptions(path: Path, library_names: set[str]) -> list[ExceptionRow]:
     return out
 
 
-def locked_version(lockfile: Path, crate: str) -> str:
-    """Return the version of `crate` in Cargo.lock; fail if absent or ambiguous."""
+def locked_package(lockfile: Path, crate: str) -> tuple[str, str]:
+    """Return (version, source) of `crate` in Cargo.lock; fail if absent or ambiguous."""
     packages = load_toml(lockfile).get("package", [])
-    versions = sorted({p["version"] for p in packages if p.get("name") == crate})
-    if not versions:
+    rows = sorted({(p["version"], p.get("source", "")) for p in packages if p.get("name") == crate})
+    if not rows:
         raise CheckError(f"{lockfile}: crate {crate} is not locked (remove it from the manifest?)")
-    if len(versions) > 1:
+    if len(rows) > 1:
         raise CheckError(
-            f"{lockfile}: {crate} is locked at several versions {versions}; the check needs one"
+            f"{lockfile}: {crate} is locked at several versions {rows}; the check needs one"
         )
-    return versions[0]
+    return rows[0]
 
 
-def find_crate_source(cargo_home: Path, crate: str, version: str) -> Path:
-    """Find registry/src/*/<crate>-<version> or tell the user to run cargo fetch."""
-    matches = sorted((cargo_home / "registry" / "src").glob(f"*/{crate}-{version}"))
+def locked_version(lockfile: Path, crate: str) -> str:
+    """Return the version of `crate` in Cargo.lock."""
+    return locked_package(lockfile, crate)[0]
+
+
+def _checkout_head(checkout: Path) -> str:
+    """Return the commit a cargo git checkout is at, following a `ref:` HEAD, or "".
+
+    Cargo writes a real .git directory; a gitfile (worktree) checkout reads as "" and fails closed.
+    """
+    git_dir = checkout / ".git"
+    try:
+        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+        if head.startswith("ref: "):
+            ref = head.removeprefix("ref: ")
+            loose = git_dir / ref
+            if loose.is_file():
+                return loose.read_text(encoding="utf-8").strip()
+            packed = (git_dir / "packed-refs").read_text(encoding="utf-8").splitlines()
+            return next((ln.split()[0] for ln in packed if ln.endswith(f" {ref}")), "")
+        return head
+    except (OSError, ValueError):  # ValueError covers a non-UTF-8 HEAD or packed-refs
+        return ""
+
+
+def find_crate_source(cargo_home: Path, crate: str, version: str, source: str = "") -> Path:
+    """Find the crate's source after `cargo fetch`: a git checkout or registry/src/*/<crate>-<version>."""
+    if source.startswith("git+"):
+        # A [patch] git source. Cargo checks it out under git/checkouts/<repo>-<hash>/<short id>,
+        # where <repo> is the URL's last path segment and the short id starts with the commit's
+        # first 7 hex digits (git lengthens it when 7 are ambiguous). The HEAD check pins the commit.
+        url, _, sha = source.removeprefix("git+").partition("#")
+        repo = url.partition("?")[0].rstrip("/").rpartition("/")[2].removesuffix(".git")
+        pattern = f"{glob.escape(repo)}-*/{glob.escape(sha[:7])}*"
+        candidates = sorted((cargo_home / "git" / "checkouts").glob(pattern))
+        # Keep only checkouts of the locked commit, so a stale or colliding one cannot answer.
+        matches = [c for c in candidates if _checkout_head(c) == sha]
+        if candidates and not matches:
+            raise CheckError(
+                f"{crate}: no checkout of {sha} under {cargo_home}; {len(candidates)} checkout(s) "
+                "are at other commits. Remove them and run `cargo fetch` again"
+            )
+        if len(matches) > 1:
+            raise CheckError(f"{crate}: several checkouts of {sha} under {cargo_home}: {matches}")
+    else:
+        matches = sorted((cargo_home / "registry" / "src").glob(f"*/{crate}-{version}"))
     if not matches:
         raise CheckError(
-            f"source for {crate} {version} not found under {cargo_home}/registry/src; "
+            f"source for {crate} {version} not found under {cargo_home}; "
             "run `cargo fetch --manifest-path src-tauri/Cargo.toml` first"
         )
     return matches[0]
@@ -508,8 +554,8 @@ def run(
         exceptions = load_exceptions(exceptions_path, {lib.name for lib in libs})
         findings: list[Finding] = []
         for lib in libs:
-            crate_version = locked_version(lockfile, lib.crate)
-            crate_dir = find_crate_source(cargo_home, lib.crate, crate_version)
+            crate_version, source = locked_package(lockfile, lib.crate)
+            crate_dir = find_crate_source(cargo_home, lib.crate, crate_version, source)
             version = extract_c_version(lib, crate_dir)
             print(f"[bundled-c] {lib.name} {version} (via {lib.crate} {crate_version})")
             check_canary(lib, api_key, urlopen, sleep)

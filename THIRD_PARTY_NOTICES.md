@@ -7,12 +7,12 @@ The licences of the Rust crates and npm packages that Scriptorium depends on are
 ## OpenJPEG
 
 - Upstream: <https://www.openjpeg.org/> (<https://github.com/uclouvain/openjpeg>)
-- Bundled version: 2.5.3 (from `config/opj_config.h` and `opj_config_private.h` in the crate)
-- Bundled by: the `openjpeg-sys` crate 1.0.12, pulled in by `jpeg2k` 0.10.1 with its `openjpeg-sys` feature
+- Bundled version: 2.5.4 (from `config/opj_config.h` and `opj_config_private.h` in the crate)
+- Bundled by: the `openjpeg-sys` crate 1.0.12, patched to a [fork commit](https://github.com/kgrizz-git/openjpeg-sys/commit/1e04bc79c120ca63b2fcc53a0f20166316234edd) that bundles OpenJPEG 2.5.4 (`[patch.crates-io]` in `src-tauri/Cargo.toml`), pulled in by `jpeg2k` 0.10.1 with its `openjpeg-sys` feature
 - Used for: decoding JPEG 2000 scans
 - Licence: BSD-2-Clause
 
-The crate's generated bindings in `src/ffi.rs` still say 2.5.2. The bundled C source and its config headers say 2.5.3, so 2.5.3 is the version that is compiled.
+The fork changes only the vendored C sources, the two config headers, and the version constant in `src/ffi.rs`. The bindings are otherwise those of 1.0.12, because OpenJPEG 2.5.4 has no API changes.
 
 Licence text, verbatim from the crate's `vendor/LICENSE` (trailing whitespace removed):
 
@@ -426,7 +426,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 I searched the web for published advisories against each bundled version on 2026-11-01. The NVD page for CVE-2025-54874 did not render in the fetch tool, so its details come from distribution and CVE-aggregator pages.
 
-- OpenJPEG 2.5.3 has a known, fixed-upstream issue. CVE-2025-54874 is an out-of-bounds heap write in `opj_jp2_read_header`. It happens when the input stream is too short and the image pointer is not initialised. It affects 2.5.3 and earlier, and OpenJPEG 2.5.4 (September 2025) fixes it. Scriptorium bundles 2.5.3, and the `jpeg2k` crate does call `opj_jp2_read_header`, the affected function. The write needs a caller whose `*p_image` is uninitialised. `jpeg2k::codec::read_header` passes a null-initialised image, and every failure path in 2.5.3's `opj_j2k_read_header` leaves it null, so the write is not reached through `jpeg2k`. This comes from reading the C source, not from running a truncated file. Upstream fixed it in commit f809b80c (`if (ret && p_image && *p_image)`). The newest `openjpeg-sys` on crates.io is 1.0.12, which still bundles 2.5.3, so the app cannot upgrade by a version bump. The upgrade is tracked in `to_do.md`.
+- OpenJPEG 2.5.4 has no known advisory. CVE-2025-54874, an out-of-bounds heap write in `opj_jp2_read_header`, affects 2.5.3 and earlier and is fixed in 2.5.4 (upstream commit f809b80c). The newest `openjpeg-sys` on crates.io, 1.0.12, still bundles 2.5.3, so `src-tauri/Cargo.toml` patches it to a fork commit with 2.5.4 (2026-11-03). The patch goes once an `openjpeg-sys` release bundles 2.5.4.
 - Little CMS 2.19.1 has no known advisory. CVE-2026-41254 and CVE-2026-42798 are integer overflows fixed in 2.19, so 2.19.1 is not affected.
 - AWS-LC 5.11.0 (`aws-lc-sys` 0.46.0) has no advisory that names it. The March 2026 RustSec advisories RUSTSEC-2026-0046, 0047 and 0048 are fixed in `aws-lc-sys` 0.38.0 and 0.39.0. RUSTSEC-2026-0044 and 0045 were not opened, so I did not confirm their fixed versions.
 

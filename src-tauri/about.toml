@@ -15,3 +15,14 @@ accepted = [
 ]
 ignore-dev-dependencies = true
 ignore-build-dependencies = true
+
+# The patched openjpeg-sys is a git checkout with the whole OpenJPEG tree, so a scan
+# finds licence headers in test and wrapper files the crate never compiles. Take the
+# licence from vendor/LICENSE only, as the crates.io package does.
+[openjpeg-sys.clarify]
+license = "BSD-2-Clause"
+
+[[openjpeg-sys.clarify.files]]
+path = "vendor/LICENSE"
+license = "BSD-2-Clause"
+checksum = "a6af136f3e15038a666b61f376612a07d9a4e48cb7c01adbf3e33b3f14ab49b6"

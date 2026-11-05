@@ -29,6 +29,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 CVE = "CVE-2025-54874"
+SHA = "1e04bc79c120ca63b2fcc53a0f20166316234edd"
 
 
 def _load_module() -> ModuleType:
@@ -198,6 +199,79 @@ class CheckBundledCvesTests(unittest.TestCase):
             t = _make_tree(Path(d))
             lib = mod.load_manifest(t["manifest"])[0]
             self.assertEqual(mod.extract_c_version(lib, t["src"]), "2.5.3")
+
+    def test_git_patched_crate_is_read_from_its_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            home = Path(d)
+            sha = "1e04bc79c120ca63b2fcc53a0f20166316234edd"
+            checkout = home / "git" / "checkouts" / "ojs-fork-9eff85236be6bfae" / sha[:7]
+            (checkout / ".git").mkdir(parents=True)
+            # Cargo leaves HEAD on a branch ref, so the commit is one hop away.
+            (checkout / ".git" / "refs" / "heads").mkdir(parents=True)
+            (checkout / ".git" / "HEAD").write_text("ref: refs/heads/master\n", encoding="utf-8")
+            (checkout / ".git" / "refs" / "heads" / "master").write_text(
+                sha + "\n", encoding="utf-8"
+            )
+            stale = home / "git" / "checkouts" / "ojs-fork-0000000000000000" / sha[:7]
+            (stale / ".git").mkdir(parents=True)
+            (stale / ".git" / "HEAD").write_text("1e04bc7" + "0" * 33 + "\n", encoding="utf-8")
+            source = f"git+https://github.com/x/ojs-fork.git?rev={sha}#{sha}"
+            found = mod.find_crate_source(home, "openjpeg-sys", "1.0.12", source)
+            self.assertEqual(found, checkout)
+            lock = home / "Cargo.lock"
+            lock.write_text(
+                f'[[package]]\nname = "openjpeg-sys"\nversion = "1.0.12"\nsource = "{source}"\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(mod.locked_package(lock, "openjpeg-sys"), ("1.0.12", source))
+
+    def _checkout(
+        self, home: Path, bucket: str, head: str, packed: str = "", short: str = SHA[:7]
+    ) -> Path:
+        path = home / "git" / "checkouts" / bucket / short
+        (path / ".git").mkdir(parents=True)
+        (path / ".git" / "HEAD").write_text(head + "\n", encoding="utf-8")
+        if packed:
+            (path / ".git" / "packed-refs").write_text(packed, encoding="utf-8")
+        return path
+
+    def test_git_checkout_head_forms(self) -> None:
+        source = f"git+https://github.com/x/fork?rev={SHA}#{SHA}"
+        packed = f"# pack-refs with: peeled\n{'f' * 40} refs/tags/v1\n^{'e' * 40}\n{SHA} refs/heads/master\n"
+        for name, head, refs in (
+            ("detached", SHA, ""),
+            ("packed", "ref: refs/heads/master", packed),
+        ):
+            with self.subTest(name), tempfile.TemporaryDirectory() as d:
+                want = self._checkout(Path(d), "fork-1", head, refs)
+                self.assertEqual(mod.find_crate_source(Path(d), "c", "1", source), want)
+
+    def test_git_checkout_errors(self) -> None:
+        source = f"git+https://github.com/x/fork?rev={SHA}#{SHA}"
+        with tempfile.TemporaryDirectory() as d:
+            self._checkout(Path(d), "fork-1", SHA)
+            self._checkout(Path(d), "fork-2", SHA)
+            with self.assertRaises(mod.CheckError) as ctx:
+                mod.find_crate_source(Path(d), "c", "1", source)
+            self.assertIn("several checkouts", str(ctx.exception))
+        with tempfile.TemporaryDirectory() as d:
+            self._checkout(Path(d), "fork-1", "0" * 40)
+            with self.assertRaises(mod.CheckError) as ctx:
+                mod.find_crate_source(Path(d), "c", "1", source)
+            self.assertIn("other commits", str(ctx.exception))
+
+    def test_git_checkout_with_longer_short_id(self) -> None:
+        source = f"git+https://github.com/x/fork?rev={SHA}#{SHA}"
+        with tempfile.TemporaryDirectory() as d:
+            want = self._checkout(Path(d), "fork-1", SHA, short=SHA[:9])
+            self.assertEqual(mod.find_crate_source(Path(d), "c", "1", source), want)
+
+    def test_git_repo_name_is_glob_escaped(self) -> None:
+        source = f"git+https://github.com/x/a[1]?rev={SHA}#{SHA}"
+        with tempfile.TemporaryDirectory() as d:
+            self._checkout(Path(d), "a1-decoy", SHA)
+            want = self._checkout(Path(d), "a[1]-real", SHA)
+            self.assertEqual(mod.find_crate_source(Path(d), "c", "1", source), want)
 
     def test_extract_fails_when_regex_misses(self) -> None:
         with tempfile.TemporaryDirectory() as d:

@@ -8,7 +8,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
 - [M1 follow-ups](plans/2026-11-02-m1-followups.md) — the exhaustive manual pass (main flows passed 2026-11-02), engine gate, A10–A13, CI `cargo build`
-- [Upgrade bundled OpenJPEG](#unplanned--small) — the CVE-2025-54874 exception expires 2026-11-29; the weekly check fails after that
+- [Drop the openjpeg-sys patch](#unplanned--small) — when an `openjpeg-sys` release bundles OpenJPEG 2.5.4
 - [M0.5 harness follow-ups](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri--remaining-quality) — Rust coverage, Python `fail_under`, Dependabot, S9–S11
 
 ## Active plans
@@ -21,7 +21,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 ## Unplanned / small
 
 - **Trim jsonschema's network stack** — `jsonschema` 0.51 with default features pulls `reqwest`, `rustls` and AWS-LC (C) into the app only to resolve remote `$ref`s, which the embedded book schemas never use. Try `default-features = false` and drop AWS-LC from `THIRD_PARTY_NOTICES.md` if it goes.
-- **Upgrade bundled OpenJPEG to 2.5.4+** — `openjpeg-sys` 1.0.12 bundles 2.5.3, which has CVE-2025-54874 (heap write on a truncated JP2 via `opj_read_header`). Watch for a newer `openjpeg-sys`, or use a `[patch.crates-io]` with a 2.5.4 vendor tree. Until then, `ci/bundled-c-exceptions.toml` excepts the CVE until 2026-11-29 so the weekly check fails again if nothing moves; extend it only with a re-check. Reading the C source shows the write is not reachable through `jpeg2k`: the write needs an uninitialised `*p_image` and `jpeg2k` passes a null-initialised one (every failure path in 2.5.3's `opj_j2k_read_header` leaves it null). The upstream fix is commit f809b80c (`if (ret && p_image && *p_image)`). Rejecting short JP2 input is then optional hardening. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+- **Drop the openjpeg-sys patch** — `src-tauri/Cargo.toml` patches `openjpeg-sys` 1.0.12 to a fork commit that bundles OpenJPEG 2.5.4 (fixes CVE-2025-54874). Upstream PR [Enet4/openjpeg-sys#5](https://github.com/Enet4/openjpeg-sys/pull/5) asks for a release with 2.5.4. When one ships, bump the crate, delete the `[patch.crates-io]` block, and update `THIRD_PARTY_NOTICES.md`.
 - **Reader notes follow-up** — Reader notes: clear a page's failure note when it later loads (after a context restore), and the engine note after a successful resize or scene update; and cap concurrent texture rebuilds in refresh() — CodeRabbit #67.
 - **Cap decoded scan size** — Cap decoded scan size (createImageBitmap resize) so huge scans don't spike memory — CodeRabbit #68.
 - **Sonar backlog (22 local issues)** — all in template hook and CI scripts (complexity, regexes, duplicated literals). See
