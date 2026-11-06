@@ -3,13 +3,13 @@
 Last reviewed: 2026-11-05
 Date: 2026-11-05
 Author: planning pass (branch `chore/m1-hardening`)
-Status: in-progress
+Status: complete
 Linked issue/PR: n/a
-Follows: [M1 follow-ups](2026-11-02-m1-followups.md)
+Follows: [M1 follow-ups](../../2026-11-02-m1-followups.md)
 
 Chunk 0 registered this file in `to_do.md` (**Next Up** and **Active plans**) and in
-[`plans/README.md`](README.md). Do not rewrite checkboxes in
-[`archive/completed/2026-08-23-m1-scan-viewer.md`](archive/completed/2026-08-23-m1-scan-viewer.md);
+[`plans/README.md`](../../README.md). Do not rewrite checkboxes in
+[`archive/completed/2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md);
 that file stays historical.
 
 ## Goal
@@ -22,7 +22,7 @@ Maintainers get a CI job that fails when `frontendDist` or the app icons are wro
 
 ## Out of scope
 
-- The manual script in [`docs/manual-test-m1.md`](../docs/manual-test-m1.md), including
+- The manual script in [`docs/manual-test-m1.md`](../../../docs/manual-test-m1.md), including
   the release-build CSP console check (section 8), the Windows WebView2 run, and the
   Dulac A9 measurements. Those stay open on the follow-ups plan.
 - ADR-0001's open platform items, making `rust-cross` required, and the layout-default
@@ -266,7 +266,7 @@ Verification:
       `pnpm build` and the same command succeeds. Do not commit `dist/`.
 - [x] `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test` in
       `src-tauri` still pass without the feature.
-- [x] PR note for the workflow change, per [`policies/github-actions-usage.md`](../policies/github-actions-usage.md):
+- [x] PR note for the workflow change, per [`policies/github-actions-usage.md`](../../../policies/github-actions-usage.md):
       same `pull_request` and `push` to `main` triggers; one extra Linux leg on the
       existing `rust` job; about 5–12 minutes on a warm cargo cache (a feature-flipped
       Tauri compile plus `pnpm build`); no new artifact; public-repo minutes are not
@@ -441,13 +441,13 @@ Verification:
 
 ## Verification
 
-- [ ] Each chunk's commands above passed, and the chunk's boxes are ticked only after that.
-- [ ] Each chunk was committed only after its own `bash scripts/sonar_scan.sh` reported
+- [x] Each chunk's commands above passed, and the chunk's boxes are ticked only after that.
+- [x] Each chunk was committed only after its own `bash scripts/sonar_scan.sh` reported
       no new issues. A scan at the end of the branch does not replace the per-commit scan.
-- [ ] `CHANGELOG.md` has Unreleased notes for the label cap and the dropped HTTP stack.
+- [x] `CHANGELOG.md` has Unreleased notes for the label cap and the dropped HTTP stack.
       `CHANGELOG.dev.md` has Unreleased notes for the CI embed, the CSP pytest, and the
       `jsonschema` feature change. No `VERSION` bump.
-- [ ] Follow-ups still lists the manual script, the Windows release build, A9, and the
+- [x] Follow-ups still lists the manual script, the Windows release build, A9, and the
       ADR open items as open. This plan does not close that file.
 
 ## Open questions
@@ -466,12 +466,14 @@ should say so before chunk 4.
 | A 256-character cap rejects a hand-written label someone already depends on | low | low | The app never writes a label. The changelog says so. No formatVersion bump. |
 | Static CSP test is mistaken for webview enforcement | med | med | Chunk 2 leaves the manual release-build bullet open. |
 
+Completed in [#77](https://github.com/kgforais1/scriptorium/pull/77), merged 2026-11-06.
+
 ## Completion steps (when status = complete)
 
 When this plan is complete, follow this workflow:
 
 1. **Update plan status** to `complete`.
-2. **Move this file** to `plans/archive/completed/`. See [`README.md`](README.md).
+2. **Move this file** to `plans/archive/completed/`. See [`README.md`](../../README.md).
    In the same change, rewrite the link this plan adds in
    `plans/2026-11-02-m1-followups.md`. That file sits in `plans/`, so a same-directory
    link to `2026-11-05-m1-hardening.md` 404s once this file moves. Point it at
@@ -488,5 +490,5 @@ When this plan is complete, follow this workflow:
 6. **Update `orchestration-state.md`** if present.
 7. **Reference the completion** with the PR that landed the chunks.
 
-Use [`prompts/cleanup-completed-work.md`](../prompts/cleanup-completed-work.md) for the
+Use [`prompts/cleanup-completed-work.md`](../../../prompts/cleanup-completed-work.md) for the
 archive pass. The follow-ups plan is not finished by this one.

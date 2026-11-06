@@ -200,15 +200,13 @@ jobs:
           rustup show
           rustup component add clippy rustfmt
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # rust-cache keeps compiled dependencies but drops this crate's own build
+      # output and stale files, so each entry stays well under the old ~2.5 GB.
+      # Only main saves; PRs restore from it, which keeps PR caches off the 10 GB quota.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/cache
-            ~/.cargo/registry/index
-            ~/.cargo/git/db
-            src-tauri/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          workspaces: src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo fmt --check
         run: cargo fmt --check
@@ -247,6 +245,82 @@ jobs:
       - name: cargo build (embed frontendDist; LC-M2)
         run: cargo build --locked --features tauri/custom-protocol
 
+  rust-coverage:
+    # Report only: no floor and not a required check. Linux skips the macOS sips
+    # fixtures, so ingest coverage reads low here. continue-on-error keeps an
+    # install or tool failure from failing the run.
+    # Cost (2026-11-06): about 4 min per run, and about 190 CI runs in 30 days
+    # (149 PR, 44 push), so roughly 760 Linux minutes a month, free on a public
+    # repo. The lcov artifact is 23 KB for 14 days. Caches: registry plus the
+    # 1.7 MB binary. target/ is not cached: the first combined entry was 982 MB,
+    # of which the registry is ~110 MB, and the repo's caches were already past
+    # GitHub's 10 GB limit.
+    name: Rust coverage
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Tauri Linux system deps
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
+        with:
+          packages: >-
+            libwebkit2gtk-4.1-dev
+            libxdo-dev
+            libssl-dev
+            libayatana-appindicator3-dev
+            librsvg2-dev
+          version: "1"
+
+      - name: Install Rust toolchain
+        run: |
+          rustup show
+          rustup component add llvm-tools-preview
+
+      # Own key, registry only: the instrumented target dir is ~1 GB and is not cached.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/index
+            ~/.cargo/git/db
+          key: cargo-llvm-cov-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: cargo-llvm-cov-${{ runner.os }}-
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cargo-llvm-cov-bin
+        with:
+          path: ~/.cargo/bin/cargo-llvm-cov
+          key: cargo-llvm-cov-bin-${{ runner.os }}-0.9.1
+
+      - name: Install cargo-llvm-cov
+        if: steps.cargo-llvm-cov-bin.outputs.cache-hit != 'true'
+        run: cargo install cargo-llvm-cov --locked --version 0.9.1
+
+      - name: cargo llvm-cov (summary)
+        # Explicit bash adds -o pipefail, so a failing test still fails through tee.
+        shell: bash
+        run: |
+          {
+            echo '### Rust coverage (report only)'
+            echo '```text'
+            cargo llvm-cov --locked
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: lcov report
+        run: cargo llvm-cov report --lcov --output-path lcov.info
+
+      - name: Upload lcov artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-lcov
+          path: src-tauri/lcov.info
+          retention-days: 14
+
   rust-cross:
     # Windows and macOS run the crate's tests too. Windows catches path and case-folding
     # behaviour; macOS runs the sips-based ingest fixtures (CMYK with a profile, JPEG 2000)
@@ -268,15 +342,13 @@ jobs:
           rustup show
           rustup component add clippy
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # rust-cache keeps compiled dependencies but drops this crate's own build
+      # output and stale files, so each entry stays well under the old ~2.5 GB.
+      # Only main saves; PRs restore from it, which keeps PR caches off the 10 GB quota.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/cache
-            ~/.cargo/registry/index
-            ~/.cargo/git/db
-            src-tauri/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          workspaces: src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo clippy --all-targets -- -D warnings
         run: cargo clippy --locked --all-targets -- -D warnings

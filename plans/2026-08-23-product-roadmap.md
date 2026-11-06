@@ -48,7 +48,7 @@ Lamplit ships in M1; Gallery Daylight (mockup B) follows in M7. Detail:
 **Completed plan:** [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md)
 
 - [x] CI fast lane + Semgrep + pre-push basedpyright
-- [x] Tauri shell + app-data library root + book schema v1 + JSON Schema
+- [x] Tauri shell + book schema v1 + JSON Schema. M0 decided the app-data library root; M1 Phase 2 delivered it (`app_data_dir()/books`)
 - [x] Rust CI: fmt / clippy -D warnings / test / check; commit `Cargo.lock`
 - [x] `.envrc.example`, agent tooling contract
 
@@ -61,17 +61,17 @@ Lamplit ships in M1; Gallery Daylight (mockup B) follows in M7. Detail:
 
 ### M0.5 — Harness follow-ups (after Tauri / remaining quality)
 
-Promote when starting. Tracked in [`to_do.md`](../to_do.md).
+Closed by [`2026-11-05-m05-harness-followups.md`](archive/completed/2026-11-05-m05-harness-followups.md).
 
-- [ ] Extend CI + pre-push for **TypeScript** lint (tsc already in M0). CI and pre-commit are done (M1 Phase 2 chunk 0: ESLint, `pnpm typecheck`); a pre-push stage is not added yet
+- [x] TypeScript lint and typecheck in CI and hooks (M1 Phase 2 chunk 0). The hooks run at pre-commit, not pre-push, which catches errors earlier, so no pre-push stage is added
 - [x] Frontend Vitest coverage gates (80% lines on `src/lib`, M1 Phase 2 chunk 0). Raising Python `fail_under` stays open below
-- [ ] Rust coverage (`cargo llvm-cov` / tarpaulin) when useful
-- [ ] Tighten Python harness coverage gate when in-process tests exist
+- [x] Rust coverage: `Rust coverage` CI job, `cargo llvm-cov`, report only. Set a floor once a few runs agree
+- [x] Python coverage gate: `fail_under = 46` (CI measured 48.2%) (**LC-L3**). Raise it as in-process tests land
 - [x] CodeQL via GitHub default setup (ruleset code scanning; not a workflow file)
-- [ ] Dependabot (required before public)
-- [ ] GitHub ruleset: required CI + Semgrep checks
-- [ ] Note: `cargo fmt` / `clippy` / `test` moved **into M0** (not deferred)
-- [ ] **From M0 senior review:** tick archived M0 plan evidence / rephrase roadmap “app-data library root” as decision not delivery (**S9**); refresh stale pyproject/README/annotations wording (**S10**); `tsc -b` + ESLint/Prettier for TS (**S11**); raise pytest `fail_under` (**LC-L3**) — see M1 plan follow-ups table
+- [x] Dependabot: `.github/dependabot.yml` covers pip, npm, github-actions and cargo
+- [x] GitHub ruleset: nine required checks, including Semgrep. Adding `Lint & test (TypeScript)`, `Third-party licences` and the two `rust-cross` legs is proposed in the M0.5 plan
+- [x] Note: `cargo fmt` / `clippy` / `test` moved **into M0** (not deferred)
+- [x] **From M0 senior review:** S9: the archived M0 plan has a Completion evidence section, and the library-root line above is reworded. S10: already fixed (`pyproject.toml:4`, `docs/development.md:11`, `docs/book-format.md:22`); slug lockstep tests cover the triplicated regex. S11: ESLint is in CI and pre-commit, and `pnpm typecheck` checks both TS projects. `tsc -b` is declined because it emits a `vite.config.js` that shadows the `.ts` config. Prettier is declined because it would reformat most of `src/` for no rule ESLint lacks
 - [x] Add `cargo build` to CI Rust job (**LC-M2**) before relying on M1 Tauri commands
 
 ### M1 — Scan viewer (MVP core)

@@ -223,3 +223,6 @@ temp/
 # The frontend helper folder `src/lib/` is source, not a Python build dir.
 !src/lib/
 *.tsbuildinfo
+
+# cargo llvm-cov output
+lcov.info

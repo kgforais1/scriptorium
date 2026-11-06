@@ -7,10 +7,9 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
-- [M1 hardening](plans/2026-11-05-m1-hardening.md) — CI embed build (LC-M2), A10–A12 confirmation and static CSP test, asset-protocol verdict, `pageLabel` cap, trim `jsonschema` HTTP stack
 - [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default, `rust-cross` ruleset
 - [Drop the openjpeg-sys patch](#unplanned--small) — when an `openjpeg-sys` release bundles OpenJPEG 2.5.4
-- [M0.5 harness follow-ups](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri--remaining-quality) — Rust coverage, Python `fail_under`, Dependabot, S9–S11
+- [Reader notes follow-up](#unplanned--small) — clear stale failure notes after a restore or resize; cap concurrent texture rebuilds (CodeRabbit #67)
 
 ## Active plans
 
@@ -18,7 +17,6 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
 | [M1 follow-ups](plans/2026-11-02-m1-followups.md) | in-progress | Manual and platform remainder after 0.2.0 |
-| [M1 hardening](plans/2026-11-05-m1-hardening.md) | in-progress | Agent-doable hardening (CI, CSP pytest, label cap, jsonschema) |
 
 ## Unplanned / small
 
@@ -37,9 +35,6 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to-plans.md) or move to
 [`plans/deferred/`](plans/deferred/) when a real plan exists.
 
-- **M0.5 harness follow-ups** — Rust coverage, Dependabot;
-  M0 senior-review docs/harness nits (**S9**–**S11**); raise pytest `fail_under` (**LC-L3**) →
-  [roadmap M0.5](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri--remaining-quality)
 - **Second skin (Gallery Daylight, mockup B) + skin picker** — M7 →
   [`design/DESIGN.md`](design/DESIGN.md#skins)
 - **Later product (M1.5–M8)** — PDF import, OCR and curator-supplied text (M2), bookshelf

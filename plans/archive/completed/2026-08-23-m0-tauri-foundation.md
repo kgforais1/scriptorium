@@ -147,3 +147,37 @@ book-format on EXIF/XMP: M1 copies bytes as-is; stripping/policy deferred but do
 - Spike: [`2026-08-23-pre-m1-flipbook-spike.md`](2026-08-23-pre-m1-flipbook-spike.md)
 - Next product: [`2026-08-23-m1-scan-viewer.md`](2026-08-23-m1-scan-viewer.md)
 - Superseded draft: [`../superseded/2026-08-23-mvp-scaffold.md`](../superseded/2026-08-23-mvp-scaffold.md)
+
+## Completion evidence (2026-11-05)
+
+Added after archive for S9; the checklist above is left as written. The table records the
+evidence available today. Items shipped in [#8](https://github.com/kgforais1/scriptorium/pull/8)
+unless the row cites a later commit. Two verification rows have no evidence and are marked
+unverified, so this does not claim every check passed.
+
+| Item | Evidence |
+|---|---|
+| `.envrc.example` + `direnv allow` | `.envrc.example`; `docs/development.md` (README content moved there) |
+| Agent-tooling contract in `AGENTS.md` | `AGENTS.md` "Agent tooling policy"; `policies/agent-tooling-contract.md` |
+| `.agent-state/` gitignored | `.gitignore` |
+| Tauri prereqs | `scripts/validate-env.sh` "Tauri Prerequisites"; `docs/development.md` |
+| Tauri 2 + Vite + React + TS at root | `7bf4a00`; `src-tauri/`, `src/`, `package.json` |
+| `pnpm tauri dev` shows a window | The app opened in the 2026-11-02 manual run (not from a fresh clone) |
+| Pin Node | `package.json` `engines`, `.nvmrc` |
+| `Cargo.lock` tracked | `src-tauri/Cargo.lock`; the `.gitignore` entry was dropped |
+| `docs/book-format.md` with decisions | `docs/book-format.md` |
+| `docs/book-format.schema.json` | `5051494`; split into `book-format.v1` and `v2.schema.json` by `2fb1809` |
+| Rust types matching the schema | `src-tauri/src/book_format/` |
+| Schema bind test | `src-tauri/src/book_format/` tests (`5051494`, later `tests_v2.rs`) |
+| Fixture generator + README | `scripts/generate-fixture-book.py` (`8d949a0`); `tests/fixtures/README.md` |
+| Rust CI job | `ci.yml` `Rust (src-tauri)`; required in the branch ruleset |
+| CI `tsc --noEmit` | `ci.yml` `Type check (TypeScript)` (`pnpm typecheck`) |
+| Advisory audits | Now a required gate: `ci.yml` `Dependency audit` |
+| markdownlint / shellcheck paths | `ci.yml` `lint` job |
+| `docs/ci-and-hooks.md` updated | `docs/ci-and-hooks.md` required-checks list |
+| Fresh clone → window | Unverified. No fresh-clone run was recorded |
+| `git check-ignore` passes on `Cargo.lock` | `src-tauri/Cargo.lock` is tracked |
+| fmt/clippy/test/check pass | `ci.yml` `rust` job, green on `main` |
+| JSON Schema validates a fixture | `tests/test_generate_fixture_book.py`; Rust round-trip test |
+| `check-bootstrap.sh` findings | Unverified. Findings were not recorded; nothing open depends on them |
+| `create-tauri-app` version | `create-tauri-app@4.6.2`, template `react-ts` (`docs/development.md`) |

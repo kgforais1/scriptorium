@@ -24,10 +24,11 @@ Do **not** delete archived plans. Move them; do not rewrite history in place.
 |---|---|
 | [`2026-08-23-product-roadmap.md`](2026-08-23-product-roadmap.md) | Product roadmap M0–M8 (stays active) |
 | [`2026-11-02-m1-followups.md`](2026-11-02-m1-followups.md) | Manual and platform M1 checks after the 0.2.0 release |
-| [`2026-11-05-m1-hardening.md`](2026-11-05-m1-hardening.md) | CI embed build, validation locks, asset-protocol verdict, jsonschema trim |
 
 Completed: [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md),
 [`archive/completed/2026-08-23-m1-scan-viewer.md`](archive/completed/2026-08-23-m1-scan-viewer.md),
+[`archive/completed/2026-11-05-m1-hardening.md`](archive/completed/2026-11-05-m1-hardening.md),
+[`archive/completed/2026-11-05-m05-harness-followups.md`](archive/completed/2026-11-05-m05-harness-followups.md),
 [`archive/completed/2026-08-23-pre-m1-flipbook-spike.md`](archive/completed/2026-08-23-pre-m1-flipbook-spike.md) ([ADR-0001](../docs/adr/0001-flipbook-engine.md)).
 Superseded: [`archive/superseded/2026-08-23-mvp-scaffold.md`](archive/superseded/2026-08-23-mvp-scaffold.md).
 Backlog index: [`to_do.md`](../to_do.md) — **Next Up** (3–5 pointers) → **Active plans** → **Icebox**.
