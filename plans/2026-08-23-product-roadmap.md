@@ -61,7 +61,7 @@ Lamplit ships in M1; Gallery Daylight (mockup B) follows in M7. Detail:
 
 ### M0.5 — Harness follow-ups (after Tauri / remaining quality)
 
-Closed by [`2026-11-05-m05-harness-followups.md`](2026-11-05-m05-harness-followups.md).
+Tracked by [`2026-11-05-m05-harness-followups.md`](2026-11-05-m05-harness-followups.md).
 
 - [x] TypeScript lint and typecheck in CI and hooks (M1 Phase 2 chunk 0). The hooks run at pre-commit, not pre-push, which catches errors earlier, so no pre-push stage is added
 - [x] Frontend Vitest coverage gates (80% lines on `src/lib`, M1 Phase 2 chunk 0). Raising Python `fail_under` stays open below
