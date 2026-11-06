@@ -3,8 +3,9 @@
 
 Reads committed JSON only (stdlib). The production CSP object must have exactly
 the approved directive names, and each source list must equal the approved set
-(compared sorted, so order does not matter). Permissions are the union of every
-capability file Tauri 2.12 would apply to the ``main`` window: a ``windows`` or
+(compared sorted, so order does not matter). Permissions are the union of the
+capability files ``app.security.capabilities`` selects (all files when it is
+absent or empty) that Tauri 2.12 would apply to the ``main`` window: a ``windows`` or
 ``webviews`` glob that matches ``main``. An omitted ``windows`` key deserializes
 to an empty list and does not grant access by itself (tauri 2.12
 ``ipc::authority::RuntimeAuthority::resolve_access``). Capability files other
@@ -123,9 +124,9 @@ def _json_capability_files() -> list[Path]:
     return paths
 
 
-def _capability_identifiers(paths: list[Path]) -> set[str]:
-    """Return the identifier of each JSON capability object this test reads."""
-    identifiers: set[str] = set()
+def _capability_identifiers(paths: list[Path]) -> dict[str, Path]:
+    """Map the identifier of each JSON capability object this test reads to its file."""
+    identifiers: dict[str, Path] = {}
     for path in paths:
         field = path.relative_to(ROOT).as_posix()
         capability = _load_json(path)
@@ -133,22 +134,25 @@ def _capability_identifiers(paths: list[Path]) -> set[str]:
         identifier = capability.get("identifier")
         assert isinstance(identifier, str), f"{field}: {_EXTEND_MSG}"
         assert identifier, f"{field}: {_EXTEND_MSG}"
-        identifiers.add(identifier)
+        identifiers[identifier] = path
     return identifiers
 
 
-def _assert_config_capabilities(security: Any, identifiers: set[str]) -> None:
-    """Fail unless ``app.security.capabilities`` is absent or names JSON files already read.
+def _configured_capability_files(security: Any, identifiers: dict[str, Path]) -> list[Path]:
+    """Return the capability files Tauri applies, per ``app.security.capabilities``.
 
-    A string is a capability identifier. An object is an inline capability.
+    An absent or empty list means every capability file. Otherwise only the named
+    files apply. A string is a capability identifier; an object is an inline
+    capability, which fails until this test is extended.
     """
-    if "capabilities" not in security:
-        return
-    entries = security["capabilities"]
+    entries = security.get("capabilities", [])
     assert isinstance(entries, list), f"app.security.capabilities: {_EXTEND_MSG}"
+    if not entries:
+        return sorted(identifiers.values())
     for entry in entries:
         assert isinstance(entry, str), f"app.security.capabilities: {_EXTEND_MSG}"
         assert entry in identifiers, f"app.security.capabilities: {_EXTEND_MSG}"
+    return sorted({identifiers[entry] for entry in entries})
 
 
 def _main_window_permissions(paths: list[Path]) -> set[str]:
@@ -195,6 +199,6 @@ def test_tauri_production_csp_and_capabilities() -> None:
     _assert_exact("app.security.assetProtocol.enable", asset_protocol["enable"], True)
     _assert_exact("app.security.assetProtocol.scope", asset_protocol["scope"], [])
 
-    capability_files = _json_capability_files()
-    _assert_config_capabilities(security, _capability_identifiers(capability_files))
-    assert _main_window_permissions(capability_files) == _MAIN_WINDOW_PERMISSIONS, "capabilities"
+    identifiers = _capability_identifiers(_json_capability_files())
+    applied = _configured_capability_files(security, identifiers)
+    assert _main_window_permissions(applied) == _MAIN_WINDOW_PERMISSIONS, "capabilities"
