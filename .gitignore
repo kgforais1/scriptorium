@@ -226,3 +226,4 @@ temp/
 
 # cargo llvm-cov output
 lcov.info
+cobertura.xml

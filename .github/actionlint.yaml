@@ -1,0 +1,6 @@
+# actionlint 1.7.12 predates the `code-quality` permission that
+# actions/upload-code-coverage needs. Drop this once actionlint knows the scope.
+paths:
+  .github/workflows/**/*.yml:
+    ignore:
+      - 'unknown permission scope "code-quality"'

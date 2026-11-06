@@ -27,6 +27,8 @@ Last reviewed: 2026-11-05
 
 SonarQube is local and manual: see [`sonarqube.md`](sonarqube.md). CI never needs `SONAR_TOKEN`.
 
+GitHub Code Quality is enabled. It is separate from CodeQL code scanning, and free for public repos. Three jobs upload Cobertura reports with `actions/upload-code-coverage`: `Tests & coverage` (pytest, label `code-coverage/pytest`), `Lint & test (TypeScript)` (Vitest, `code-coverage/vitest`) and `Rust coverage` (`cargo llvm-cov report --cobertura`, `code-coverage/cargo-llvm-cov`). Each of those jobs has `code-quality: write`. The two required jobs upload with `fail-on-error: false` and do not wait for processing, so a Code Quality outage cannot block a merge. Code Quality reports line coverage only. `Rust coverage` is not required and is `continue-on-error`, so a PR can merge without its upload.
+
 Dependabot covers pip, npm, github-actions and cargo (`.github/dependabot.yml`). CodeQL is the ruleset code-scanning requirement above. **Rust fmt/clippy/test belong in M0**, not M0.5 — see foundation plan.
 
 ## Quick start
@@ -40,7 +42,7 @@ pre-commit run --all-files --hook-stage pre-push   # basedpyright
 
 ## Required GitHub checks
 
-The default-branch ruleset requires every check below except `Rust coverage`. The four added on 2026-11-06 are `Rust (windows-latest)`, `Rust (macos-latest)`, `Lint & test (TypeScript)` and `Third-party licences`. The ruleset also has a `code_quality` rule (blocks on errors) and a `code_coverage` rule with `max_coverage_drop: 0` and no minimum line coverage. GitHub's docs disagree on what 0 means for the drop: the UI guide says 0 disables a threshold, while the REST reference says a PR that lowers coverage by more than this amount is blocked, which at 0 would forbid any drop. Coverage rules apply only once GitHub Code Quality is enabled and coverage data is uploaded, and this repo uploads none yet. Check the behaviour on the first PR after that.
+The default-branch ruleset requires every check below except `Rust coverage`. The four added on 2026-11-06 are `Rust (windows-latest)`, `Rust (macos-latest)`, `Lint & test (TypeScript)` and `Third-party licences`. The ruleset also has a `code_quality` rule (blocks on errors) and a `code_coverage` rule with `max_coverage_drop: 0` and no minimum line coverage. GitHub's docs disagree on what 0 means for the drop: the UI guide says 0 disables a threshold, while the REST reference says a PR that lowers coverage by more than this amount is blocked, which at 0 would forbid any drop. Code Quality is enabled and CI uploads coverage (see above), so check how the drop rule behaves on the first PRs.
 
 - `Policy (file size, docs, backlog)`
 - `Lint & format`

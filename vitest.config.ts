@@ -14,7 +14,7 @@ export default defineConfig({
         // What stays untested is the wiring itself: draw order, listener setup, and teardown.
         "src/features/reader/engine/{engine,renderer,gl,shaders,pointerInput,decodeWorker,workerFactory,index}.ts",
       ],
-      reporter: ["text", "lcov"],
+      reporter: ["text", "lcov", "cobertura"],
       thresholds: { lines: 80 },
     },
   },
