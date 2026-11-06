@@ -27,7 +27,7 @@ Last reviewed: 2026-11-05
 
 SonarQube is local and manual: see [`sonarqube.md`](sonarqube.md). CI never needs `SONAR_TOKEN`.
 
-**Later (M0.5):** Dependabot. CodeQL is already the ruleset code-scanning requirement above, not an M0.5 follow-up. **Rust fmt/clippy/test belong in M0**, not M0.5 — see foundation plan.
+Dependabot covers pip, npm, github-actions and cargo (`.github/dependabot.yml`). CodeQL is the ruleset code-scanning requirement above. **Rust fmt/clippy/test belong in M0**, not M0.5 — see foundation plan.
 
 ## Quick start
 
@@ -38,9 +38,9 @@ pre-commit run --all-files
 pre-commit run --all-files --hook-stage pre-push   # basedpyright
 ```
 
-## Required GitHub checks (suggested)
+## Required GitHub checks
 
-After the first green `CI` run, set default-branch ruleset required checks to:
+The default-branch ruleset requires every check below unless it is marked *proposed*. The proposed ones are green on PRs but not yet required; adding them is a ruleset change for the repo owner.
 
 - `Policy (file size, docs, backlog)`
 - `Lint & format`
@@ -49,10 +49,11 @@ After the first green `CI` run, set default-branch ruleset required checks to:
 - `Secret scan (gitleaks)`
 - `SAST — Semgrep` (from Security workflow)
 - `Rust (src-tauri)` — **required from M0** once `src-tauri/` exists (`cargo fmt`, then `clippy` / `test` / `check` with `--locked`, then `pnpm build` and `cargo build --locked --features tauri/custom-protocol`; exact job name must match `ci.yml`). Plain `cargo build` without that feature does not embed `frontendDist` on Tauri 2.12 (dev builds use `devUrl`), so the extra step fails when `dist/` is missing — the gap **LC-M2** called out after M0 review.
-- `Rust (windows-latest)` and `Rust (macos-latest)` — the `rust-cross` matrix (`clippy --locked --all-targets`, `test --locked`). Not required yet; make them required once they have been green on a few PRs
+- `Rust (windows-latest)` and `Rust (macos-latest)` — the `rust-cross` matrix (`clippy --locked --all-targets`, `test --locked`). *Proposed*
 - `Type check (TypeScript)` — `pnpm install` + `pnpm typecheck` (app and config files)
-- `Lint & test (TypeScript)` — `pnpm install` + `pnpm lint` (ESLint) + `pnpm skin:check` (step "Skin CSS is current": the committed `src/styles/skin-<id>.css` matches `design/skins/<id>/tokens.json`; fix with `pnpm skin:css`) + `pnpm skin:lint` (step "Skin literals": no colour, font-family, radius, or filter literals in `src/features/reader/` CSS and TSX outside `engine/`) + `pnpm test:coverage` (Vitest, lines ≥ 80 on `src/lib/**`)
-- `Third-party licences` — `pnpm licenses:check` runs `scripts/gen-licenses.mjs --check`: `cargo about` (config `src-tauri/about.toml`) must accept the licence of every Rust crate the app ships (it skips crates used only as dev or build dependencies), and the committed `THIRD_PARTY_LICENSES.generated.md` must match. Fix with `pnpm licenses:gen` (needs the cargo-about version in `package.json` `config.cargoAboutVersion`, which CI also installs).
+- `Lint & test (TypeScript)` — *proposed*. `pnpm install` + `pnpm lint` (ESLint) + `pnpm skin:check` (step "Skin CSS is current": the committed `src/styles/skin-<id>.css` matches `design/skins/<id>/tokens.json`; fix with `pnpm skin:css`) + `pnpm skin:lint` (step "Skin literals": no colour, font-family, radius, or filter literals in `src/features/reader/` CSS and TSX outside `engine/`) + `pnpm test:coverage` (Vitest, lines ≥ 80 on `src/lib/**`)
+- `Third-party licences` — *proposed*. `pnpm licenses:check` runs `scripts/gen-licenses.mjs --check`: `cargo about` (config `src-tauri/about.toml`) must accept the licence of every Rust crate the app ships (it skips crates used only as dev or build dependencies), and the committed `THIRD_PARTY_LICENSES.generated.md` must match. Fix with `pnpm licenses:gen` (needs the cargo-about version in `package.json` `config.cargoAboutVersion`, which CI also installs).
+- `Rust coverage` — not required and not proposed. `cargo llvm-cov` report only (job summary and the `rust-lcov` artifact).
 - `Dependency audit` — `pnpm audit --prod` + `cargo audit` (uses `src-tauri/.cargo/audit.toml`). Informational findings pass. The job fails closed on a vulnerability and when the audit did not complete: an advisory-database fetch failure, a command error, or exhausted registry retries.
 - `CodeQL` — GitHub **default setup** (`dynamic/github-code-scanning/codeql`). Already required by the branch ruleset as code scanning (alert threshold errors; security alerts high or higher), not a status-check context and not a workflow file
 

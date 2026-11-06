@@ -54,81 +54,81 @@ after a clean local Sonar scan.
 
 ### Chunk 0: Archive the M1 hardening plan
 
-- [ ] Tick the hardening plan's four Verification boxes with #77 evidence.
-- [ ] Set `Status: complete` and move `plans/2026-11-05-m1-hardening.md` to
+- [x] Tick the hardening plan's four Verification boxes with #77 evidence.
+- [x] Set `Status: complete` and move `plans/2026-11-05-m1-hardening.md` to
       `plans/archive/completed/`.
-- [ ] Rewrite both links (lines 35 and 46) in `plans/2026-11-02-m1-followups.md` to
+- [x] Rewrite both links (lines 35 and 46) in `plans/2026-11-02-m1-followups.md` to
       `archive/completed/2026-11-05-m1-hardening.md`. In the moved file, prepend `../../`
       to the links at lines 8, 11 and 474, and `../../../` to those at 25, 269 and 491. Line
       12 becomes the same-directory `2026-08-23-m1-scan-viewer.md`. Line 479 is a shell
       command; leave it.
-- [ ] Remove it from `to_do.md` (Next Up and Active plans) and the `plans/README.md`
+- [x] Remove it from `to_do.md` (Next Up and Active plans) and the `plans/README.md`
       active table, and add it to the README's Completed list. Register this plan in both
       files, in this same commit.
-- [ ] Reference PR #77 as the completion. No changelog line; #77 already logged it.
-- [ ] Verify: `python ci/scripts/check_doc_links.py --internal-only --strict` on the
+- [x] Reference PR #77 as the completion. No changelog line; #77 already logged it.
+- [x] Verify: `python ci/scripts/check_doc_links.py --internal-only --strict` on the
       touched files, and `python hooks/scripts/check_todo_limits.py to_do.md`.
 
 ### Chunk 1: Python coverage floor (LC-L3)
 
-- [ ] Measure where CI runs: take the total from the last green `main` run's
+- [x] Measure where CI runs: take the total from the last green `main` run's
       `coverage-xml` artifact (Ubuntu, Python 3.12). Record it next to the local macOS
       number (48%).
-- [ ] Set `fail_under` in `pyproject.toml` to the CI total rounded down, minus 2
+- [x] Set `fail_under` in `pyproject.toml` to the CI total rounded down, minus 2
       (expected: 46). Record the slope in `docs/ci-and-hooks.md`: an untested
       100-statement script costs about 4.5 points.
-- [ ] Verify: `pytest --cov` passes; temporarily set the floor to 99 and see it fail.
-- [ ] `CHANGELOG.dev.md` Changed line. In `docs/ci-and-hooks.md`, update the coverage
+- [x] Verify: `pytest --cov` passes; temporarily set the floor to 99 and see it fail.
+- [x] `CHANGELOG.dev.md` Changed line. In `docs/ci-and-hooks.md`, update the coverage
       row and line 162, which omits `scripts` from the measured paths.
 
 ### Chunk 2: Rust coverage report
 
-- [ ] Add a `Rust coverage` job to `ci.yml` (Linux only, same apt deps as `rust`). Give
+- [x] Add a `Rust coverage` job to `ci.yml` (Linux only, same apt deps as `rust`). Give
       it its own cache key over the registry and `src-tauri/target/llvm-cov-target`, so
       instrumented builds never land in the `rust` job's cache.
-- [ ] Install `cargo-llvm-cov` with `cargo install --locked --version X`, cached by a key
+- [x] Install `cargo-llvm-cov` with `cargo install --locked --version X`, cached by a key
       that includes the version, as `cargo-audit` is. Add `llvm-tools-preview` with
       `rustup component add`.
-- [ ] Run `cargo llvm-cov --locked | tee -a "$GITHUB_STEP_SUMMARY"`, then
+- [x] Run `cargo llvm-cov --locked | tee -a "$GITHUB_STEP_SUMMARY"`, then
       `cargo llvm-cov report --lcov --output-path lcov.info`, and upload `lcov.info` as an
       artifact for 14 days. (`--summary-only` needs `--lcov`/`--json` and strips line data.)
-- [ ] Report only: no `--fail-under-lines`. Not a required check.
-- [ ] Pin new actions to the SHAs already in `ci.yml`.
+- [x] Report only: no `--fail-under-lines`. Not a required check.
+- [x] Pin new actions to the SHAs already in `ci.yml`.
 - [ ] Record the first CI number and its run time in this plan. A local macOS number runs
       the `sips` fixtures that CI skips, so it is not the baseline.
-- [ ] `CHANGELOG.dev.md` Added line; `docs/ci-and-hooks.md` row.
+- [x] `CHANGELOG.dev.md` Added line; `docs/ci-and-hooks.md` row.
 
 ### Chunk 3: S9, S10, S11
 
-- [ ] S9: do not tick the archived M0 plan's checklist; `plans/README.md` forbids
+- [x] S9: do not tick the archived M0 plan's checklist; `plans/README.md` forbids
       rewriting archives. Append a dated "Completion evidence (2026-11-05)" section that
       maps each of its 24 boxes to a file or PR, or says where it went. Rephrase roadmap line 51 so "app-data library root" reads as
       delivered in M1 Phase 2 (`app_data_dir()/books`), not M0.
-- [ ] S10: already done (see Current state). Record it in the roadmap with those lines.
-- [ ] S11: record as done. `tsc -b` and Prettier are declined, with the reasons from the
+- [x] S10: already done (see Current state). Record it in the roadmap with those lines.
+- [x] S11: record as done. `tsc -b` and Prettier are declined, with the reasons from the
       alternatives table. No `package.json` change.
-- [ ] TS hooks: `eslint` and `tsc` run at pre-commit (`default_stages`), not pre-push.
+- [x] TS hooks: `eslint` and `tsc` run at pre-commit (`default_stages`), not pre-push.
       Rewrite roadmap line 66 to say pre-commit meets the intent, then tick it.
-- [ ] Verify: markdownlint, doc links.
+- [x] Verify: markdownlint, doc links.
 
 ### Chunk 4: Tick the roadmap and propose the ruleset change
 
-- [ ] Tick every M0.5 roadmap item that is now done, with a short evidence pointer.
+- [x] Tick every M0.5 roadmap item that is now done, with a short evidence pointer.
 - [ ] In the PR description, propose adding `Lint & test (TypeScript)`,
       `Third-party licences`, `Rust (windows-latest)` and `Rust (macos-latest)` to the
       ruleset's required checks. The `rust-cross` item in the follow-ups plan closes when
       the user applies it.
-- [ ] Update `docs/ci-and-hooks.md`'s required-checks list (lines 40–58) to show those four
+- [x] Update `docs/ci-and-hooks.md`'s required-checks list (lines 40–58) to show those four
       as proposed, and fix line 29 ("Later (M0.5): Dependabot"), which is stale.
-- [ ] Remove the M0.5 Icebox pointer from `to_do.md`.
+- [x] Remove the M0.5 Icebox pointer from `to_do.md`.
 - [ ] Mark this plan complete and archive it in the same commit if every box is ticked.
 
 ## Verification
 
-- [ ] `pytest --cov`, `cargo test --locked`, `pnpm typecheck`, `pnpm lint` pass.
+- [x] `pytest --cov`, `cargo test --locked`, `pnpm typecheck`, `pnpm lint` pass.
 - [ ] The new `Rust coverage` job passes on the PR and posts a summary.
-- [ ] `check_doc_links.py --internal-only --strict` on every touched file reports 0 broken.
-- [ ] Local Sonar: no new issues before each commit.
+- [x] `check_doc_links.py --internal-only --strict` on every touched file reports 0 broken.
+- [x] Local Sonar: no new issues before each commit.
 
 ## Risks
 

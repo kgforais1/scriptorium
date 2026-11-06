@@ -36,9 +36,6 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to-plans.md) or move to
 [`plans/deferred/`](plans/deferred/) when a real plan exists.
 
-- **M0.5 harness follow-ups** — Rust coverage, Dependabot;
-  M0 senior-review docs/harness nits (**S9**–**S11**); raise pytest `fail_under` (**LC-L3**) →
-  [roadmap M0.5](plans/2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri--remaining-quality)
 - **Second skin (Gallery Daylight, mockup B) + skin picker** — M7 →
   [`design/DESIGN.md`](design/DESIGN.md#skins)
 - **Later product (M1.5–M8)** — PDF import, OCR and curator-supplied text (M2), bookshelf
