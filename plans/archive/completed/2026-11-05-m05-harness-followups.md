@@ -3,12 +3,12 @@
 Last reviewed: 2026-11-05
 Date: 2026-11-05
 Author: Claude (Opus 5.5)
-Status: in-progress
-Linked issue/PR: n/a (follows [#77](https://github.com/kgforais1/scriptorium/pull/77))
+Status: complete
+Linked issue/PR: [#78](https://github.com/kgforais1/scriptorium/pull/78) (follows [#77](https://github.com/kgforais1/scriptorium/pull/77))
 
 ## Goal
 
-Close the open [M0.5 roadmap items](2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri--remaining-quality)
+Close the open [M0.5 roadmap items](../../2026-08-23-product-roadmap.md#m05--harness-follow-ups-after-tauri--remaining-quality)
 and archive the finished M1 hardening plan, in one PR. Most M0.5 items are already done
 and only need ticking with evidence. The real work is a Python coverage floor, a Rust
 coverage report, and a few stale-wording fixes.
@@ -17,7 +17,7 @@ coverage report, and a few stale-wording fixes.
 
 - The manual M1 checks (macOS script, A9 on Dulac, Windows WebView2, release-build CSP
   console, ADR-0001 platform items, layout default). They need a person and real hardware,
-  and stay open in [`2026-11-02-m1-followups.md`](2026-11-02-m1-followups.md).
+  and stay open in [`2026-11-02-m1-followups.md`](../../2026-11-02-m1-followups.md).
 - Changing the GitHub branch ruleset. That is a repo setting, not a file. Chunk 4 only
   proposes the change, and the user applies it or approves it after the PR.
 - Prettier. See the alternatives table.
@@ -85,7 +85,7 @@ after a clean local Sonar scan.
 
 - [x] Add a `Rust coverage` job to `ci.yml` (Linux only, same apt deps as `rust`). Give
       it its own cache key over the registry and `src-tauri/target/llvm-cov-target`, so
-      instrumented builds never land in the `rust` job's cache.
+      instrumented builds never land in the `rust` job's cache. (The target dir was dropped after the first run: ~800 MB.)
 - [x] Install `cargo-llvm-cov` with `cargo install --locked --version X`, cached by a key
       that includes the version, as `cargo-audit` is. Add `llvm-tools-preview` with
       `rustup component add`.
@@ -94,7 +94,8 @@ after a clean local Sonar scan.
       artifact for 14 days. (`--summary-only` needs `--lcov`/`--json` and strips line data.)
 - [x] Report only: no `--fail-under-lines`. Not a required check.
 - [x] Pin new actions to the SHAs already in `ci.yml`.
-- [ ] Record the first CI number and its run time in this plan. A local macOS number runs
+- [x] First CI run (2026-11-06, run 42162918181): 82.25% lines, 72.13% functions, 82.35% regions; 3 min 54 s including a 55 s `cargo-llvm-cov` install. The ~1 GB instrumented target dir is not cached (repo caches were past 10 GB).
+      A local macOS number runs
       the `sips` fixtures that CI skips, so it is not the baseline.
 - [x] `CHANGELOG.dev.md` Added line; `docs/ci-and-hooks.md` row.
 
@@ -114,19 +115,19 @@ after a clean local Sonar scan.
 ### Chunk 4: Tick the roadmap and propose the ruleset change
 
 - [x] Tick every M0.5 roadmap item that is now done, with a short evidence pointer.
-- [ ] In the PR description, propose adding `Lint & test (TypeScript)`,
+- [x] In the PR description, propose adding `Lint & test (TypeScript)`,
       `Third-party licences`, `Rust (windows-latest)` and `Rust (macos-latest)` to the
       ruleset's required checks. The `rust-cross` item in the follow-ups plan closes when
       the user applies it.
 - [x] Update `docs/ci-and-hooks.md`'s required-checks list (lines 40–58) to show those four
       as proposed, and fix line 29 ("Later (M0.5): Dependabot"), which is stale.
 - [x] Remove the M0.5 Icebox pointer from `to_do.md`.
-- [ ] Mark this plan complete and archive it in the same commit if every box is ticked.
+- [x] Mark this plan complete and archive it in the same commit if every box is ticked.
 
 ## Verification
 
 - [x] `pytest --cov`, `cargo test --locked`, `pnpm typecheck`, `pnpm lint` pass.
-- [ ] The new `Rust coverage` job passes on the PR and posts a summary.
+- [x] The new `Rust coverage` job passes on the PR and posts a summary.
 - [x] `check_doc_links.py --internal-only --strict` on every touched file reports 0 broken.
 - [x] Local Sonar: no new issues before each commit.
 

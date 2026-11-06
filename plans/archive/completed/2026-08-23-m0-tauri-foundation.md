@@ -150,8 +150,10 @@ book-format on EXIF/XMP: M1 copies bytes as-is; stripping/policy deferred but do
 
 ## Completion evidence (2026-11-05)
 
-Added after archive for S9; the checklist above is left as written. Every item shipped in
-[#8](https://github.com/kgforais1/scriptorium/pull/8) unless the row cites a later commit.
+Added after archive for S9; the checklist above is left as written. The table records the
+evidence available today. Items shipped in [#8](https://github.com/kgforais1/scriptorium/pull/8)
+unless the row cites a later commit. Two verification rows have no evidence and are marked
+unverified, so this does not claim every check passed.
 
 | Item | Evidence |
 |---|---|
@@ -160,7 +162,7 @@ Added after archive for S9; the checklist above is left as written. Every item s
 | `.agent-state/` gitignored | `.gitignore` |
 | Tauri prereqs | `scripts/validate-env.sh` "Tauri Prerequisites"; `docs/development.md` |
 | Tauri 2 + Vite + React + TS at root | `7bf4a00`; `src-tauri/`, `src/`, `package.json` |
-| `pnpm tauri dev` shows a window | Superseded by the reader; checked in the 2026-11-02 manual run |
+| `pnpm tauri dev` shows a window | The app opened in the 2026-11-02 manual run (not from a fresh clone) |
 | Pin Node | `package.json` `engines`, `.nvmrc` |
 | `Cargo.lock` tracked | `src-tauri/Cargo.lock`; the `.gitignore` entry was dropped |
 | `docs/book-format.md` with decisions | `docs/book-format.md` |
@@ -173,9 +175,9 @@ Added after archive for S9; the checklist above is left as written. Every item s
 | Advisory audits | Now a required gate: `ci.yml` `Dependency audit` |
 | markdownlint / shellcheck paths | `ci.yml` `lint` job |
 | `docs/ci-and-hooks.md` updated | `docs/ci-and-hooks.md` required-checks list |
-| Fresh clone → window | As the dev-window row |
+| Fresh clone → window | Unverified. No fresh-clone run was recorded |
 | `git check-ignore` passes on `Cargo.lock` | `src-tauri/Cargo.lock` is tracked |
 | fmt/clippy/test/check pass | `ci.yml` `rust` job, green on `main` |
 | JSON Schema validates a fixture | `tests/test_generate_fixture_book.py`; Rust round-trip test |
-| `check-bootstrap.sh` findings | Not recorded at the time. The script still exists; nothing open depends on it |
+| `check-bootstrap.sh` findings | Unverified. Findings were not recorded; nothing open depends on them |
 | `create-tauri-app` version | `create-tauri-app@4.6.2`, template `react-ts` (`docs/development.md`) |

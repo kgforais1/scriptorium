@@ -9,7 +9,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 - [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default, `rust-cross` ruleset
 - [Drop the openjpeg-sys patch](#unplanned--small) — when an `openjpeg-sys` release bundles OpenJPEG 2.5.4
-- [M0.5 harness follow-ups](plans/2026-11-05-m05-harness-followups.md) — Python coverage floor, Rust coverage report, S9–S11 evidence, ruleset proposal
+- [Reader notes follow-up](#unplanned--small) — clear stale failure notes after a restore or resize; cap concurrent texture rebuilds (CodeRabbit #67)
 
 ## Active plans
 
@@ -17,7 +17,6 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
 | [M1 follow-ups](plans/2026-11-02-m1-followups.md) | in-progress | Manual and platform remainder after 0.2.0 |
-| [M0.5 harness follow-ups](plans/2026-11-05-m05-harness-followups.md) | in-progress | Coverage floors, S9–S11, plan upkeep |
 
 ## Unplanned / small
 

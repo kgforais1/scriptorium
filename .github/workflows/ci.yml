@@ -249,9 +249,17 @@ jobs:
 
   rust-coverage:
     # Report only: no floor and not a required check. Linux skips the macOS sips
-    # fixtures, so ingest coverage reads low here.
+    # fixtures, so ingest coverage reads low here. continue-on-error keeps an
+    # install or tool failure from failing the run.
+    # Cost (2026-11-06): about 4 min per run, and about 190 CI runs in 30 days
+    # (149 PR, 44 push), so roughly 760 Linux minutes a month, free on a public
+    # repo. The lcov artifact is 23 KB for 14 days. Caches: registry plus the
+    # 1.7 MB binary. target/ is not cached: the first combined entry was 982 MB,
+    # of which the registry is ~110 MB, and the repo's caches were already past
+    # GitHub's 10 GB limit.
     name: Rust coverage
     runs-on: ubuntu-latest
+    continue-on-error: true
     defaults:
       run:
         working-directory: src-tauri
@@ -274,15 +282,13 @@ jobs:
           rustup show
           rustup component add llvm-tools-preview
 
-      # Own key: instrumented artifacts live in target/llvm-cov-target and must not
-      # land in the rust job's cache.
+      # Own key, registry only: the instrumented target dir is ~1 GB and is not cached.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry/cache
             ~/.cargo/registry/index
             ~/.cargo/git/db
-            src-tauri/target/llvm-cov-target
           key: cargo-llvm-cov-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: cargo-llvm-cov-${{ runner.os }}-
 
