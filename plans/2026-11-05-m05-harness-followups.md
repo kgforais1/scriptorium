@@ -33,7 +33,7 @@ coverage report, and a few stale-wording fixes.
 | Ruleset required checks | Mostly done | Ruleset 21519272 requires 9 checks including Semgrep. Missing: `Lint & test (TypeScript)`, `Third-party licences`, `Rust (windows-latest)`, `Rust (macos-latest)` |
 | `cargo fmt/clippy/test` in M0 note | Done | `ci.yml` `rust` job |
 | S9 | Open | Archived M0 plan has 24 unticked boxes; roadmap line 51 ticks "app-data library root" |
-| S10 | Done | `pyproject.toml:4` description is current; the README `.nvmrc` hedge is gone (`docs/development.md:11`); `docs/book-format.md:20` says `{}` is tolerated on read. Slug lockstep tests exist |
+| S10 | Done | `pyproject.toml:4` description is current; the README `.nvmrc` hedge is gone (`docs/development.md:11`); `docs/book-format.md:22` says `{}` is tolerated on read. Slug lockstep tests exist |
 | S11 | Done in substance | ESLint in CI and pre-commit. `pnpm typecheck` runs `tsc -p tsconfig.node.json --noEmit` as well, which checks `vite.config.ts` and `vitest.config.ts` |
 
 ## Approach
