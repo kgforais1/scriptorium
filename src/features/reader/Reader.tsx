@@ -56,6 +56,7 @@ export function Reader({ book, onClose, scene }: Readonly<Props>) {
     reduced,
     onChange,
     onPageError: notes.pageFailed,
+    onRecover: notes.recovered,
   });
 
   const spreads = change?.spreads ?? spreadCount(pageCount);

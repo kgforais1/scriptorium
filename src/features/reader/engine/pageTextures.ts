@@ -11,6 +11,9 @@ import type { Rgb } from "./scene";
 /** Textures kept around the open spread. */
 export const TEX_CACHE = 12;
 
+/** At most this many texture rebuilds decode at once after a resize; the rest wait their turn. */
+export const MAX_REBUILDS = 2;
+
 /** Creates and frees textures. The GL backend (`glBackend.ts`) is the real one. */
 export interface TextureBackend<T> {
   /** A plain-paper texture, shown while a page loads and for the pastedowns. */
@@ -34,8 +37,8 @@ export interface PageTextureHost {
   sourceOf(slot: number): PageSource | null;
   /** Slots that must not be evicted: the open spread and the turning leaf. */
   pinned(): Iterable<number>;
-  /** A texture arrived. */
-  onLoad(): void;
+  /** A texture arrived for this slot. */
+  onLoad(slot: number): void;
   /** A page failed to load or upload. It keeps showing paper and is not retried. */
   onError(slot: number, err: unknown): void;
 }
@@ -51,6 +54,9 @@ export class PageTextures<T> {
   private readonly cache: LruCache<Cached<T>>;
   private readonly loading = new Map<number, Loading>();
   private readonly failed = new Set<number>();
+  // Rebuilds waiting for a free decode, oldest first (see refresh and MAX_REBUILDS).
+  private rebuildQueue: number[] = [];
+  private rebuilding = 0;
   private abort = new AbortController();
   private paperTex: T;
   private paperColor: Rgb;
@@ -97,7 +103,8 @@ export class PageTextures<T> {
    * Rebuilds cached textures that are much smaller than the current target height, for example
    * after the canvas grew from its first tiny layout. The old texture stays on screen until the
    * new one lands, and a failed rebuild keeps the old one. Decodes in flight that would also land
-   * too small are aborted on their own; the rest finish. Call it after a resize.
+   * too small are aborted on their own; the rest finish. At most `MAX_REBUILDS` rebuilds decode
+   * at once, so a big cache does not flood the decoder; the rest queue. Call it after a resize.
    */
   refresh(): void {
     if (this.suspended) return;
@@ -108,7 +115,18 @@ export class PageTextures<T> {
       l.ac.abort();
       this.loading.delete(slot);
     }
-    for (const slot of stale) this.start(slot, true);
+    this.rebuildQueue = stale;
+    this.pumpRebuilds();
+  }
+
+  // Starts queued rebuilds while fewer than MAX_REBUILDS are decoding. A slot evicted or already
+  // loading by the time its turn comes is skipped.
+  private pumpRebuilds(): void {
+    while (this.rebuilding < MAX_REBUILDS && this.rebuildQueue.length > 0 && !this.suspended) {
+      const slot = this.rebuildQueue.shift();
+      if (slot === undefined || !this.cache.has(slot) || this.loading.has(slot)) continue;
+      this.start(slot, true);
+    }
   }
 
   // Decodes a slot. A rebuild (replacing) keeps the cached texture and drops its result if the
@@ -124,6 +142,7 @@ export class PageTextures<T> {
     const signal = ac.signal;
     const texH = this.host.texHeight();
     const target: ComposeTarget = { boxAspect: this.host.boxAspect, texH, paper: this.paperColor };
+    if (replacing) this.rebuilding++;
     const done = this.decodeAsync(source, target, signal)
       .then((page) => {
         if (signal.aborted || this.suspended || (replacing && !this.cache.has(slot))) return page.bitmap.close();
@@ -137,6 +156,10 @@ export class PageTextures<T> {
         generation.removeEventListener("abort", onRestart);
         // A restart may have begun a newer load of this slot; only clear our own entry.
         if (this.loading.get(slot)?.ac === ac) this.loading.delete(slot);
+        if (replacing) {
+          this.rebuilding--;
+          this.pumpRebuilds();
+        }
       });
     this.loading.set(slot, { ac, texH, done });
   }
@@ -178,7 +201,7 @@ export class PageTextures<T> {
       this.fail(slot, err);
       return;
     }
-    this.host.onLoad();
+    this.host.onLoad(slot);
   }
 
   // Swaps in a rebuilt texture. If the GPU refuses it the old texture stays, with no report: the
@@ -189,7 +212,7 @@ export class PageTextures<T> {
     } catch {
       return;
     }
-    this.host.onLoad();
+    this.host.onLoad(slot);
   }
 
   /** Uploads a decoded page into the cache and closes its bitmap. Throws on a GPU error. */
@@ -244,6 +267,7 @@ export class PageTextures<T> {
 
   /** Aborts loads and frees every texture. */
   dispose(): void {
+    this.rebuildQueue = [];
     this.abort.abort();
     this.cache.clear();
     this.backend.free(this.paperTex);
@@ -254,6 +278,7 @@ export class PageTextures<T> {
     this.abort.abort();
     this.abort = new AbortController();
     this.loading.clear();
+    this.rebuildQueue = [];
   }
 
   private fail(slot: number, err: unknown): void {

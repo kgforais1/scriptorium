@@ -37,6 +37,11 @@ export type EngineOptions = {
   onChange?: (state: EngineChange) => void;
   onError?: (error: EngineError) => void;
   /**
+   * Something that failed is fine again: a page (0-based) got a texture, or, with null, a
+   * resize, scene change, or context restore succeeded. Lets the UI clear a stale error note.
+   */
+  onRecover?: (page: number | null) => void;
+  /**
    * Called with the projected page corners while a leaf moves and once when the book settles.
    * The same buffer every time; copy what you keep. Layout in `corners.ts`.
    */
@@ -250,6 +255,7 @@ export class FlipbookEngine implements FlipbookController {
       this.fail(null, "could not apply the new scene", err);
       return;
     }
+    this.opts.onRecover?.(null);
     this.dirty = true;
     this.geometryDue = true;
   }
@@ -315,9 +321,10 @@ export class FlipbookEngine implements FlipbookController {
         return p === null ? null : this.opts.pages[p];
       },
       pinned: () => this.pinnedSlots(),
-      onLoad: () => {
+      onLoad: (slot: number) => {
         this.dirty = true;
         this.emit();
+        this.opts.onRecover?.(slot - 1);
       },
       onError: (slot: number, err: unknown) => this.fail(slot - 1, `page ${slot - 1} failed to load`, err),
     };
@@ -407,6 +414,7 @@ export class FlipbookEngine implements FlipbookController {
           this.fail(null, "could not resize the scene", err);
           return;
         }
+        this.opts.onRecover?.(null);
         this.dirty = true;
         this.geometryDue = true;
       }, 60);
@@ -441,6 +449,7 @@ export class FlipbookEngine implements FlipbookController {
       return;
     }
     this.lost = false;
+    this.opts.onRecover?.(null);
     this.last = performance.now();
     this.geometryDue = true;
     this.prefetch();
