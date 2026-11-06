@@ -200,15 +200,13 @@ jobs:
           rustup show
           rustup component add clippy rustfmt
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # rust-cache keeps compiled dependencies but drops this crate's own build
+      # output and stale files, so each entry stays well under the old ~2.5 GB.
+      # Only main saves; PRs restore from it, which keeps PR caches off the 10 GB quota.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/cache
-            ~/.cargo/registry/index
-            ~/.cargo/git/db
-            src-tauri/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          workspaces: src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo fmt --check
         run: cargo fmt --check
@@ -344,15 +342,13 @@ jobs:
           rustup show
           rustup component add clippy
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # rust-cache keeps compiled dependencies but drops this crate's own build
+      # output and stale files, so each entry stays well under the old ~2.5 GB.
+      # Only main saves; PRs restore from it, which keeps PR caches off the 10 GB quota.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/cache
-            ~/.cargo/registry/index
-            ~/.cargo/git/db
-            src-tauri/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          workspaces: src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo clippy --all-targets -- -D warnings
         run: cargo clippy --locked --all-targets -- -D warnings
