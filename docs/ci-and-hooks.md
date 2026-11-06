@@ -18,7 +18,7 @@ Last reviewed: 2026-11-05
 | **Rust fmt / clippy / test** | — | — | ✅ required from **M0** once `src-tauri/` exists | — |
 | **Type check (TypeScript)** | ✅ `types: tsc` on `.ts`/`.tsx` changes | — | ✅ `pnpm typecheck` (app and config files) | — |
 | **Audit (pnpm + cargo)** | — | — | ✅ required (`Dependency audit`; informational findings pass, audit and tooling failures fail closed) | ✅ weekly re-run (`Dependency audit (weekly)`) |
-| **Tests + coverage** | — | — | ✅ pytest-cov (report; gate later) | — |
+| **Tests + coverage** | — | — | ✅ pytest-cov (`fail_under` 46) | — |
 | **Tests + coverage (TypeScript)** | — | — | ✅ `pnpm test:coverage` (Vitest; lines ≥ 80 on `src/lib/**`) | — |
 | **SAST** | — | — | — | ✅ Semgrep on PR (whole repo; templates/scratch in `.semgrepignore`) |
 | **SonarQube (local, opt-in)** | `sonar-freshness` (no-op unless `SONAR_FRESHNESS_GATE=1`) | `sonar-freshness-push` (same opt-in) | — never | — never |
@@ -159,7 +159,7 @@ repository secret speeds it up; without one the script sleeps about 7 seconds be
 
 - Source lines: soft **600** / hard **1000** — [`policies/file-size-and-counts.md`](../policies/file-size-and-counts.md)
 - Complexity: cyclomatic **15**, branches **15**, statements **100** — `ruff.toml`
-- Coverage: **reported** on `hooks/scripts` + `ci/scripts` today; raise `fail_under` after app tests (M0.5)
+- Coverage: measured on `hooks/scripts`, `ci/scripts` and `scripts`, with `fail_under = 46` in `pyproject.toml`. CI measured 48.2% on 2026-11-06 (Ubuntu, Python 3.12), and the floor sits 2 points below. Many scripts are tested by subprocess, which coverage does not see, so an untested 100-statement script costs about 4.5 points. Raise the floor when in-process tests lift the total.
 
 ## Temp files
 

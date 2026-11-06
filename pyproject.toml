@@ -17,7 +17,7 @@ source = ["hooks/scripts", "ci/scripts", "scripts"]
 omit = ["tests/*"]
 
 [tool.coverage.report]
-fail_under = 0
+fail_under = 46
 show_missing = true
 skip_empty = true
 exclude_lines = [
