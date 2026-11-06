@@ -7,9 +7,9 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
-- [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default, `rust-cross` ruleset
+- [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default
 - [Drop the openjpeg-sys patch](#unplanned--small) — when an `openjpeg-sys` release bundles OpenJPEG 2.5.4
-- [Reader notes follow-up](#unplanned--small) — clear stale failure notes after a restore or resize; cap concurrent texture rebuilds (CodeRabbit #67)
+- [M1.5 PDF import](plans/2026-08-23-product-roadmap.md#m15--pdf-import) — next milestone; needs a plan
 
 ## Active plans
 
@@ -21,7 +21,6 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 ## Unplanned / small
 
 - **Drop the openjpeg-sys patch** — `src-tauri/Cargo.toml` patches `openjpeg-sys` 1.0.12 to a fork commit that bundles OpenJPEG 2.5.4 (fixes CVE-2025-54874). Upstream PR [Enet4/openjpeg-sys#5](https://github.com/Enet4/openjpeg-sys/pull/5) asks for a release with 2.5.4. When one ships, bump the crate, delete the `[patch.crates-io]` block, and update `THIRD_PARTY_NOTICES.md`.
-- **Reader notes follow-up** — Reader notes: clear a page's failure note when it later loads (after a context restore), and the engine note after a successful resize or scene update; and cap concurrent texture rebuilds in refresh() — CodeRabbit #67.
 - **Cap decoded scan size** — Cap decoded scan size (createImageBitmap resize) so huge scans don't spike memory — CodeRabbit #68.
 - **Sonar backlog (22 local issues)** — all in template hook and CI scripts (complexity, regexes, duplicated literals). See
   `tmp/sonar-latest-issues.md` after a scan.

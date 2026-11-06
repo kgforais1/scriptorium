@@ -16,6 +16,7 @@ uses [Semantic Versioning](https://semver.org/).
 - A page label (`pageLabel`) may be at most 256 characters; longer labels are rejected when a package is validated or opened.
 
 ### Fixed
+- The reader clears a page's "did not load" note once that page loads after all, for example after the graphics context comes back. A whole-scene error note also clears once a later resize or scene change works.
 - The macOS app is now signed ad hoc. macOS no longer calls the downloaded app damaged, and lets you open it through **Privacy & Security → Open Anyway**.
 
 ### Security

@@ -25,6 +25,9 @@ export type EngineChange = { spread: number; spreads: number; turning: boolean; 
 /** Something went wrong. `page` is the 0-based scan that failed, or null for the engine itself. */
 export type EngineError = { page: number | null; message: string; cause: unknown };
 
+// The whole-engine operations that can fail and later succeed.
+type Fault = "scene" | "resize" | "restore";
+
 /** Options for `FlipbookEngine.create`. */
 export type EngineOptions = {
   /** The book's scans in order, URLs from `pageUrl`. Needs at least one. */
@@ -36,6 +39,12 @@ export type EngineOptions = {
   reducedMotion: boolean;
   onChange?: (state: EngineChange) => void;
   onError?: (error: EngineError) => void;
+  /**
+   * Something that failed is fine again: a page (0-based) got a texture, or, with null, the
+   * operation behind the last whole-engine error (a scene change, resize, or context restore)
+   * succeeded on a later try. Lets the UI clear a stale error note.
+   */
+  onRecover?: (page: number | null) => void;
   /**
    * Called with the projected page corners while a leaf moves and once when the book settles.
    * The same buffer every time; copy what you keep. Layout in `corners.ts`.
@@ -103,6 +112,8 @@ export class FlipbookEngine implements FlipbookController {
   private last = performance.now();
   private disposed = false;
   private lost = false;
+  // The operation behind the last whole-engine error, so only that operation's success clears it.
+  private fault: Fault | null = null;
   private readonly cleanup: (() => void)[] = [];
   // Settled when the graphics context comes back, fails to come back, or the engine is disposed.
   // Only openingLoaded waits on it.
@@ -247,9 +258,12 @@ export class FlipbookEngine implements FlipbookController {
         this.prefetch();
       }
     } catch (err) {
+      this.fault = "scene";
       this.fail(null, "could not apply the new scene", err);
       return;
     }
+    // Only a scene fault clears here, so a failed restore stays reported while the context is lost.
+    this.recover("scene");
     this.dirty = true;
     this.geometryDue = true;
   }
@@ -296,6 +310,15 @@ export class FlipbookEngine implements FlipbookController {
     this.opts.onChange(state);
   }
 
+  // Reports that a whole-engine operation succeeded, if the current error came from that operation.
+  // A successful restore also lays out at the current size, so it settles a resize fault too.
+  private recover(op: Fault) {
+    const settles = this.fault === op || (op === "restore" && this.fault === "resize");
+    if (!settles) return;
+    this.fault = null;
+    this.opts.onRecover?.(null);
+  }
+
   private fail(page: number | null, message: string, cause: unknown) {
     console.error(`[flipbook] ${message}`, cause);
     this.opts.onError?.({ page, message, cause });
@@ -315,9 +338,10 @@ export class FlipbookEngine implements FlipbookController {
         return p === null ? null : this.opts.pages[p];
       },
       pinned: () => this.pinnedSlots(),
-      onLoad: () => {
+      onLoad: (slot: number) => {
         this.dirty = true;
         this.emit();
+        this.opts.onRecover?.(slot - 1);
       },
       onError: (slot: number, err: unknown) => this.fail(slot - 1, `page ${slot - 1} failed to load`, err),
     };
@@ -404,9 +428,11 @@ export class FlipbookEngine implements FlipbookController {
           this.textures.refresh();
           this.prefetch();
         } catch (err) {
+          this.fault = "resize";
           this.fail(null, "could not resize the scene", err);
           return;
         }
+        this.recover("resize");
         this.dirty = true;
         this.geometryDue = true;
       }, 60);
@@ -436,11 +462,13 @@ export class FlipbookEngine implements FlipbookController {
       this.machine.reapply();
       this.textures.resume();
     } catch (err) {
+      this.fault = "restore";
       this.fail(null, "could not rebuild the scene after the graphics context was lost", err);
       this.settleRestoreWaiters(err);
       return;
     }
     this.lost = false;
+    this.recover("restore");
     this.last = performance.now();
     this.geometryDue = true;
     this.prefetch();

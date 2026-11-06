@@ -14,6 +14,8 @@ type Options = {
   onChange: (change: EngineChange) => void;
   /** Called when one page fails to load. The book stays open. */
   onPageError: (error: EngineError) => void;
+  /** Called when a page loads, or (null) a resize, scene change, or restore succeeds. */
+  onRecover: (page: number | null) => void;
 };
 
 /**
@@ -23,7 +25,7 @@ type Options = {
  *
  * @returns The canvas ref to attach, the controller ref, the status, and the start error message.
  */
-export function useEngine({ book, scene, reduced, onChange, onPageError }: Readonly<Options>) {
+export function useEngine({ book, scene, reduced, onChange, onPageError, onRecover }: Readonly<Options>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const controllerRef = useRef<FlipbookController | null>(null);
   // Keyed by book, so a new book reads as loading until its own engine starts.
@@ -31,11 +33,11 @@ export function useEngine({ book, scene, reduced, onChange, onPageError }: Reado
   const status: EngineStatus = started?.book === book ? started.status : "loading";
   const error = started?.book === book ? started.error : null;
   // Read when the engine starts. Later changes go through the two effects below.
-  const latest = useRef({ scene, reduced, onChange, onPageError });
+  const latest = useRef({ scene, reduced, onChange, onPageError, onRecover });
   const appliedScene = useRef(scene);
 
   useEffect(() => {
-    latest.current = { scene, reduced, onChange, onPageError };
+    latest.current = { scene, reduced, onChange, onPageError, onRecover };
   });
 
   useEffect(() => {
@@ -52,6 +54,7 @@ export function useEngine({ book, scene, reduced, onChange, onPageError }: Reado
         reducedMotion: latest.current.reduced,
         onChange: (c) => latest.current.onChange(c),
         onError: (e) => latest.current.onPageError(e),
+        onRecover: (page) => latest.current.onRecover(page),
       },
       ac.signal,
     ).then(

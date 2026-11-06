@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ComposeTarget, DecodedPage, PageDecoder, PageSource } from "./decode";
-import { PageTextures, type TextureBackend } from "./pageTextures";
+import { MAX_REBUILDS, PageTextures, type TextureBackend } from "./pageTextures";
 import type { Rgb } from "./scene";
 
 type Tex = { id: number; paper: Rgb | null; kind: "paper" | "page"; texH: number | null; composed: boolean };
@@ -292,6 +292,137 @@ describe("PageTextures", () => {
       await flush();
       for (const slot of [1, 2, 3]) expect(t.tex.get(slot).texH).toBe(800);
       expect(t.tex.size).toBe(3);
+    });
+
+    it("decodes at most MAX_REBUILDS rebuilds at once and queues the rest", async () => {
+      // Each decode waits until the test releases it, so the in-flight count is visible.
+      const gates: Array<() => void> = [];
+      let inFlight = 0;
+      let peak = 0;
+      const decode: PageDecoder = (_source, target) =>
+        new Promise((resolve) => {
+          inFlight++;
+          peak = Math.max(peak, inFlight);
+          gates.push(() => {
+            inFlight--;
+            resolve(composed(target));
+          });
+        });
+      const t = setup({ decode });
+      t.size.texH = 2;
+      for (const s of [1, 2, 3, 4, 5]) t.tex.load(s);
+      while (gates.length) gates.shift()?.();
+      await flush();
+      peak = 0;
+      t.size.texH = 800;
+      t.tex.refresh();
+      expect(inFlight).toBe(MAX_REBUILDS);
+      while (inFlight > 0 || gates.length) {
+        gates.shift()?.();
+        await flush();
+      }
+      expect(peak).toBe(MAX_REBUILDS);
+      for (const slot of [1, 2, 3, 4, 5]) expect(t.tex.get(slot).texH).toBe(800);
+    });
+
+    it("drops queued rebuilds when the context is lost", async () => {
+      const gates: Array<() => void> = [];
+      const decode: PageDecoder = (_source, target) => new Promise((resolve) => gates.push(() => resolve(composed(target))));
+      const t = setup({ decode });
+      t.size.texH = 2;
+      for (const s of [1, 2, 3, 4]) t.tex.load(s);
+      while (gates.length) gates.shift()?.();
+      await flush();
+      t.size.texH = 800;
+      t.tex.refresh();
+      const started = t.decodeSpy.mock.calls.length;
+      t.tex.suspend();
+      while (gates.length) gates.shift()?.();
+      await flush();
+      expect(t.decodeSpy.mock.calls.length).toBe(started);
+    });
+
+    it("frees its rebuild slots after a context loss, so later refreshes still run", async () => {
+      const gates: Array<() => void> = [];
+      const decode: PageDecoder = (_source, target, signal) =>
+        new Promise((resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+          gates.push(() => resolve(composed(target)));
+        });
+      const t = setup({ decode });
+      t.size.texH = 2;
+      for (const s of [1, 2, 3]) t.tex.load(s);
+      while (gates.length) gates.shift()?.();
+      await flush();
+      t.size.texH = 800;
+      t.tex.refresh();
+      t.tex.suspend();
+      await flush();
+      t.tex.resume();
+      for (const s of [1, 2, 3]) t.tex.load(s);
+      while (gates.length) gates.shift()?.();
+      await flush();
+      const before = t.decodeSpy.mock.calls.length;
+      t.size.texH = 1600;
+      t.tex.refresh();
+      expect(t.decodeSpy.mock.calls.length).toBe(before + MAX_REBUILDS);
+    });
+
+    it("lets a newer resize start rebuilds without waiting for aborted ones to settle", async () => {
+      // Rebuild decodes ignore their abort signal, like a main-thread decode that cannot stop.
+      // Each is held until the test settles it. `counted` tracks rebuilds still holding a place
+      // (not aborted, not settled); aborted ones may keep running, which is the intended trade-off.
+      let tiny = true;
+      const held: Array<{ signal: AbortSignal; settle: () => void }> = [];
+      let counted = 0;
+      let peakCounted = 0;
+      const decode: PageDecoder = (_source, target, signal) => {
+        if (tiny) return Promise.resolve(composed(target));
+        counted++;
+        peakCounted = Math.max(peakCounted, counted);
+        let holding = true;
+        const end = () => {
+          if (holding) counted--;
+          holding = false;
+        };
+        signal.addEventListener("abort", end, { once: true });
+        return new Promise<DecodedPage>((resolve) =>
+          held.push({
+            signal,
+            settle: () => {
+              end();
+              resolve(composed(target));
+            },
+          }),
+        );
+      };
+      const t = setup({ decode });
+      await loadTiny(t, [1, 2, 3, 4]);
+      tiny = false;
+      t.size.texH = 800;
+      t.tex.refresh();
+      const afterFirst = t.decodeSpy.mock.calls.length;
+      t.size.texH = 1600;
+      t.tex.refresh();
+      // The aborted 800 rebuilds gave their places back, so the 1600 ones start at once.
+      expect(t.decodeSpy.mock.calls.length).toBe(afterFirst + MAX_REBUILDS);
+      // Settling the aborted ones must not free a second place each (a double release).
+      for (const h of held.filter((x) => x.signal.aborted)) h.settle();
+      await flush();
+      expect(t.decodeSpy.mock.calls.length).toBe(afterFirst + MAX_REBUILDS);
+      // Queued rebuilds start only as a current one settles, one for one.
+      held.find((x) => !x.signal.aborted)?.settle();
+      await flush();
+      expect(t.decodeSpy.mock.calls.length).toBe(afterFirst + MAX_REBUILDS + 1);
+      // Tracked rebuild places never exceed the cap.
+      expect(peakCounted).toBeLessThanOrEqual(MAX_REBUILDS);
+    });
+
+    it("tells the host which slot loaded", async () => {
+      const t = setup();
+      t.tex.load(3);
+      await flush();
+      expect(t.onLoad).toHaveBeenCalledWith(3);
     });
 
     it("keeps the old texture on screen until the new one lands, then frees it", async () => {
