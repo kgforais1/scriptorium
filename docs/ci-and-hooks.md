@@ -40,7 +40,7 @@ pre-commit run --all-files --hook-stage pre-push   # basedpyright
 
 ## Required GitHub checks
 
-The default-branch ruleset requires every check below except `Rust coverage`. The four added on 2026-11-06 are `Rust (windows-latest)`, `Rust (macos-latest)`, `Lint & test (TypeScript)` and `Third-party licences`. The ruleset also has a `code_quality` rule (blocks on errors) and a `code_coverage` rule. Its `max_coverage_drop: 0` turns the drop threshold off, and no minimum line coverage is set, so the rule blocks nothing on coverage today. Coverage rules need GitHub Code Quality enabled and coverage data uploaded; this repo uploads none yet.
+The default-branch ruleset requires every check below except `Rust coverage`. The four added on 2026-11-06 are `Rust (windows-latest)`, `Rust (macos-latest)`, `Lint & test (TypeScript)` and `Third-party licences`. The ruleset also has a `code_quality` rule (blocks on errors) and a `code_coverage` rule with `max_coverage_drop: 0` and no minimum line coverage. GitHub's docs disagree on what 0 means for the drop: the UI guide says 0 disables a threshold, while the REST reference says a PR that lowers coverage by more than this amount is blocked, which at 0 would forbid any drop. Coverage rules apply only once GitHub Code Quality is enabled and coverage data is uploaded, and this repo uploads none yet. Check the behaviour on the first PR after that.
 
 - `Policy (file size, docs, backlog)`
 - `Lint & format`
