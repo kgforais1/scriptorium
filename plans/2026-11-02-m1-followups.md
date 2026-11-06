@@ -38,7 +38,7 @@ run on 2026-11-02. These items are the rest. Section links point at the archived
       config-only checklist rows.
 - [ ] Close ADR-0001's open items: WebGL2 on WebView2 and WebKitGTK, touch on real hardware,
       WKWebView frame rate, and an RSS sample.
-- [ ] Mark the `rust-cross` CI job required on Windows and macOS in the branch ruleset.
+- [x] Mark the `rust-cross` CI job required on Windows and macOS in the branch ruleset (done 2026-11-06, with `Lint & test (TypeScript)` and `Third-party licences`).
 - [ ] Decide single versus spread layout defaults.
 
 ### Hardening ([M0 review follow-ups](archive/completed/2026-08-23-m1-scan-viewer.md#follow-ups-from-m0-senior-reviews-2026-08-25))

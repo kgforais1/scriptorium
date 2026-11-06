@@ -69,7 +69,7 @@ Closed by [`2026-11-05-m05-harness-followups.md`](archive/completed/2026-11-05-m
 - [x] Python coverage gate: `fail_under = 46` (CI measured 48.2%) (**LC-L3**). Raise it as in-process tests land
 - [x] CodeQL via GitHub default setup (ruleset code scanning; not a workflow file)
 - [x] Dependabot: `.github/dependabot.yml` covers pip, npm, github-actions and cargo
-- [x] GitHub ruleset: nine required checks, including Semgrep. Adding `Lint & test (TypeScript)`, `Third-party licences` and the two `rust-cross` legs is proposed in the M0.5 plan
+- [x] GitHub ruleset: 13 required checks, including Semgrep. `Rust (windows-latest)`, `Rust (macos-latest)`, `Lint & test (TypeScript)` and `Third-party licences` were added on 2026-11-06
 - [x] Note: `cargo fmt` / `clippy` / `test` moved **into M0** (not deferred)
 - [x] **From M0 senior review:** S9: the archived M0 plan has a Completion evidence section, and the library-root line above is reworded. S10: already fixed (`pyproject.toml:4`, `docs/development.md:11`, `docs/book-format.md:22`); slug lockstep tests cover the triplicated regex. S11: ESLint is in CI and pre-commit, and `pnpm typecheck` checks both TS projects. `tsc -b` is declined because it emits a `vite.config.js` that shadows the `.ts` config. Prettier is declined because it would reformat most of `src/` for no rule ESLint lacks
 - [x] Add `cargo build` to CI Rust job (**LC-M2**) before relying on M1 Tauri commands

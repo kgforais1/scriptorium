@@ -7,7 +7,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 ## Next Up (keep 3–5; pointers only — not full checklists)
 
-- [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default, `rust-cross` ruleset
+- [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default
 - [Drop the openjpeg-sys patch](#unplanned--small) — when an `openjpeg-sys` release bundles OpenJPEG 2.5.4
 - [M1.5 PDF import](plans/2026-08-23-product-roadmap.md#m15--pdf-import) — next milestone; needs a plan
 
