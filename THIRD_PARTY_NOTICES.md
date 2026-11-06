@@ -1,6 +1,6 @@
 # Third-party notices
 
-Scriptorium statically links three C libraries into the app binary. This file lists each one with its bundled version, its upstream, and its licence text. It also records an advisory check made on 2026-11-01.
+Scriptorium statically links two C libraries into the app binary. This file lists each one with its bundled version, its upstream, and its licence text. It also records an advisory check made on 2026-11-01.
 
 The licences of the Rust crates and npm packages that Scriptorium depends on are not repeated here. Cargo and pnpm list them: run `cargo metadata` in `src-tauri/`, or `pnpm licenses list`. Versions below come from `src-tauri/Cargo.lock` and from the bundled C source in each crate.
 

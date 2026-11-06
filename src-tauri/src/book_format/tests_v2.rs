@@ -294,8 +294,15 @@ fn page_label_max_length_matches_schema_and_validators() {
     assert_eq!(page_label_max(1), PAGE_LABEL_MAX_LEN as u64);
     assert_eq!(page_label_max(2), PAGE_LABEL_MAX_LEN as u64);
 
-    let ok_label = "é".repeat(PAGE_LABEL_MAX_LEN);
+    // U+1F4D4 is one Unicode scalar, 4 UTF-8 bytes, and a UTF-16 surrogate pair.
+    // JSON Schema maxLength counts scalars. A UTF-16 count would reject 256 of these.
+    let scalar = "📖";
+    assert_eq!(scalar.chars().count(), 1);
+    assert_eq!(scalar.len(), 4);
+    assert_eq!(scalar.encode_utf16().count(), 2);
+    let ok_label = scalar.repeat(PAGE_LABEL_MAX_LEN);
     assert_eq!(ok_label.chars().count(), PAGE_LABEL_MAX_LEN);
+    assert_eq!(ok_label.encode_utf16().count(), PAGE_LABEL_MAX_LEN * 2);
 
     let mut v1_book = BookMeta::sample_v1();
     v1_book.pages[0].page_label = Some(ok_label.clone());
@@ -315,7 +322,7 @@ fn page_label_max_length_matches_schema_and_validators() {
         "v2 schema must accept 256-scalar label"
     );
 
-    let long = "é".repeat(PAGE_LABEL_MAX_LEN + 1);
+    let long = scalar.repeat(PAGE_LABEL_MAX_LEN + 1);
     v1_book.pages[0].page_label = Some(long.clone());
     assert_eq!(
         v1_book.validate(),

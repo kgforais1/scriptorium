@@ -1,6 +1,6 @@
 # Scriptorium — CI & hooks
 
-Last reviewed: 2026-11-02
+Last reviewed: 2026-11-05
 
 ## Recommendation (what runs where)
 
@@ -47,8 +47,8 @@ After the first green `CI` run, set default-branch ruleset required checks to:
 - `Tests & coverage`
 - `Secret scan (gitleaks)`
 - `SAST — Semgrep` (from Security workflow)
-- `Rust (src-tauri)` — **required from M0** once `src-tauri/` exists (`cargo fmt` / `clippy` / `test` / `check`, then `pnpm build` and `cargo build --locked --features tauri/custom-protocol`; exact job name must match `ci.yml`). Plain `cargo build` without that feature does not embed `frontendDist` on Tauri 2.12 (dev builds use `devUrl`), so the extra step fails when `dist/` is missing — the gap **LC-M2** called out after M0 review.
-- `Rust (windows-latest)` and `Rust (macos-latest)` — the `rust-cross` matrix (`clippy --all-targets`, `test`). Not required yet; make them required once they have been green on a few PRs
+- `Rust (src-tauri)` — **required from M0** once `src-tauri/` exists (`cargo fmt`, then `clippy` / `test` / `check` with `--locked`, then `pnpm build` and `cargo build --locked --features tauri/custom-protocol`; exact job name must match `ci.yml`). Plain `cargo build` without that feature does not embed `frontendDist` on Tauri 2.12 (dev builds use `devUrl`), so the extra step fails when `dist/` is missing — the gap **LC-M2** called out after M0 review.
+- `Rust (windows-latest)` and `Rust (macos-latest)` — the `rust-cross` matrix (`clippy --locked --all-targets`, `test --locked`). Not required yet; make them required once they have been green on a few PRs
 - `Type check (TypeScript)` — `pnpm install` + `pnpm typecheck` (app and config files)
 - `Lint & test (TypeScript)` — `pnpm install` + `pnpm lint` (ESLint) + `pnpm skin:check` (step "Skin CSS is current": the committed `src/styles/skin-<id>.css` matches `design/skins/<id>/tokens.json`; fix with `pnpm skin:css`) + `pnpm skin:lint` (step "Skin literals": no colour, font-family, radius, or filter literals in `src/features/reader/` CSS and TSX outside `engine/`) + `pnpm test:coverage` (Vitest, lines ≥ 80 on `src/lib/**`)
 - `Third-party licences` — `pnpm licenses:check` runs `scripts/gen-licenses.mjs --check`: `cargo about` (config `src-tauri/about.toml`) must accept the licence of every Rust crate the app ships (it skips crates used only as dev or build dependencies), and the committed `THIRD_PARTY_LICENSES.generated.md` must match. Fix with `pnpm licenses:gen` (needs the cargo-about version in `package.json` `config.cargoAboutVersion`, which CI also installs).

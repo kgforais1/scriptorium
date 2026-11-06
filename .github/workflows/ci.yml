@@ -214,13 +214,13 @@ jobs:
         run: cargo fmt --check
 
       - name: cargo clippy -- -D warnings
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --locked -- -D warnings
 
       - name: cargo test
-        run: cargo test
+        run: cargo test --locked
 
       - name: cargo check
-        run: cargo check
+        run: cargo check --locked
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -279,10 +279,10 @@ jobs:
           restore-keys: cargo-${{ runner.os }}-
 
       - name: cargo clippy --all-targets -- -D warnings
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: cargo test
-        run: cargo test
+        run: cargo test --locked
 
   typecheck-ts:
     name: Type check (TypeScript)

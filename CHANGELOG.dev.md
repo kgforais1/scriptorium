@@ -6,12 +6,12 @@ Internal / developer-facing changes that do not belong in the public
 ## [Unreleased]
 
 ### Added
-- `tests/test_tauri_csp.py` locks the production CSP object, empty runtime asset scope, and default capability permissions. `img-src` and `connect-src` must equal the approved source sets, and a source that only `devCsp` allows cannot appear on the production directive. A10–A12 were already covered in Rust tests; the release-build console CSP check remains manual (`docs/manual-test-m1.md` section 8).
+- `tests/test_tauri_csp.py` locks the production CSP object, empty runtime asset scope, and default capability permissions. The production directive names must be exactly the approved set, and each source list must equal that directive's approved sources. Permissions are the union of every capability file Tauri would apply to the `main` window (`windows` or `webviews` glob), and that union must be `core:default` and `dialog:allow-open`. A10–A12 were already covered in Rust tests; the release-build console CSP check remains manual (`docs/manual-test-m1.md` section 8). The `pageLabel` length test uses U+1F4D4 (`📖`), one scalar and two UTF-16 units, so a UTF-16 count cannot pass 256.
 
 ### Changed
 - `jsonschema` is built with `default-features = false` (no remote schema fetch stack); `ci/bundled-c.toml`, `THIRD_PARTY_NOTICES.md`, and the generated licence file no longer list AWS-LC.
 - `PAGE_LABEL_MAX_LEN` (256 Unicode scalars) is enforced in `PageEntry::validate`, both book-format schemas, and the fixture generator; `tests_v2.rs` and `tests/test_generate_fixture_book.py` lock the constant to schema `pageLabel.maxLength`.
-- The `Rust (src-tauri)` CI job runs `pnpm build`, then `cargo build --locked --features tauri/custom-protocol`, so the production frontend must embed from the committed lockfile (a Tauri 2.12 debug build without that feature does not require `../dist`).
+- The `Rust (src-tauri)` CI job runs `pnpm build`, then `cargo build --locked --features tauri/custom-protocol`, so the production frontend must embed from the committed lockfile (a Tauri 2.12 debug build without that feature does not require `../dist`). `cargo clippy`, `cargo test`, and `cargo check` on that job and on `rust-cross` also pass `--locked`. `cargo fmt` does not.
 - macOS bundles are ad-hoc signed (`bundle.macOS.signingIdentity: "-"`), so `codesign --verify --deep --strict` passes and Gatekeeper offers **Open Anyway** instead of reporting the app as damaged. The v0.2.0 DMG was rebuilt this way.
 - `pnpm-workspace.yaml` overrides `minimatch` to 11 (Dependabot #23).
 - `openjpeg-sys` is patched (`[patch.crates-io]`) to a fork commit bundling OpenJPEG 2.5.4. The CVE-2025-54874 exception is removed. `check_bundled_c_cves.py` reads git-patched crates from `$CARGO_HOME/git/checkouts`, accepting only a checkout whose `.git/HEAD` is the locked commit.
