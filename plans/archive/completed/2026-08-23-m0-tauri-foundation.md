@@ -151,7 +151,7 @@ book-format on EXIF/XMP: M1 copies bytes as-is; stripping/policy deferred but do
 ## Completion evidence (2026-11-05)
 
 Added after archive for S9; the checklist above is left as written. Every item shipped in
-[#8](https://github.com/kgforais1/scriptorium/pull/8) unless noted.
+[#8](https://github.com/kgforais1/scriptorium/pull/8) unless the row cites a later commit.
 
 | Item | Evidence |
 |---|---|
