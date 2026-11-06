@@ -7,8 +7,13 @@ the approved directive names, and each source list must equal the approved set
 capability file Tauri 2.12 would apply to the ``main`` window: a ``windows`` or
 ``webviews`` glob that matches ``main``. An omitted ``windows`` key deserializes
 to an empty list and does not grant access by itself (tauri 2.12
-``ipc::authority::RuntimeAuthority::resolve_access``). This does not prove the
-webview enforces CSP at runtime; see docs/manual-test-m1.md section 8.
+``ipc::authority::RuntimeAuthority::resolve_access``). Capability files other
+than ``*.json``, and ``app.security.capabilities`` entries that are inline
+objects or that name a file this test does not read, fail until the test is
+extended. Tauri 2.12 otherwise loads ``json`` and ``toml`` (and ``json5`` only
+with the ``config-json5`` feature, which this lockfile does not enable) and
+treats a string in that list as a capability identifier. This does not prove
+the webview enforces CSP at runtime; see docs/manual-test-m1.md section 8.
 
 Run:
   python -m pytest tests/test_tauri_csp.py -q
@@ -51,6 +56,7 @@ _PRODUCTION_SOURCES: dict[str, list[str]] = {
 }
 
 _MAIN_WINDOW_PERMISSIONS = {"core:default", "dialog:allow-open"}
+_EXTEND_MSG = "extend tests/test_tauri_csp.py before adding this capability source"
 
 
 def _load_json(path: Path) -> Any:
@@ -107,11 +113,47 @@ def _permission_id(entry: Any, field: str) -> str:
     raise AssertionError(field)
 
 
-def _main_window_permissions() -> set[str]:
+def _json_capability_files() -> list[Path]:
+    """Return every ``*.json`` file under capabilities, or fail on any other file."""
+    files = [path for path in CAPABILITIES_DIR.rglob("*") if path.is_file()]
+    other = sorted(path.relative_to(ROOT).as_posix() for path in files if path.suffix != ".json")
+    assert not other, f"{other}: {_EXTEND_MSG}"
+    paths = sorted(path for path in files if path.suffix == ".json")
+    assert paths, "src-tauri/capabilities"
+    return paths
+
+
+def _capability_identifiers(paths: list[Path]) -> set[str]:
+    """Return the identifier of each JSON capability object this test reads."""
+    identifiers: set[str] = set()
+    for path in paths:
+        field = path.relative_to(ROOT).as_posix()
+        capability = _load_json(path)
+        assert isinstance(capability, dict), f"{field}: {_EXTEND_MSG}"
+        identifier = capability.get("identifier")
+        assert isinstance(identifier, str), f"{field}: {_EXTEND_MSG}"
+        assert identifier, f"{field}: {_EXTEND_MSG}"
+        identifiers.add(identifier)
+    return identifiers
+
+
+def _assert_config_capabilities(security: Any, identifiers: set[str]) -> None:
+    """Fail unless ``app.security.capabilities`` is absent or names JSON files already read.
+
+    A string is a capability identifier. An object is an inline capability.
+    """
+    if "capabilities" not in security:
+        return
+    entries = security["capabilities"]
+    assert isinstance(entries, list), f"app.security.capabilities: {_EXTEND_MSG}"
+    for entry in entries:
+        assert isinstance(entry, str), f"app.security.capabilities: {_EXTEND_MSG}"
+        assert entry in identifiers, f"app.security.capabilities: {_EXTEND_MSG}"
+
+
+def _main_window_permissions(paths: list[Path]) -> set[str]:
     """Union of permissions from every capability file that applies to ``main``."""
     granted: set[str] = set()
-    paths = sorted(CAPABILITIES_DIR.glob("*.json"))
-    assert paths, "src-tauri/capabilities"
     for path in paths:
         field = f"capabilities/{path.name}"
         capability = _load_json(path)
@@ -153,4 +195,6 @@ def test_tauri_production_csp_and_capabilities() -> None:
     _assert_exact("app.security.assetProtocol.enable", asset_protocol["enable"], True)
     _assert_exact("app.security.assetProtocol.scope", asset_protocol["scope"], [])
 
-    assert _main_window_permissions() == _MAIN_WINDOW_PERMISSIONS, "capabilities"
+    capability_files = _json_capability_files()
+    _assert_config_capabilities(security, _capability_identifiers(capability_files))
+    assert _main_window_permissions(capability_files) == _MAIN_WINDOW_PERMISSIONS, "capabilities"
