@@ -369,9 +369,33 @@ describe("PageTextures", () => {
     });
 
     it("lets a newer resize start rebuilds without waiting for aborted ones to settle", async () => {
-      // Rebuild decodes ignore their abort signal and never settle, like a slow main-thread decode.
+      // Rebuild decodes ignore their abort signal, like a main-thread decode that cannot stop.
+      // Each is held until the test settles it. `counted` tracks rebuilds still holding a place
+      // (not aborted, not settled); aborted ones may keep running, which is the intended trade-off.
       let tiny = true;
-      const decode: PageDecoder = (_source, target) => (tiny ? Promise.resolve(composed(target)) : new Promise<DecodedPage>(() => {}));
+      const held: Array<{ signal: AbortSignal; settle: () => void }> = [];
+      let counted = 0;
+      let peakCounted = 0;
+      const decode: PageDecoder = (_source, target, signal) => {
+        if (tiny) return Promise.resolve(composed(target));
+        counted++;
+        peakCounted = Math.max(peakCounted, counted);
+        let holding = true;
+        const end = () => {
+          if (holding) counted--;
+          holding = false;
+        };
+        signal.addEventListener("abort", end, { once: true });
+        return new Promise<DecodedPage>((resolve) =>
+          held.push({
+            signal,
+            settle: () => {
+              end();
+              resolve(composed(target));
+            },
+          }),
+        );
+      };
       const t = setup({ decode });
       await loadTiny(t, [1, 2, 3, 4]);
       tiny = false;
@@ -380,7 +404,18 @@ describe("PageTextures", () => {
       const afterFirst = t.decodeSpy.mock.calls.length;
       t.size.texH = 1600;
       t.tex.refresh();
+      // The aborted 800 rebuilds gave their places back, so the 1600 ones start at once.
       expect(t.decodeSpy.mock.calls.length).toBe(afterFirst + MAX_REBUILDS);
+      // Settling the aborted ones must not free a second place each (a double release).
+      for (const h of held.filter((x) => x.signal.aborted)) h.settle();
+      await flush();
+      expect(t.decodeSpy.mock.calls.length).toBe(afterFirst + MAX_REBUILDS);
+      // Queued rebuilds start only as a current one settles, one for one.
+      held.find((x) => !x.signal.aborted)?.settle();
+      await flush();
+      expect(t.decodeSpy.mock.calls.length).toBe(afterFirst + MAX_REBUILDS + 1);
+      // Tracked rebuild places never exceed the cap.
+      expect(peakCounted).toBeLessThanOrEqual(MAX_REBUILDS);
     });
 
     it("tells the host which slot loaded", async () => {
