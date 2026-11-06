@@ -20,6 +20,7 @@ Last reviewed: 2026-11-05
 | **Audit (pnpm + cargo)** | — | — | ✅ required (`Dependency audit`; informational findings pass, audit and tooling failures fail closed) | ✅ weekly re-run (`Dependency audit (weekly)`) |
 | **Tests + coverage** | — | — | ✅ pytest-cov (`fail_under` 46) | — |
 | **Tests + coverage (TypeScript)** | — | — | ✅ `pnpm test:coverage` (Vitest; lines ≥ 80 on `src/lib/**`) | — |
+| **Rust coverage** | — | — | ✅ `cargo llvm-cov` (report only; job summary + `rust-lcov` artifact) | — |
 | **SAST** | — | — | — | ✅ Semgrep on PR (whole repo; templates/scratch in `.semgrepignore`) |
 | **SonarQube (local, opt-in)** | `sonar-freshness` (no-op unless `SONAR_FRESHNESS_GATE=1`) | `sonar-freshness-push` (same opt-in) | — never | — never |
 | **CodeQL** | — | — | — | ✅ already required: GitHub default setup, ruleset code scanning (not a job in `security.yml`) |

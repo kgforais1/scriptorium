@@ -247,6 +247,76 @@ jobs:
       - name: cargo build (embed frontendDist; LC-M2)
         run: cargo build --locked --features tauri/custom-protocol
 
+  rust-coverage:
+    # Report only: no floor and not a required check. Linux skips the macOS sips
+    # fixtures, so ingest coverage reads low here.
+    name: Rust coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Tauri Linux system deps
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
+        with:
+          packages: >-
+            libwebkit2gtk-4.1-dev
+            libxdo-dev
+            libssl-dev
+            libayatana-appindicator3-dev
+            librsvg2-dev
+          version: "1"
+
+      - name: Install Rust toolchain
+        run: |
+          rustup show
+          rustup component add llvm-tools-preview
+
+      # Own key: instrumented artifacts live in target/llvm-cov-target and must not
+      # land in the rust job's cache.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/index
+            ~/.cargo/git/db
+            src-tauri/target/llvm-cov-target
+          key: cargo-llvm-cov-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: cargo-llvm-cov-${{ runner.os }}-
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cargo-llvm-cov-bin
+        with:
+          path: ~/.cargo/bin/cargo-llvm-cov
+          key: cargo-llvm-cov-bin-${{ runner.os }}-0.9.1
+
+      - name: Install cargo-llvm-cov
+        if: steps.cargo-llvm-cov-bin.outputs.cache-hit != 'true'
+        run: cargo install cargo-llvm-cov --locked --version 0.9.1
+
+      - name: cargo llvm-cov (summary)
+        # Explicit bash adds -o pipefail, so a failing test still fails through tee.
+        shell: bash
+        run: |
+          {
+            echo '### Rust coverage (report only)'
+            echo '```text'
+            cargo llvm-cov --locked
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: lcov report
+        run: cargo llvm-cov report --lcov --output-path lcov.info
+
+      - name: Upload lcov artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-lcov
+          path: src-tauri/lcov.info
+          retention-days: 14
+
   rust-cross:
     # Windows and macOS run the crate's tests too. Windows catches path and case-folding
     # behaviour; macOS runs the sips-based ingest fixtures (CMYK with a profile, JPEG 2000)
