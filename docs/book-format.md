@@ -72,7 +72,7 @@ Every v1 field below is unchanged in v2. v2 adds the optional `sources[]` and pa
 | `height` | number | yes | image height in px (`minimum: 1`) |
 | `byteSize` | number | yes | bytes on disk (`exclusiveMinimum: 0`) |
 | `sha256` | string | yes | hex digest of the page file |
-| `pageLabel` | string | no | optional human label |
+| `pageLabel` | string | no | optional human label (`maxLength: 256`) |
 | `storage` | string | no | `"copied"` default; `"referenced"` reserved, not implemented in M1 |
 | `source` | object | no (v2) | `ref` (a `sources[].id`) and, for a multi-frame source, a 0-based `frame` |
 
@@ -154,6 +154,7 @@ an equivalent):
 | `pages[].file` (cross-page) | Reject two pages whose `file` paths collide case-insensitively (`pages/A.png` vs `pages/a.png`) — required for Windows/macOS default volumes; not expressible in JSON Schema. |
 | `pages[].width` / `height` | Reject values `< 1` (degenerate images). |
 | `pages[].byteSize` | Reject `0` (empty page files). |
+| `pages[].pageLabel` | When present, MUST be at most 256 Unicode characters. |
 | `formatVersion` | MUST be `1` or `2`; any other value is `UnsupportedFormatVersion`. |
 | `sources[]` / `source` (v2) | See [Originals](#originals-formatversion-2). |
 

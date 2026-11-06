@@ -1,6 +1,6 @@
 # Plans
 
-Last reviewed: 2026-10-28
+Last reviewed: 2026-11-05
 
 Implementation plans for plan-driven / multi-agent work. Policy:
 [`policies/plans-and-todos.md`](../policies/plans-and-todos.md). Template:
@@ -23,7 +23,8 @@ Do **not** delete archived plans. Move them; do not rewrite history in place.
 | Plan | Role |
 |---|---|
 | [`2026-08-23-product-roadmap.md`](2026-08-23-product-roadmap.md) | Product roadmap M0–M8 (stays active) |
-| [`2026-11-02-m1-followups.md`](2026-11-02-m1-followups.md) | Open M1 checks after the 0.2.0 release |
+| [`2026-11-02-m1-followups.md`](2026-11-02-m1-followups.md) | Manual and platform M1 checks after the 0.2.0 release |
+| [`2026-11-05-m1-hardening.md`](2026-11-05-m1-hardening.md) | CI embed build, validation locks, asset-protocol verdict, jsonschema trim |
 
 Completed: [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md),
 [`archive/completed/2026-08-23-m1-scan-viewer.md`](archive/completed/2026-08-23-m1-scan-viewer.md),

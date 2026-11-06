@@ -31,8 +31,9 @@ DEFAULT_SEED = 20260824
 FIXTURES_ROOT = Path("tmp/fixtures")
 PAGE_WIDTH = 800
 PAGE_HEIGHT = 1100
-# Keep in lockstep with docs/book-format.v2.schema.json (and Rust book_format constants).
+# Keep in lockstep with docs/book-format.v1.schema.json, v2, and Rust book_format constants.
 TITLE_MAX_LEN = 4096
+PAGE_LABEL_MAX_LEN = 256
 TEXT_FIELD_MAX_LEN = 8192  # rights + attribution (Rust TEXT_FIELD_MAX_LEN)
 PAGES_MAX_ITEMS = 100_000
 BOOK_ID_RE = re.compile(

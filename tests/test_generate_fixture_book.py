@@ -229,17 +229,28 @@ class FixtureBookTests(unittest.TestCase):
             )
 
     def test_book_id_pattern_matches_schema(self) -> None:
-        schema = json.loads((ROOT / "docs" / "book-format.v2.schema.json").read_text())
-        pattern = schema["properties"]["id"]["pattern"]
+        v1_schema = json.loads((ROOT / "docs" / "book-format.v1.schema.json").read_text())
+        v2_schema = json.loads((ROOT / "docs" / "book-format.v2.schema.json").read_text())
+        pattern = v2_schema["properties"]["id"]["pattern"]
         self.assertEqual(
             gen.BOOK_ID_RE.pattern,
             pattern,
             "Python BOOK_ID_RE must match docs/book-format.v2.schema.json",
         )
-        self.assertEqual(gen.TITLE_MAX_LEN, schema["properties"]["title"]["maxLength"])
-        self.assertEqual(gen.TEXT_FIELD_MAX_LEN, schema["properties"]["rights"]["maxLength"])
-        self.assertEqual(gen.TEXT_FIELD_MAX_LEN, schema["properties"]["attribution"]["maxLength"])
-        self.assertEqual(gen.PAGES_MAX_ITEMS, schema["properties"]["pages"]["maxItems"])
+        self.assertEqual(gen.TITLE_MAX_LEN, v2_schema["properties"]["title"]["maxLength"])
+        self.assertEqual(gen.TEXT_FIELD_MAX_LEN, v2_schema["properties"]["rights"]["maxLength"])
+        self.assertEqual(
+            gen.TEXT_FIELD_MAX_LEN, v2_schema["properties"]["attribution"]["maxLength"]
+        )
+        self.assertEqual(gen.PAGES_MAX_ITEMS, v2_schema["properties"]["pages"]["maxItems"])
+        self.assertEqual(
+            gen.PAGE_LABEL_MAX_LEN,
+            v1_schema["$defs"]["pageEntry"]["properties"]["pageLabel"]["maxLength"],
+        )
+        self.assertEqual(
+            gen.PAGE_LABEL_MAX_LEN,
+            v2_schema["$defs"]["pageEntry"]["properties"]["pageLabel"]["maxLength"],
+        )
 
     def test_build_rejects_id_with_trailing_newline(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

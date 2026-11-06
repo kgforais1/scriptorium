@@ -30,6 +30,8 @@ const WINDOWS_RESERVED_STEMS: &[&str] = &[
 
 /// Max character length for `title` (matches schema `maxLength`; Unicode scalar count).
 pub const TITLE_MAX_LEN: usize = 4096;
+/// Max character length for optional `pageLabel` (matches both schemas; Unicode scalar count).
+pub const PAGE_LABEL_MAX_LEN: usize = 256;
 /// Max character length for `rights` / `attribution`.
 pub const TEXT_FIELD_MAX_LEN: usize = 8192;
 /// Max number of pages in a package (matches schema `maxItems`).
@@ -142,7 +144,7 @@ pub enum BookMetaError {
         /// Allowed length.
         max: usize,
     },
-    /// `rights` or `attribution` exceeds the schema max length.
+    /// `rights`, `attribution`, or `pageLabel` exceeds the schema max length.
     TextFieldTooLong {
         /// Name of the field.
         field: &'static str,
@@ -294,7 +296,8 @@ pub struct PageEntry {
 }
 
 impl PageEntry {
-    /// Validate path safety, dimensions, byte size, and checksum shape for this page.
+    /// Validate path safety, dimensions, byte size, checksum shape, and
+    /// optional `pageLabel` length (Unicode scalars) for this page.
     pub fn validate(&self) -> Result<(), BookMetaError> {
         validate_page_file(self.index, &self.file)?;
         if self.width < 1 || self.height < 1 {
@@ -312,6 +315,16 @@ impl PageEntry {
                 index: self.index,
                 sha256: self.sha256.clone(),
             });
+        }
+        if let Some(label) = &self.page_label {
+            let len = label.chars().count();
+            if len > PAGE_LABEL_MAX_LEN {
+                return Err(BookMetaError::TextFieldTooLong {
+                    field: "pageLabel",
+                    len,
+                    max: PAGE_LABEL_MAX_LEN,
+                });
+            }
         }
         Ok(())
     }
