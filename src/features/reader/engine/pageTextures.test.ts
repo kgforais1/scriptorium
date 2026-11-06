@@ -368,6 +368,21 @@ describe("PageTextures", () => {
       expect(t.decodeSpy.mock.calls.length).toBe(before + MAX_REBUILDS);
     });
 
+    it("lets a newer resize start rebuilds without waiting for aborted ones to settle", async () => {
+      // Rebuild decodes ignore their abort signal and never settle, like a slow main-thread decode.
+      let tiny = true;
+      const decode: PageDecoder = (_source, target) => (tiny ? Promise.resolve(composed(target)) : new Promise<DecodedPage>(() => {}));
+      const t = setup({ decode });
+      await loadTiny(t, [1, 2, 3, 4]);
+      tiny = false;
+      t.size.texH = 800;
+      t.tex.refresh();
+      const afterFirst = t.decodeSpy.mock.calls.length;
+      t.size.texH = 1600;
+      t.tex.refresh();
+      expect(t.decodeSpy.mock.calls.length).toBe(afterFirst + MAX_REBUILDS);
+    });
+
     it("tells the host which slot loaded", async () => {
       const t = setup();
       t.tex.load(3);

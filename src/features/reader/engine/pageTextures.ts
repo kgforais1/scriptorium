@@ -11,7 +11,11 @@ import type { Rgb } from "./scene";
 /** Textures kept around the open spread. */
 export const TEX_CACHE = 12;
 
-/** At most this many texture rebuilds decode at once after a resize; the rest wait their turn. */
+/**
+ * At most this many texture rebuilds are counted at once after a resize; the rest wait their turn.
+ * An aborted rebuild gives its place back at once, so a decode that ignores its abort can overlap
+ * the new ones briefly.
+ */
 export const MAX_REBUILDS = 2;
 
 /** Creates and frees textures. The GL backend (`glBackend.ts`) is the real one. */
@@ -47,7 +51,9 @@ export interface PageTextureHost {
 type Cached<T> = { tex: T; texH: number };
 // A decode in flight: its own controller (aborted with its generation, or alone by a refresh), the
 // height it will compose to, and a promise that settles when the attempt is over, however it ended.
-type Loading = { ac: AbortController; texH: number; done: Promise<void> };
+// `hold.active` is true while a rebuild counts against MAX_REBUILDS; a refresh that aborts it
+// releases the hold at once, so a newer resize need not wait for the aborted decode to settle.
+type Loading = { ac: AbortController; texH: number; done: Promise<void>; hold: { active: boolean } };
 
 /** LRU of page textures keyed by slot. */
 export class PageTextures<T> {
@@ -114,6 +120,7 @@ export class PageTextures<T> {
       if (!needsReload(l.texH, target)) continue;
       l.ac.abort();
       this.loading.delete(slot);
+      this.release(l.hold);
     }
     this.rebuildQueue = stale;
     this.pumpRebuilds();
@@ -142,6 +149,7 @@ export class PageTextures<T> {
     const signal = ac.signal;
     const texH = this.host.texHeight();
     const target: ComposeTarget = { boxAspect: this.host.boxAspect, texH, paper: this.paperColor };
+    const hold = { active: replacing };
     if (replacing) this.rebuilding++;
     const done = this.decodeAsync(source, target, signal)
       .then((page) => {
@@ -156,12 +164,17 @@ export class PageTextures<T> {
         generation.removeEventListener("abort", onRestart);
         // A restart may have begun a newer load of this slot; only clear our own entry.
         if (this.loading.get(slot)?.ac === ac) this.loading.delete(slot);
-        if (replacing) {
-          this.rebuilding--;
-          this.pumpRebuilds();
-        }
+        if (this.release(hold)) this.pumpRebuilds();
       });
-    this.loading.set(slot, { ac, texH, done });
+    this.loading.set(slot, { ac, texH, done, hold });
+  }
+
+  // Gives back a rebuild's place under MAX_REBUILDS once. Returns whether it held one.
+  private release(hold: { active: boolean }): boolean {
+    if (!hold.active) return false;
+    hold.active = false;
+    this.rebuilding--;
+    return true;
   }
 
   // A decoder that throws before returning its promise becomes a rejection, so the cleanup in
