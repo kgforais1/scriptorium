@@ -73,7 +73,7 @@ pub fn inspect_folder(path: &Path, library: &Path) -> Result<FolderInfo, BookErr
     let name = folder_name(path);
     Ok(FolderInfo::Scans {
         files: opened.len(),
-        frames: total_frames(&opened),
+        frames: total_frames(&opened)?,
         estimated_bytes,
         suggested_id: suggest_book_id(&name, library)?,
         suggested_title: name,

@@ -72,9 +72,9 @@ pub(super) fn load_library(dir: &Path) -> Result<Pdfium, String> {
         .map_err(|err| format!("{}: {err}", path.display()))
 }
 
-/// Whether the library is loaded. It does not try to load it.
+/// Whether the library is loaded. Outside tests it does not try to load it.
 pub fn is_available() -> bool {
-    matches!(LIBRARY.get(), Some(Ok(_)))
+    library().is_ok()
 }
 
 /// Where tests look for the library: `PDFIUM_DYNAMIC_LIB_PATH`, else the fetch script's

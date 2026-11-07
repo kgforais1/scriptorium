@@ -4,10 +4,11 @@
 //! renamed into place, so a crash never leaves a half-written book under its real name.
 
 use super::load::parse_meta;
+use super::ocr::OcrLog;
 use super::{io_error, now_rfc3339, sha256_bytes, sort, sweep, BookError};
 use crate::book_format::{
     validate_book_id, BookMeta, PageEntry, PageSource, RenderMode, SourceEntry, StorageMode,
-    CURRENT_FORMAT_VERSION,
+    CURRENT_FORMAT_VERSION, PAGES_MAX_ITEMS,
 };
 use crate::ingest::convert::{self, DisplayImage, InputKind, Inspection};
 use std::path::{Path, PathBuf};
@@ -129,11 +130,15 @@ fn unreadable(file: &Path, err: convert::ConvertError) -> BookError {
             file: file.to_path_buf(),
             reason: "not a supported input format".into(),
         },
+        convert::ConvertError::EncryptedPdf => BookError::EncryptedPdf {
+            file: file.to_path_buf(),
+        },
+        convert::ConvertError::PdfiumUnavailable(reason) => BookError::PdfiumUnavailable { reason },
     }
 }
 
 /// Zero-padded page or source number, at least four digits.
-fn numbered(i: usize, count: usize) -> String {
+pub(super) fn numbered(i: usize, count: usize) -> String {
     let width = count.saturating_sub(1).to_string().len().max(4);
     format!("{i:0width$}")
 }
@@ -176,6 +181,13 @@ impl Drop for TempDir {
 /// heavily compressed sources whose re-encode grows.
 const DISPLAY_FRAME_ESTIMATE: u64 = 6 * 1024 * 1024;
 
+/// A PDF page is budgeted at 12 MB: a noisy 12 MP page at q92 can pass 6 MB, and a vector
+/// PDF's bytes per page say nothing about the rasters it holds.
+const PDF_FRAME_ESTIMATE: u64 = 12 * 1024 * 1024;
+
+/// Room for one PDF page's `ocr/` text file.
+const PDF_TEXT_ESTIMATE: u64 = 64 * 1024;
+
 /// Bytes ingest will write for one input: the file itself when copied as-is, or the kept
 /// original plus one display copy per frame when converted.
 pub(crate) fn estimate_bytes(size: u64, info: &Inspection) -> u64 {
@@ -183,13 +195,25 @@ pub(crate) fn estimate_bytes(size: u64, info: &Inspection) -> u64 {
         return size;
     }
     let frames = u64::from(info.frames.max(1));
+    if info.kind == InputKind::Pdf {
+        let per_frame = PDF_FRAME_ESTIMATE + PDF_TEXT_ESTIMATE;
+        return size.saturating_add(frames.saturating_mul(per_frame));
+    }
     size.saturating_add(frames.saturating_mul((size / frames).max(DISPLAY_FRAME_ESTIMATE)))
 }
 
 /// The number of pages `opened` produces: one per frame. Create's progress total and
-/// `inspect_folder`'s `frames` both use this.
-pub(super) fn total_frames(opened: &[(&Path, Inspection)]) -> u32 {
-    opened.iter().map(|(_, info)| info.frames).sum()
+/// `inspect_folder`'s `frames` both use this. More pages than a book can hold is
+/// `TooManyPages`, so the error comes before any page is rendered.
+pub(super) fn total_frames(opened: &[(&Path, Inspection)]) -> Result<u32, BookError> {
+    let total: u64 = opened.iter().map(|(_, info)| u64::from(info.frames)).sum();
+    match u32::try_from(total) {
+        Ok(pages) if pages as usize <= PAGES_MAX_ITEMS => Ok(pages),
+        _ => Err(BookError::TooManyPages {
+            pages: total,
+            max: PAGES_MAX_ITEMS as u32,
+        }),
+    }
 }
 
 /// Each input path with its inspection, in page order.
@@ -221,6 +245,7 @@ struct Builder {
     originals_count: usize,
     pages: Vec<PageEntry>,
     sources: Vec<SourceEntry>,
+    ocr: OcrLog,
 }
 
 impl Builder {
@@ -228,6 +253,7 @@ impl Builder {
         library: &Path,
         id: &str,
         opened: &[(&Path, Inspection)],
+        total: u32,
     ) -> Result<(Self, TempDir), BookError> {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -252,10 +278,11 @@ impl Builder {
         }
         let builder = Self {
             tmp,
-            page_count: total_frames(opened) as usize,
+            page_count: total as usize,
             originals_count: opened.iter().filter(|(_, i)| i.needs_conversion).count(),
             pages: Vec::new(),
             sources: Vec::new(),
+            ocr: OcrLog::default(),
         };
         Ok((builder, guard))
     }
@@ -341,6 +368,11 @@ impl Builder {
                 frame: (info.frames > 1).then_some(frame),
             });
             self.add_page(&source, &display, page_source)?;
+            if let Some(text) = source.page_text(frame) {
+                let index = self.pages.len() - 1;
+                self.ocr
+                    .add_page(&self.tmp, index, self.page_count, &text)?;
+            }
             on_frame(self.pages.len() as u32, self.page_count as u32);
         }
         Ok(())
@@ -366,6 +398,7 @@ impl Builder {
             reason: e.to_string(),
         })?;
         parse_meta(&text)?;
+        self.ocr.finish(&self.tmp)?;
         for (name, body) in [
             ("meta.json", text + "\n"),
             ("annotations.json", "[]\n".to_string()),
@@ -432,9 +465,10 @@ pub fn create_book_from_folder_with(
 
     let inputs = ordered_inputs(folder)?;
     let (opened, estimated) = inspect_all(&inputs)?;
+    let total = total_frames(&opened)?;
     check_space(library, estimated)?;
 
-    let (mut builder, mut guard) = Builder::new(library, &opts.id, &opened)?;
+    let (mut builder, mut guard) = Builder::new(library, &opts.id, &opened, total)?;
     for (path, info) in &opened {
         builder.add_input(path, info, &mut on_frame)?;
     }

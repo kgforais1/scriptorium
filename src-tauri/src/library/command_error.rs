@@ -28,6 +28,9 @@ fn variant_name(err: &BookError) -> &'static str {
         BookError::InvalidPackage { .. } => "InvalidPackage",
         BookError::ChecksumMismatch { .. } => "ChecksumMismatch",
         BookError::PermissionDenied { .. } => "PermissionDenied",
+        BookError::TooManyPages { .. } => "TooManyPages",
+        BookError::EncryptedPdf { .. } => "EncryptedPdf",
+        BookError::PdfiumUnavailable { .. } => "PdfiumUnavailable",
     }
 }
 
@@ -88,7 +91,15 @@ mod tests {
             BookError::ChecksumMismatch {
                 file: "pages/0001.jpg".into(),
             },
-            BookError::PermissionDenied { path: p },
+            BookError::PermissionDenied { path: p.clone() },
+            BookError::TooManyPages {
+                pages: 100_001,
+                max: 100_000,
+            },
+            BookError::EncryptedPdf { file: p },
+            BookError::PdfiumUnavailable {
+                reason: "missing".into(),
+            },
         ]
     }
 
@@ -127,7 +138,7 @@ mod tests {
             assert_eq!(mapped.message, err.to_string());
             assert!(seen.insert(mapped.kind), "duplicate kind");
         }
-        assert_eq!(seen.len(), 10);
+        assert_eq!(seen.len(), 13);
     }
 
     #[test]
