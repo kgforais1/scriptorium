@@ -208,6 +208,10 @@ tmp/*
 !tmp/README.md
 temp/
 
+# ── Bundled pdfium library (fetched by scripts/fetch_pdfium.sh) ──────────────
+src-tauri/pdfium/
+.pdfium-archives/
+
 # ── Pre-commit ───────────────────────────────────────────────────────────────
 # (pre-commit itself is tracked; ignore its local cache)
 .pre-commit-cache/

@@ -4,6 +4,9 @@
 mod color;
 pub mod convert;
 mod decode;
+pub mod pdf;
 
 #[cfg(test)]
 mod convert_tests;
+#[cfg(test)]
+mod pdf_tests;

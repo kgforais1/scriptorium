@@ -180,6 +180,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Cache pdfium archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pdfium-archives
+          # The script pins the release and the hashes, so its hash is the version key.
+          key: pdfium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch_pdfium.sh') }}
+
+      - name: Fetch pdfium
+        shell: bash
+        env:
+          # Relative, because Git Bash on Windows mishandles a backslash workspace path.
+          PDFIUM_ARCHIVE_CACHE: ../.pdfium-archives
+        run: |
+          ../scripts/fetch_pdfium.sh
+          echo "PDFIUM_DYNAMIC_LIB_PATH=${{ github.workspace }}/src-tauri/pdfium" >> "$GITHUB_ENV"
+
       - name: Install Tauri Linux system deps
         # https://v2.tauri.app/start/prerequisites/#linux
         # Cached .debs skip the slow apt download (often 2-6 min). build-essential,
@@ -263,6 +279,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Cache pdfium archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pdfium-archives
+          # The script pins the release and the hashes, so its hash is the version key.
+          key: pdfium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch_pdfium.sh') }}
+
+      - name: Fetch pdfium
+        shell: bash
+        env:
+          # Relative, because Git Bash on Windows mishandles a backslash workspace path.
+          PDFIUM_ARCHIVE_CACHE: ../.pdfium-archives
+        run: |
+          ../scripts/fetch_pdfium.sh
+          echo "PDFIUM_DYNAMIC_LIB_PATH=${{ github.workspace }}/src-tauri/pdfium" >> "$GITHUB_ENV"
+
       - name: Install Tauri Linux system deps
         uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
         with:
@@ -342,6 +374,22 @@ jobs:
         working-directory: src-tauri
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Cache pdfium archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pdfium-archives
+          # The script pins the release and the hashes, so its hash is the version key.
+          key: pdfium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch_pdfium.sh') }}
+
+      - name: Fetch pdfium
+        shell: bash
+        env:
+          # Relative, because Git Bash on Windows mishandles a backslash workspace path.
+          PDFIUM_ARCHIVE_CACHE: ../.pdfium-archives
+        run: |
+          ../scripts/fetch_pdfium.sh
+          echo "PDFIUM_DYNAMIC_LIB_PATH=${{ github.workspace }}/src-tauri/pdfium" >> "$GITHUB_ENV"
 
       - name: Install Rust toolchain
         run: |

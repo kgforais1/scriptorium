@@ -44,6 +44,13 @@ The generated `meta.json` conforms to formatVersion 1 of the book package spec
 `byteSize` are computed from the written PNGs, and page 0 carries an optional
 `pageLabel` to exercise that field.
 
+## PDF fixtures
+
+`../scripts/generate_pdf_fixtures.py` writes nine tiny PDFs (a few KB each) into
+`tests/fixtures/pdf/`. Unlike the fixture book, these **are committed**. The script is
+stdlib-only and deterministic, so re-running it leaves `git status` clean. The Rust PDF tests
+also need the pdfium library from `../scripts/fetch_pdfium.sh`.
+
 ## Public-domain test corpora
 
 Real scans for load, aspect, and format testing. Download them into gitignored
