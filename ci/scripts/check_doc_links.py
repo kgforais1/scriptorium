@@ -45,7 +45,8 @@ CATALOG_DIRS = ("inventory",)
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(\s*([^)\s]+?)\s*\)")
 CATALOG_RE = re.compile(r"^Catalog reviewed through:\s*(\d{4}-\d{2}-\d{2})\s*$", re.MULTILINE)
-CODE_FENCE_RE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
+# Opens a fenced block: three or more backticks or tildes at the start of a line.
+FENCE_OPEN_RE = re.compile(r"^(`{3,}|~{3,})")
 
 TIMEOUT = 10
 USER_AGENT = "template-repo-doc-link-check/1.0"
@@ -72,7 +73,22 @@ def iter_markdown(paths: list[Path]) -> list[Path]:
 
 def strip_code(text: str) -> str:
     """Blank out fenced blocks so template placeholders are not read as real links."""
-    return CODE_FENCE_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    out: list[str] = []
+    fence = ""  # the open fence's marker, or "" outside a block
+    for line in text.splitlines(keepends=True):
+        if fence:
+            # A block closes on a run of the same character at least as long.
+            if line.startswith(fence) and not line.rstrip("\r\n").lstrip(fence[0]):
+                fence = ""
+            out.append("\n" if line.endswith("\n") else "")
+            continue
+        opened = FENCE_OPEN_RE.match(line)
+        if opened:
+            fence = opened.group(1)
+            out.append("\n" if line.endswith("\n") else "")
+            continue
+        out.append(line)
+    return "".join(out)
 
 
 def check_internal(path: Path, text: str) -> list[str]:

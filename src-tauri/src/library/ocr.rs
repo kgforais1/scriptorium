@@ -98,10 +98,14 @@ fn validate_text(name: &str, text: &str) -> Result<(), BookError> {
     })
 }
 
-/// Check every file in an `ocr/` directory.
+/// Check every `.json` file in an `ocr/` directory.
 fn validate_dir(dir: &Path) -> Result<(), BookError> {
     for entry in std::fs::read_dir(dir).map_err(|e| io_error(dir, &e))? {
         let path = entry.map_err(|e| io_error(dir, &e))?.path();
+        // Only ingest's own files. A stray file such as `.DS_Store` is not the book's.
+        if path.extension().is_none_or(|ext| ext != "json") {
+            continue;
+        }
         let text = std::fs::read_to_string(&path).map_err(|e| io_error(&path, &e))?;
         validate_text(&path.display().to_string(), &text)?;
     }
