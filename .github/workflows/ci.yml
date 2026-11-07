@@ -246,9 +246,9 @@ jobs:
         run: cargo build --locked --features tauri/custom-protocol
 
   rust-coverage:
-    # Report only: no floor and not a required check. Linux skips the macOS sips
-    # fixtures, so ingest coverage reads low here. continue-on-error keeps an
-    # install or tool failure from failing the run.
+    # Fails below 80% line coverage. Main measured 82.25% on 2026-11-06, so the floor
+    # sits 2 points below, like Python's. Linux skips the macOS sips fixtures, so
+    # ingest coverage reads low here.
     # Cost (2026-11-06): about 4 min per run, and about 190 CI runs in 30 days
     # (149 PR, 44 push), so roughly 760 Linux minutes a month, free on a public
     # repo. The lcov artifact is 23 KB for 14 days. Caches: registry plus the
@@ -257,7 +257,6 @@ jobs:
     # GitHub's 10 GB limit.
     name: Rust coverage
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: src-tauri
@@ -301,20 +300,27 @@ jobs:
         run: cargo install cargo-llvm-cov --locked --version 0.9.1
 
       - name: cargo llvm-cov (summary)
-        # Explicit bash adds -o pipefail, so a failing test still fails through tee.
+        # Explicit bash adds -o pipefail, so a failing test or the coverage floor fails through tee.
         shell: bash
         run: |
           {
-            echo '### Rust coverage (report only)'
+            echo '### Rust coverage (lines must be at least 80%)'
             echo '```text'
-            cargo llvm-cov --locked
+            cargo llvm-cov --locked --fail-under-lines 80
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Runs after a floor failure too, so that run keeps its artifact. continue-on-error,
+      # because after a test failure the profile data may be incomplete.
       - name: lcov report
+        if: always()
+        continue-on-error: true
         run: cargo llvm-cov report --lcov --output-path lcov.info
 
+      # Diagnostic only: an artifact-service failure must not fail the coverage gate.
       - name: Upload lcov artifact
+        if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rust-lcov

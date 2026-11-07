@@ -20,7 +20,7 @@ Last reviewed: 2026-11-05
 | **Audit (pnpm + cargo)** | — | — | ✅ required (`Dependency audit`; informational findings pass, audit and tooling failures fail closed) | ✅ weekly re-run (`Dependency audit (weekly)`) |
 | **Tests + coverage** | — | — | ✅ pytest-cov (`fail_under` 46) | — |
 | **Tests + coverage (TypeScript)** | — | — | ✅ `pnpm test:coverage` (Vitest; lines ≥ 80 on `src/lib/**`) | — |
-| **Rust coverage** | — | — | ✅ `cargo llvm-cov` (report only, `continue-on-error`; 82% lines on Linux, 2026-11-06) | — |
+| **Rust coverage** | — | — | ✅ `cargo llvm-cov --fail-under-lines 80` (82.25% lines on Linux, 2026-11-06) | — |
 | **SAST** | — | — | — | ✅ Semgrep on PR (whole repo; templates/scratch in `.semgrepignore`) |
 | **SonarQube (local, opt-in)** | `sonar-freshness` (no-op unless `SONAR_FRESHNESS_GATE=1`) | `sonar-freshness-push` (same opt-in) | — never | — never |
 | **CodeQL** | — | — | — | ✅ already required: GitHub default setup, ruleset code scanning (not a job in `security.yml`) |
@@ -40,7 +40,7 @@ pre-commit run --all-files --hook-stage pre-push   # basedpyright
 
 ## Required GitHub checks
 
-The default-branch ruleset requires every check below except `Rust coverage`. The four added on 2026-11-06 are `Rust (windows-latest)`, `Rust (macos-latest)`, `Lint & test (TypeScript)` and `Third-party licences`. The ruleset also has a `code_quality` rule (blocks on errors) and a `code_coverage` rule with `max_coverage_drop: 0` and no minimum line coverage. GitHub's docs disagree on what 0 means for the drop: the UI guide says 0 disables a threshold, while the REST reference says a PR that lowers coverage by more than this amount is blocked, which at 0 would forbid any drop. Coverage rules apply only once GitHub Code Quality is enabled and coverage data is uploaded, and this repo uploads none yet. Check the behaviour on the first PR after that.
+The default-branch ruleset requires every check below except `Rust coverage`, which is proposed. The four added on 2026-11-06 are `Rust (windows-latest)`, `Rust (macos-latest)`, `Lint & test (TypeScript)` and `Third-party licences`. The ruleset also has a `code_quality` rule (blocks on errors) and a `code_coverage` rule with `max_coverage_drop: 0` and no minimum line coverage. GitHub's docs disagree on what 0 means for the drop: the UI guide says 0 disables a threshold, while the REST reference says a PR that lowers coverage by more than this amount is blocked, which at 0 would forbid any drop. The rule has no data: Code Quality is enabled, but coverage upload returns HTTP 404 on this personal-account repo (tried in #80). Coverage is enforced in CI instead, by Python `fail_under`, the Vitest thresholds and the Rust floor.
 
 - `Policy (file size, docs, backlog)`
 - `Lint & format`
@@ -53,7 +53,7 @@ The default-branch ruleset requires every check below except `Rust coverage`. Th
 - `Type check (TypeScript)` — `pnpm install` + `pnpm typecheck` (app and config files)
 - `Lint & test (TypeScript)` — `pnpm install` + `pnpm lint` (ESLint) + `pnpm skin:check` (step "Skin CSS is current": the committed `src/styles/skin-<id>.css` matches `design/skins/<id>/tokens.json`; fix with `pnpm skin:css`) + `pnpm skin:lint` (step "Skin literals": no colour, font-family, radius, or filter literals in `src/features/reader/` CSS and TSX outside `engine/`) + `pnpm test:coverage` (Vitest, lines ≥ 80 on `src/lib/**`) + `pnpm build` (the production bundle)
 - `Third-party licences` — `pnpm licenses:check` runs `scripts/gen-licenses.mjs --check`: `cargo about` (config `src-tauri/about.toml`) must accept the licence of every Rust crate the app ships (it skips crates used only as dev or build dependencies), and the committed `THIRD_PARTY_LICENSES.generated.md` must match. Fix with `pnpm licenses:gen` (needs the cargo-about version in `package.json` `config.cargoAboutVersion`, which CI also installs).
-- `Rust coverage` — not required. `cargo llvm-cov` report only (job summary and the `rust-lcov` artifact).
+- `Rust coverage` — *proposed*. `cargo llvm-cov --fail-under-lines 80` (job summary and the `rust-lcov` artifact). Linux skips the macOS `sips` fixtures, so ingest reads low.
 - `Dependency audit` — `pnpm audit --prod` + `cargo audit` (uses `src-tauri/.cargo/audit.toml`). Informational findings pass. The job fails closed on a vulnerability and when the audit did not complete: an advisory-database fetch failure, a command error, or exhausted registry retries.
 - `CodeQL` — GitHub **default setup** (`dynamic/github-code-scanning/codeql`). Already required by the branch ruleset as code scanning (alert threshold errors; security alerts high or higher), not a status-check context and not a workflow file
 
