@@ -4,9 +4,9 @@
   "version": "0.2.0",
   "identifier": "dev.scriptorium.app",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm pdfium:fetch && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm licenses:check && pnpm build",
+    "beforeBuildCommand": "pnpm pdfium:fetch && pnpm licenses:check && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {

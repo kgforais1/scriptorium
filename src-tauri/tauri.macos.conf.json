@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "macOS": {
+      "frameworks": ["pdfium/libpdfium.dylib"],
+      "entitlements": "Entitlements.plist"
+    }
+  }
+}

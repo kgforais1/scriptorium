@@ -56,7 +56,7 @@ built app.
 - [ ] Click **Open…** and choose the scans folder. Expected: a dialog titled "Create a book
   from these scans?" appears.
 - [ ] The dialog shows the file count, the page count, and an estimated size. For the
-  fixture it reads "12 image files, 12 pages, about" a small size.
+  fixture it reads "12 files, 12 pages, about" a small size.
 - [ ] The **Title** field holds the folder name. The **Book id** field holds a slug of it.
   Edit the title to something else. Expected: the field accepts the text.
 - [ ] Type an invalid id, such as `Bad Id!`. Expected: a hint appears under the field and
@@ -148,7 +148,7 @@ Each error opens a dialog with a heading, a message, and an **OK** button. Press
 Escape to dismiss it.
 
 - [ ] Open… an empty folder. Expected: heading "Folder is empty".
-- [ ] Open… a folder that holds only `.txt` files. Expected: heading "No supported images".
+- [ ] Open… a folder that holds only `.txt` files. Expected: heading "No images or PDFs".
 - [ ] Make a folder with `a.png` and `a.jpg`, using copies of any two images. Open… it.
   Expected: heading "Two files share a name".
 - [ ] Open… a folder with an unreadable file, such as a text file renamed to `page.png`.

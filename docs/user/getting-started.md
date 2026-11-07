@@ -35,19 +35,22 @@ To try the app without a full build, run `pnpm tauri dev` instead.
 2. Start Scriptorium and click **Open…**.
 3. Choose the folder.
 
-Scriptorium reads these image types:
+Scriptorium reads these file types:
 
 - JPEG, PNG, and WebP files.
 - BMP and GIF files. A GIF uses its first frame.
 - TIFF files. Each page of a multi-page TIFF becomes one page of the book.
 - JPEG 2000 files (`.jp2`, `.j2k`, and `.jpf`).
+- PDF files. Each page of a PDF becomes one page of the book, drawn as an image. Scriptorium
+  keeps the PDF itself too, and saves any text the PDF holds. A PDF with a password is refused.
+  Pages are drawn at up to 300 DPI, and very large pages are scaled down.
 
 Scriptorium puts the files in natural order. That means `page2` comes before `page10`, and
 capital letters do not matter. If you want a page in a certain place, number the file names.
 Two files may not share a name once the extension is removed. `a.png` and `a.jpg` clash.
 
 The app then shows a dialog titled "Create a book from these scans?". It tells you how many
-image files it found, how many pages they make, and about how much space the book will take.
+files it found, how many pages they make, and about how much space the book will take.
 You can fill in these fields:
 
 - **Title** is the name shown above the book. It starts as the folder name.
@@ -131,7 +134,7 @@ A problem opens a dialog with a heading and a message. Press **OK** to close it.
 | Heading | What it means and what to do |
 |---|---|
 | Folder is empty | The folder has nothing in it. Choose the folder that holds your scans. |
-| No supported images | The folder has no image of a type that Scriptorium reads. Check the file types above. |
+| No images or PDFs | The folder has no file of a type that Scriptorium reads. Check the file types above. |
 | Can't read a file | One file is damaged, or its type does not match its name. The message names the file. Replace it or take it out. |
 | Book already exists | Your library already has a book with that id. Choose another id in the dialog. |
 | Two files share a name | Two files differ only by their extension. Rename one of them. |
@@ -139,6 +142,9 @@ A problem opens a dialog with a heading and a message. Press **OK** to close it.
 | Book is from a newer version | A newer Scriptorium made this book. Update the app to open it. |
 | Not a valid book | The folder looks like a book but is missing parts or is malformed. Open the original scans instead. |
 | Book is damaged | A page no longer matches what was saved. Restore the book from a backup, or make it again from the scans. |
+| Too many pages | The files add up to more than 100000 pages. Split them into two books. |
+| PDF is password-protected | A PDF needs a password. Save an unprotected copy and use that. |
+| PDF import is unavailable | The part of the app that reads PDFs could not start. Reinstall Scriptorium. Images still import. |
 | Access denied | Your system refused access to a folder. Check its permissions, or choose another folder. |
 | Scriptorium hit a problem | Something unexpected failed. Try again. If it keeps happening, report it with the text in the message. |
 | Something went wrong | Scriptorium could not tell what failed. Try again. |
