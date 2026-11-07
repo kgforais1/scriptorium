@@ -16,7 +16,7 @@ The licences of the Rust crates and npm packages that Scriptorium depends on are
 
 The fork changes only the vendored C sources, the two config headers, and the version constant in `src/ffi.rs`. The bindings are otherwise those of 1.0.12, because OpenJPEG 2.5.4 has no API changes.
 
-Licence text, verbatim from the crate's `vendor/LICENSE` (trailing whitespace removed, and one tab expanded to spaces):
+Licence text, verbatim from the crate's `vendor/LICENSE` (trailing whitespace removed):
 
 ~~~~text
 /*
@@ -68,7 +68,7 @@ Licence text, verbatim from the crate's `vendor/LICENSE` (trailing whitespace re
 - Used for: ICC colour management
 - Licence: MIT
 
-Licence text, verbatim from the crate's `vendor/LICENSE` (trailing whitespace removed, and one tab expanded to spaces):
+Licence text, verbatim from the crate's `vendor/LICENSE` (trailing whitespace removed):
 
 ~~~~text
 MIT License
