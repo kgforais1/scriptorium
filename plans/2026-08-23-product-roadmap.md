@@ -65,7 +65,7 @@ Closed by [`2026-11-05-m05-harness-followups.md`](archive/completed/2026-11-05-m
 
 - [x] TypeScript lint and typecheck in CI and hooks (M1 Phase 2 chunk 0). The hooks run at pre-commit, not pre-push, which catches errors earlier, so no pre-push stage is added
 - [x] Frontend Vitest coverage gates (80% lines on `src/lib`, M1 Phase 2 chunk 0). Raising Python `fail_under` stays open below
-- [x] Rust coverage: `Rust coverage` CI job, `cargo llvm-cov`, report only. Set a floor once a few runs agree
+- [x] Rust coverage: `Rust coverage` CI job, `cargo llvm-cov`; fails below 80% lines (Linux measured 82.25% on 2026-11-06). Proposed as a required check
 - [x] Python coverage gate: `fail_under = 46` (CI measured 48.2%) (**LC-L3**). Raise it as in-process tests land
 - [x] CodeQL via GitHub default setup (ruleset code scanning; not a workflow file)
 - [x] Dependabot: `.github/dependabot.yml` covers pip, npm, github-actions and cargo
