@@ -3,7 +3,7 @@
 Last reviewed: 2026-11-07
 Date: 2026-11-07
 Author: planning pass (branch `plan/m2-ocr`)
-Status: draft
+Status: in-progress
 Linked issue/PR: n/a
 Roadmap: [M2 — OCR-aware scans](2026-08-23-product-roadmap.md#m2--ocr-aware-scans-text-under-the-image)
 

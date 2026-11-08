@@ -10,6 +10,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 - [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default
 - [Drop the openjpeg-sys patch](#unplanned--small) — when an `openjpeg-sys` release bundles OpenJPEG 2.5.4
 - [M1.5 PDF import](plans/2026-11-07-m15-pdf-import.md) — merged in #82; manual checks in M1 follow-ups
+- [M2a OCR engine and pipeline](plans/2026-11-07-m2a-ocr-pipeline.md) — Phase 1 engine spike on `feat/m2a-ocr-spike`
 
 ## Active plans
 
@@ -18,7 +19,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
 | [M1 follow-ups](plans/2026-11-02-m1-followups.md) | in-progress | Manual and platform remainder after 0.2.0 |
 | [M1.5 PDF import](plans/2026-11-07-m15-pdf-import.md) | in-progress | pdfium rasteriser, PDF originals, plain text under `ocr/` |
-| [M2a OCR engine and pipeline](plans/2026-11-07-m2a-ocr-pipeline.md) | draft | engine spike, bundled OCR, background job, `ocr/` v1 with boxes |
+| [M2a OCR engine and pipeline](plans/2026-11-07-m2a-ocr-pipeline.md) | in-progress | engine spike, bundled OCR, background job, `ocr/` v1 with boxes |
 
 ## Unplanned / small
 
