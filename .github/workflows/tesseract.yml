@@ -1,0 +1,94 @@
+# tesseract.yml — packaging proof for the self-contained Tesseract sidecar (M2a Phase 1).
+# Runs on PRs that touch the build script or this workflow, and on demand.
+# Action refs are pinned to full commit SHAs.
+
+name: Tesseract build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/build_tesseract.sh
+      - .github/workflows/tesseract.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and run (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      # Windows builds inside MSYS2 MinGW64 (UNTESTED); the other runners use their own toolchain.
+      - name: Set up MSYS2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@f84a36b4009b96413f91c01441130855db9392e5 # v2.9.0
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-nasm mingw-w64-x86_64-rust curl tar
+
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake nasm
+
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        run: brew install cmake nasm
+
+      - name: Build Tesseract
+        if: runner.os != 'Windows'
+        run: bash scripts/build_tesseract.sh
+
+      - name: Build Tesseract (MSYS2)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: bash scripts/build_tesseract.sh
+
+      - name: Run the binary with no system Tesseract
+        run: |
+          set -euo pipefail
+          bin="$(ls src-tauri/binaries/tesseract-*)"
+          # Fail if a system Tesseract is visible on PATH.
+          if command -v tesseract > /dev/null 2>&1; then
+            echo "system tesseract on PATH"; exit 1
+          fi
+          mkdir -p tmp/tessdata
+          curl --proto "=https" --proto-redir "=https" --tlsv1.2 --fail --silent --show-error --location \
+            --output tmp/tessdata/eng.traineddata \
+            https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/eng.traineddata
+          echo "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2  tmp/tessdata/eng.traineddata" > tmp/eng.sha256
+          python -m pip install --quiet pillow
+          python - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
+          img = Image.new("L", (900, 160), 255)
+          ImageDraw.Draw(img).text((20, 40), "THE PRINCESS AND THE GOBLIN", fill=0, font=ImageFont.load_default(size=48))
+          img.save("tmp/fixture.png")
+          PY
+          if command -v sha256sum > /dev/null 2>&1; then sha256sum -c tmp/eng.sha256; else shasum -a 256 -c tmp/eng.sha256; fi
+          out="$("$bin" tmp/fixture.png - --tessdata-dir tmp/tessdata)"
+          echo "${out}"
+          echo "${out}" | grep -qi "PRINCESS"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tesseract-${{ matrix.os }}
+          path: src-tauri/binaries/tesseract-*
+          if-no-files-found: error

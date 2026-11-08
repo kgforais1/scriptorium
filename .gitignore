@@ -230,3 +230,6 @@ src-tauri/pdfium/
 
 # cargo llvm-cov output
 lcov.info
+
+# Built sidecar binaries (scripts/build_tesseract.sh)
+src-tauri/binaries/
