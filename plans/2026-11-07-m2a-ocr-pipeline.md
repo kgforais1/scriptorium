@@ -134,15 +134,17 @@ through `jpeg-decoder`'s `Decoder::scale`, which picks the smallest DCT scale (1
 1/1) whose output is still at or above the requested size. The job requests the capped size, so
 the decoded image is never smaller than the caps, and is then resized down to them. The step never
 upscales. A 16 MP JPEG therefore decodes at 1/1, because 1/2 would fall below the cap. A 100 MP
-JPEG decodes at 1/2. A larger PNG or WebP must be decoded whole. Whole decodes are refused above
-50 MP, and any page over 150 MP, the limit ingest applies to JPEG 2000, is refused. A refused page
+JPEG decodes at 1/2. A larger PNG or WebP must be decoded whole. A whole decode is refused when
+its buffer would exceed 200 MB. The buffer size comes from the header: pixels times bytes per
+pixel, which the PNG header's colour type and bit depth give. So an 8-bit RGBA PNG is refused
+above 50 MP, and a 16-bit RGBA PNG, at 8 bytes a pixel, above 25 MP. Any page over 150 MP, the limit ingest applies to JPEG 2000, is refused. A refused page
 is marked `failed` with "too large" and never decoded.
 
 **Memory budget.** Every allocation counts: the decode buffer, any conversion to RGB, the resized
 buffer, and the PNG encoder's buffers. A page whose decode buffer is within 12 MP is a small page.
 At 4 bytes a pixel its decode is at most 48 MB, the resized copy at most 48 MB, and the encoder
-at most 16 MB, so 112 MB. Any other page, a scaled JPEG above the cap or a whole PNG or WebP up to
-50 MP, is a large page and needs the single large-page permit. Its budget is 200 MB to decode,
+at most 16 MB, so 112 MB. Any other page, a scaled JPEG above the cap or a whole PNG or WebP with a
+buffer up to 200 MB, is a large page and needs the single large-page permit. Its budget is 200 MB to decode,
 48 MB resized, and 16 MB to encode, so 264 MB. There is no separate RGB copy. The resize reads
 the decoded buffer in whatever layout it has and writes the capped RGBA output in one pass, so
 the only buffers are the three counted. A small page follows the same rule. The step budget is therefore (pool size - 1) x 112 MB +
@@ -163,8 +165,10 @@ and WebP. Tests run a 16 MP display JPEG, a 100 MP JPEG, a 16 MP PNG, a WebP dis
 60 MP PNG, and a header claiming 200 MP. They check each output is within the PDF caps. A counting
 allocator checks each page's peak against its budget. The 16 MP JPEG decodes at 1/1, so its full
 48 MB buffer is expected, within the 264 MB large-page budget. The 100 MP JPEG must peak below that
-budget, which proves it never decoded at full size (400 MB). The 60 MP PNG and the 200 MP header
-are refused without decoding.
+budget, which proves it never decoded at full size (400 MB). The 60 MP PNG, a 50 MP 16-bit RGBA PNG,
+and the 200 MP header are refused without decoding. A 20 MP 16-bit PNG is accepted within budget.
+A test runs large pages from two books at once, so both wait on the one large-page permit. It
+checks only one holds it at a time, and the combined peak stays within 600 MB.
 
 ### Storage: `ocr/` schema v1
 
@@ -177,6 +181,7 @@ are refused without decoding.
     "ocr": {
       "engine": "tesseract 5.5.1 eng-fast",
       "generatedAt": "2026-11-07T12:00:00Z",
+      "runId": "…",
       "imageSha256": "…",
       "text": "…",
       "lines": [
@@ -213,9 +218,9 @@ are refused without decoding.
   "schema": 1,
   "engine": "tesseract 5.5.1 eng-fast",
   "updatedAt": "…",
-  "forcedAt": "…",
+  "forced": { "runId": "…" },
   "pages": {
-    "0": { "status": "done", "imageSha256": "…" },
+    "0": { "status": "done", "imageSha256": "…", "runId": "…" },
     "1": { "status": "failed", "error": "timeout", "failedAt": "…" }
   },
   "summary": { "pages": 202, "done": 201, "failed": 1, "pending": 0, "skipped": 0, "withText": 180 }
@@ -263,15 +268,23 @@ in two steps:
      fails on a page that had good text stays failed until a later success. That success writes a
      newer `generatedAt`, which clears it.
    - An `ocr` layer with the current engine id and the page's current `sha256` is `done`, unless
-     the old index has `forcedAt` set and the layer's `generatedAt` is not strictly after it
-     (below). Then the page is `pending`. This holds after a crash too, when no job is running.
+     the old index has `forced` set and the layer's `runId` is not that run's id (below). Then
+     the page is `pending`. This holds after a crash too, when no job is running.
    - Any other page is `pending`.
 
 Every move to `failed` stamps `failedAt`: a live page failure, a timeout, and an invalid file
-found by the rebuild. `forcedAt` appears in the index only while a forced run is unfinished. All
-three timestamps are RFC 3339 with millisecond precision, and the ties above go the safe way: a
-failure at the same instant as a success wins, and a layer from the same instant as `forcedAt`
-still counts as unfinished.
+found by the rebuild. Both timestamps are RFC 3339 with millisecond precision, and a tie goes the
+safe way: a failure at the same instant as a success wins.
+
+Every run gets a random `runId`, and every `ocr` layer it writes records it. `forced` appears in
+the index only while a forced run is unfinished, and names that run's id. A forced run's progress
+is therefore an exact match, not a clock comparison, so clock changes cannot mark a page done.
+
+**A lost index during a forced run.** `forced` lives only in the index. If the index is missing
+or invalid when the job rebuilds, the forced intent cannot be recovered, and step 2 counts
+matching layers as `done`. The job does not guess. It records `forcedLost: true` in the new
+index, `ocr_status` reports it, and the reader says "A re-run was interrupted. Recognise text
+again to finish it." A test covers this.
 
 Then it writes the rebuilt index atomically. The job runs `pending` pages, then retries each
 `failed` page once per run. M2c moves `skipped` into the page file, where it belongs. Reading 202
@@ -283,12 +296,17 @@ it never failed. A page that hits the deadline or crashes the engine is `failed`
 is written to the index at once, outside the throttle, under the per-book mutex. Every index
 write takes that mutex, so two workers' writes never race.
 
-**`ocr_status`.** It never reads page files. While a job runs, it returns the registry's live
+**`ocr_status`.** It never parses page files. While a job runs, it returns the registry's live
 snapshot only, and computes the summary from that snapshot, because the index on disk lags. With
 no job running, it reads `index.json`. It checks each `done` entry's `imageSha256` against
-`meta.json`, and the index's `engine` against the engine the app ships now. Either mismatch
-reports that page as `pending`, so the reader never says "Text ready" over stale text or text
-from an older engine. It recomputes the summary after those checks. A crashed run may still
+`meta.json`, and the index's `engine` against the engine the app ships now. If `forced` is set,
+a `done` entry whose `runId` is not the forced run's id is unfinished. It also checks that each
+`done` entry's page file exists, which is a cheap `stat` and no read. Any of these reports that
+page as `pending`, so the reader never says "Text ready" over stale text or text
+from an older engine. A page file that exists but is invalid is caught by the next job's
+rebuild, which marks it `failed`, because only a parse can find it. Pages that are done and
+untouched by a forced run stay `done`, so Resume never redoes them. It recomputes the summary
+after those checks. A crashed run may still
 show a few finished pages as `pending` until the next job starts. That errs the safe way.
 
 **Books with no v1 index.** `ocr_status` treats a missing `index.json`, which every M1 image book
@@ -303,8 +321,16 @@ file leaves the file unchanged and marks the page `failed`.
 
 ### The OCR job
 
-- One job runs per book at a time. A second non-forced request for the same book returns the
-  running job. A forced one upgrades it, as described below.
+- One job runs per book at a time, across app instances too. The app does not stop a second
+  instance from opening, so a job takes an exclusive lock on `ocr/.job.lock`, with the same
+  `lock_dir` helper, before it rebuilds the index. Only the lock holder writes the index or the
+  `ocr` layers, so two instances cannot overwrite each other's index or erase a failure. The lock
+  is released when the job finishes, fails, or is cancelled, and the OS releases it if the app
+  crashes. An instance that cannot take the lock reports the state `busy`, writes nothing, and
+  its reader shows "Reading text in another window". It retries when asked again. M2c's editor
+  takes the same lock for its writes. Within one instance, a second non-forced request returns
+  the running job, and a forced one upgrades it, as described below. A test holds the lock from a
+  second process and checks the first writes nothing.
 - All jobs share one global pool, sized to half the logical cores, at least 1 and at most 4. So
   two books OCR at once never use more than that. Each worker runs one page at a time. Books take
   turns page by page. [ocrs: same pool.]
@@ -319,13 +345,15 @@ file leaves the file unchanged and marks the page `failed`.
 - `run_ocr` takes `force: bool`. A forced run re-runs every page that is not `skipped`, including
   fresh `done` pages with the same engine and checksum. It still writes only the `ocr` layer. The
   automatic run after ingest is not forced.
-- A forced run is made durable by `forcedAt` in the index, written atomically before its first
-  page. While `forcedAt` is set, a page counts as unfinished until its `ocr` layer is newer than
-  `forcedAt`. So a forced run that is cancelled, or ends in a crash, resumes on its unfinished
-  pages only, and existing text stays readable meanwhile. `forcedAt` is cleared when the forced
+- A forced run is made durable by `forced.runId` in the index, written atomically before its
+  first page. While `forced` is set, a page counts as unfinished until its `ocr` layer carries
+  that `runId`. So a forced run that is cancelled, or ends in a crash, resumes on its unfinished
+  pages only, and existing text stays readable meanwhile. `forced` is cleared when the forced
   run has been through every page.
-- A forced request while a run is going does not just return that run. It writes `forcedAt` to the
-  index atomically at once, under the per-book mutex, and the running job then makes one more pass over the pages whose layers are older than it. Because `forcedAt` is on disk
+- A forced request while a run is going does not just return that run. It writes `forced` with a new
+  `runId` to the index atomically at once, under the per-book mutex. The running job adopts that
+  id for every page it writes from then on, and then makes one more pass over the pages whose
+  layers carry a different id. Because `forced` is on disk
   before the request returns, a cancel or crash before that pass does not lose it. So
   "Recognise text again" during the automatic run is never lost. A test covers this overlap.
 - Before the first page, the job checks the engine once. For Tesseract that means the binary
@@ -341,7 +369,7 @@ file leaves the file unchanged and marks the page `failed`.
   - `ocr-progress` is `{ root, seq, done, failed, total }`, throttled to 4 a second with the
     existing throttle.
   - `ocr-state` is `{ root, seq, state }`, sent on every change, never throttled. `state` is
-    `idle`, `running`, `cancelling`, `finished`, or `unavailable`.
+    `idle`, `running`, `cancelling`, `finished`, `unavailable`, or `busy`.
   - `seq` is one counter per book that rises with every event.
 - `ocr_status(root)` returns the book's job `state`, the current `seq`, and the page statuses, as
   one snapshot. While a job runs, the registry holds the live statuses and counts in memory, and
@@ -356,7 +384,11 @@ reader only ever compares it with events from the same session. The reader subsc
   replays events in each order around the query. A Rust test emits progress before the index
   flush, and checks `ocr_status` returns the new counts with that event's `seq`.
 - A page failure (timeout, a crash, unreadable output) marks that page `failed` with a short
-  error and moves on. The job fails as a whole only if the pre-check fails: the binary will not
+  error and moves on. If that failure, or any page file or index write, cannot be written, the
+  job stops at once, because it can no longer record what it did. It reports `OcrStorage` with
+  the path and the OS error, and the state becomes `unavailable`. Nothing is lost: an unwritten
+  page has no fresh layer, so the next rebuild finds it `pending` and the next run retries it. A
+  test makes the `ocr/` folder read-only mid-run and checks this. The job fails as a whole only if the pre-check fails: the binary will not
   start, or a requested language is missing. That is reported as `OcrUnavailable`, like
   `PdfiumUnavailable`.
 - There is no per-book write lock today. M2a adds one: a mutex per book in the job
@@ -376,11 +408,12 @@ M2a adds only status, since showing text is M2b:
 - `ReaderHeader` gets a "Text" button with three actions. "Recognise text again" calls
   `run_ocr` with `force: true`, so it redoes every page that is not skipped, even unchanged
   ones. "Stop" calls `cancel_ocr`. "Resume" appears whenever no job is running or
-  cancelling, that is when the state is `idle` or `finished`, and some page is `pending` or
-  `failed`. That covers a stopped run, a finished run with failures, a crashed run, and a book
-  that was never OCRed. It calls `run_ocr` with
-  `force: false`, so it does only unfinished pages. A frontend test covers each action and that
-  Resume stays hidden while `cancelling`.
+  cancelling, that is when the state is `idle`, `finished`, or `unavailable`, and some page is
+  `pending` or `failed`. That covers a stopped run, a finished run with failures, a crashed run, a
+  book that was never OCRed, and an engine or disk problem that has since been fixed. It calls `run_ocr` with
+  `force: false`, so it does only unfinished pages. A frontend test covers each action, that
+  Resume stays hidden while `cancelling` or `busy`, and that Resume after `unavailable` calls
+  `run_ocr` with `force: false`.
 - Errors map through `src/lib/errors.ts` like the existing kinds.
 
 ### Bundling Tesseract
@@ -428,6 +461,7 @@ check.]
 | Kind | When |
 |---|---|
 | `OcrUnavailable` | The engine binary or language data is missing or will not start. The job's pre-check finds this before any page. |
+| `OcrStorage` | A page file or the index cannot be written. The job stops. The next run, once the disk is writable, redoes the unrecorded pages. |
 | `OcrError::NoLanguage` | Internal only. An empty `langs` is a caller bug, caught by a unit test, and never reaches the UI. |
 | `OcrAlreadyRunning` | Not an error to the UI; `run_ocr` returns the running job's id. |
 | `InvalidPackage` | `meta.json` cannot be read, so the job cannot list the pages. |
@@ -524,7 +558,8 @@ Per-page failures are statuses, not errors.
 - [ ] Add `run_ocr`, `cancel_ocr`, and `ocr_status`, and start a job after ingest.
 - [ ] Write the engine-input step: header size, scaled JPEG decode, the large-page permit, the
       refusals, and a temp PNG. Test it on a 16 MP and a 100 MP JPEG, a 16 MP PNG, a WebP page,
-      a 60 MP PNG, and a header claiming 200 MP, with the counting-allocator check.
+      a 60 MP PNG, 50 MP and 20 MP 16-bit PNGs, and a header claiming 200 MP, with the
+      counting-allocator check. Add the two-book large-permit test.
 - [ ] Tests with `FakeEngine`: resume after cancel, cancel returning within a second while a page
       is in flight, a failing page, a second request joining the running job, two books sharing
       the pool, progress throttling, and cancel on exit.
@@ -533,7 +568,9 @@ Per-page failures are statuses, not errors.
       also fails the whole job, with no page attempted and no page marked `failed`. So does a
       truncated `eng.traineddata`, which `--list-langs` would still list, caught by the
       test-image recognition.
-- [ ] Test `force`: a forced run redoes a fresh page and keeps a `skipped` one. Test that a page
+- [ ] Test `force`: a forced run redoes a fresh page and keeps a `skipped` one. Test that a
+      forced run cancelled halfway resumes on exactly the pages without its `runId`, and that a
+      lost index sets `forcedLost`. Test that a page
       failure is in the index on disk at once. Test that `ocr_status` reports a `done` page from
       an older engine as `pending`.
 - [ ] Test the stale run-directory sweep. Test `recognize` with an empty `langs`.
