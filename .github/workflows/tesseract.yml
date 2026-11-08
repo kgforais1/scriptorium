@@ -41,6 +41,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
+          cache: false
           install: >-
             mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
             mingw-w64-x86_64-nasm mingw-w64-x86_64-rust curl tar
@@ -75,15 +76,8 @@ jobs:
             --output tmp/tessdata/eng.traineddata \
             https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/eng.traineddata
           echo "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2  tmp/tessdata/eng.traineddata" > tmp/eng.sha256
-          python -m pip install --quiet pillow
-          python - <<'PY'
-          from PIL import Image, ImageDraw, ImageFont
-          img = Image.new("L", (900, 160), 255)
-          ImageDraw.Draw(img).text((20, 40), "THE PRINCESS AND THE GOBLIN", fill=0, font=ImageFont.load_default(size=48))
-          img.save("tmp/fixture.png")
-          PY
           if command -v sha256sum > /dev/null 2>&1; then sha256sum -c tmp/eng.sha256; else shasum -a 256 -c tmp/eng.sha256; fi
-          out="$("$bin" tmp/fixture.png - --tessdata-dir tmp/tessdata)"
+          out="$("$bin" tests/fixtures/ocr/smoke.png - --tessdata-dir tmp/tessdata)"
           echo "${out}"
           echo "${out}" | grep -qi "PRINCESS"
 

@@ -112,6 +112,10 @@ python3 scripts/fetch-iiif-corpus.py <manifest-url> tmp/fixtures/corpus/<name> [
 
 ## OCR ground-truth pages
 
+`ocr/smoke.png` is a one-line image ("THE PRINCESS AND THE GOBLIN") that
+`.github/workflows/tesseract.yml` OCRs to prove the built binary runs. It was drawn with
+Pillow's default font.
+
 `ocr/` holds hand-checked transcriptions of 12 corpus pages for the M2a OCR engine spike
 (`../scripts/ocr_spike.py`). The page images are **not** committed. Rebuild them with the
 two zip recipes above (Dulac) and below (*The Princess and the Goblin*), which write
