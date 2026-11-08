@@ -35,7 +35,7 @@ images, one JPEG per page.
 1. Start the app with `pnpm tauri dev`, or open your built app.
 2. Click **Open…**.
 3. Choose `tmp/fixtures/corpus/dulac-picture-book/jpg`.
-4. The dialog says "Create a book from these scans?". It lists the image files and an
+4. The dialog says "Create a book from these scans?". It lists the files and an
    estimated size.
 5. Change the title to "Edmund Dulac's Picture-Book" and the book id to `dulac-picture-book`. The
    id starts as `jpg`, from the folder name, and names the book's folder in your library.

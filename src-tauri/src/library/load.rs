@@ -6,9 +6,9 @@
 
 use super::{io_error, sha256_file, BookError};
 use crate::book_format::{
-    BookMeta, BookMetaError, SourceFormat, CURRENT_FORMAT_VERSION, MIN_FORMAT_VERSION,
+    BookMeta, BookMetaError, SourceEntry, SourceFormat, CURRENT_FORMAT_VERSION, MIN_FORMAT_VERSION,
 };
-use crate::ingest::convert;
+use crate::ingest::{convert, pdf};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -193,6 +193,33 @@ fn format_name(format: SourceFormat) -> String {
         .unwrap_or_default()
 }
 
+/// Check a PDF original's page count against its recorded `frames` when pdfium is loaded.
+/// Without pdfium only the checksum is checked, which `verify_file` already did, so a missing
+/// library does not make every PDF book unreadable. That is logged once.
+pub(super) fn check_pdf_original(
+    path: &Path,
+    src: &SourceEntry,
+    pdfium_ready: bool,
+) -> Result<(), BookError> {
+    static WARNED: std::sync::Once = std::sync::Once::new();
+    if !pdfium_ready {
+        WARNED.call_once(|| {
+            eprintln!("pdfium is not loaded: PDF originals are checked by checksum only");
+        });
+        return Ok(());
+    }
+    let found = pdf::open(path)
+        .map_err(|e| invalid(format!("original {} cannot be read: {e}", src.file)))?
+        .page_count();
+    if found != src.frames {
+        return Err(invalid(format!(
+            "original {} records {} frame(s) but has {found}",
+            src.file, src.frames
+        )));
+    }
+    Ok(())
+}
+
 /// Open and fully verify the book package at `dir`.
 pub fn load_book(dir: &Path) -> Result<LoadedBook, BookError> {
     let root = dir.canonicalize().map_err(|e| io_error(dir, &e))?;
@@ -210,9 +237,9 @@ pub fn load_book(dir: &Path) -> Result<LoadedBook, BookError> {
     }
     for src in meta.sources.iter().flatten() {
         let path = verify_file(&root, &src.file, src.byte_size, &src.sha256)?;
-        // `format` and `frames` must match the file itself. PDF, which ingest cannot decode
-        // before M1.5, is checked by checksum only.
+        // `format` and `frames` must match the file itself. A PDF's page count needs pdfium.
         if src.format == SourceFormat::Pdf {
+            check_pdf_original(&path, src, pdf::is_available())?;
             continue;
         }
         let info = convert::inspect(&path)

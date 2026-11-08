@@ -119,7 +119,7 @@ export function ConfirmIngest({ folder, info, onCreated, onCancel, onError }: Re
   return (
     <Modal title="Create a book from these scans?" onClose={progress === null ? onCancel : null}>
       <p className="ingest-summary">
-        {info.files} image files, {info.frames} pages, about {formatMegabytes(info.estimatedBytes)}.
+        {info.files} files, {info.frames} pages, about {formatMegabytes(info.estimatedBytes)}.
       </p>
       <form
         aria-busy={ingesting}

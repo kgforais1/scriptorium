@@ -57,6 +57,42 @@ class HostnameHelperTests(unittest.TestCase):
         )
 
 
+class StripCodeTests(unittest.TestCase):
+    """Fenced blocks are blanked so their links are not checked."""
+
+    def test_backtick_fence_is_blanked(self) -> None:
+        text = "a\n```\n[x](missing.md)\n```\nb\n"
+        self.assertEqual(mod.strip_code(text), "a\n\n\n\nb\n")
+
+    def test_tilde_fence_is_blanked(self) -> None:
+        text = "a\n~~~~text\n[x](missing.md)\n~~~~\nb\n"
+        self.assertNotIn("missing.md", mod.strip_code(text))
+        self.assertEqual(mod.strip_code(text).count("\n"), text.count("\n"))
+
+    def test_closing_fence_may_have_trailing_whitespace(self) -> None:
+        for fence in ("```", "~~~"):
+            text = f"{fence}\n[x](inside.md)\n{fence} \t\n[y](after.md)\n"
+            stripped = mod.strip_code(text)
+            self.assertNotIn("inside.md", stripped, msg=fence)
+            self.assertIn("after.md", stripped, msg=fence)
+
+    def test_fences_may_be_indented_three_spaces(self) -> None:
+        text = "   ~~~\n[x](inside.md)\n   ~~~\n[y](after.md)\n"
+        stripped = mod.strip_code(text)
+        self.assertNotIn("inside.md", stripped)
+        self.assertIn("after.md", stripped)
+
+    def test_a_closer_with_an_info_string_does_not_close(self) -> None:
+        text = "```\n```python\n[x](inside.md)\n```\n[y](after.md)\n"
+        stripped = mod.strip_code(text)
+        self.assertNotIn("inside.md", stripped)
+        self.assertIn("after.md", stripped)
+
+    def test_link_outside_fences_survives(self) -> None:
+        text = "~~~\ncode\n~~~\n[x](kept.md)\n"
+        self.assertIn("kept.md", mod.strip_code(text))
+
+
 class SkipHostTests(unittest.TestCase):
     """SKIP_HOSTS matching used before any HEAD request."""
 

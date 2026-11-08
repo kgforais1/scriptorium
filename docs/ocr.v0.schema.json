@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scriptorium.local/ocr.v0.schema.json",
+  "title": "Scriptorium book package page text (provisional)",
+  "description": "Covers ocr/<NNNN>.json and ocr/index.json as written by PDF ingest. A document is valid when it matches exactly one of the two shapes. Provisional until M2, which adds boxes to the page file and moves to v1. See docs/book-format.md.",
+  "oneOf": [
+    { "$ref": "#/$defs/page" },
+    { "$ref": "#/$defs/index" }
+  ],
+  "$defs": {
+    "page": {
+      "description": "ocr/<NNNN>.json: the plain text of one page. Written only for a page that has text.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "text"],
+      "properties": {
+        "source": { "const": "pdf" },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "index": {
+      "description": "ocr/index.json: per-page status for the PDF pages, and a book-level rollup.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "generatedAt", "pages", "summary"],
+      "properties": {
+        "engine": { "const": "pdfium" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "pages": {
+          "description": "Page position (0-based, decimal, no padding) to that page's status. Image pages are not listed.",
+          "type": "object",
+          "propertyNames": { "pattern": "^(0|[1-9][0-9]{0,5})$" },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status"],
+            "properties": {
+              "status": { "enum": ["text", "none"] }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pdfPages", "withText"],
+          "properties": {
+            "pdfPages": { "type": "integer", "minimum": 0 },
+            "withText": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}

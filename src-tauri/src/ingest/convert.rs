@@ -4,12 +4,15 @@
 //! that already meets that is copied as-is. Anything else is converted, and the caller keeps
 //! the untouched original under `originals/`.
 
-use super::{color, decode};
+use super::{color, decode, pdf};
 use crate::book_format::SourceFormat;
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::{DynamicImage, ImageEncoder};
 use std::path::Path;
+
+/// How far into a file `%PDF-` may start.
+const PDF_HEADER_WINDOW: usize = 1024;
 
 /// JPEG quality for converted copies (plan: at least 92).
 pub const JPEG_QUALITY: u8 = 92;
@@ -31,6 +34,8 @@ pub enum InputKind {
     Tiff,
     /// A JPEG 2000 image.
     Jp2,
+    /// A PDF document. Each page becomes one frame.
+    Pdf,
 }
 
 impl InputKind {
@@ -45,6 +50,7 @@ impl InputKind {
             "gif" => Self::Gif,
             "tif" | "tiff" => Self::Tiff,
             "jp2" | "j2k" | "jpf" => Self::Jp2,
+            "pdf" => Self::Pdf,
             _ => return None,
         })
     }
@@ -59,6 +65,7 @@ impl InputKind {
             Self::Gif => "GIF",
             Self::Tiff => "TIFF",
             Self::Jp2 => "JPEG 2000",
+            Self::Pdf => "PDF",
         }
     }
 
@@ -72,6 +79,7 @@ impl InputKind {
             Self::Gif => SourceFormat::Gif,
             Self::Tiff => SourceFormat::Tiff,
             Self::Jp2 => SourceFormat::Jp2,
+            Self::Pdf => SourceFormat::Pdf,
         }
     }
 
@@ -83,7 +91,7 @@ impl InputKind {
     /// Display extension for a converted copy: JPEG for photographic sources, else PNG.
     fn converted_ext(self) -> &'static str {
         match self {
-            Self::Jpeg | Self::Tiff | Self::Jp2 => "jpg",
+            Self::Jpeg | Self::Tiff | Self::Jp2 | Self::Pdf => "jpg",
             Self::Png | Self::Webp | Self::Bmp | Self::Gif => "png",
         }
     }
@@ -91,7 +99,7 @@ impl InputKind {
     /// Display extension when the input is copied as-is.
     fn passthrough_ext(self) -> &'static str {
         match self {
-            Self::Jpeg => "jpg",
+            Self::Jpeg | Self::Pdf => "jpg",
             Self::Png => "png",
             _ => "webp",
         }
@@ -106,6 +114,10 @@ pub enum ConvertError {
     /// The file could not be decoded or breaks a conversion rule (for example CMYK with no
     /// ICC profile). Maps to the ingest error `UnreadableFile`.
     UnreadableFile(String),
+    /// A PDF needs a password. Maps to the ingest error `EncryptedPdf`.
+    EncryptedPdf,
+    /// The pdfium library is not loaded. Maps to the ingest error `PdfiumUnavailable`.
+    PdfiumUnavailable(String),
 }
 
 impl std::fmt::Display for ConvertError {
@@ -113,6 +125,8 @@ impl std::fmt::Display for ConvertError {
         match self {
             Self::UnsupportedFormat => write!(f, "not a supported input format"),
             Self::UnreadableFile(reason) => write!(f, "unreadable file: {reason}"),
+            Self::EncryptedPdf => write!(f, "the PDF is password-protected"),
+            Self::PdfiumUnavailable(reason) => write!(f, "pdfium is unavailable: {reason}"),
         }
     }
 }
@@ -123,12 +137,24 @@ pub(super) fn unreadable(reason: impl std::fmt::Display) -> ConvertError {
     ConvertError::UnreadableFile(reason.to_string())
 }
 
+impl From<pdf::PdfError> for ConvertError {
+    fn from(err: pdf::PdfError) -> Self {
+        match err {
+            pdf::PdfError::LibraryUnavailable(reason) => Self::PdfiumUnavailable(reason),
+            pdf::PdfError::Encrypted => Self::EncryptedPdf,
+            pdf::PdfError::NoPages => unreadable("the PDF has no pages"),
+            pdf::PdfError::Unreadable(reason) => Self::UnreadableFile(reason),
+        }
+    }
+}
+
 /// What ingest needs to know about one input file before it writes anything.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Inspection {
     /// The detected input format.
     pub kind: InputKind,
-    /// Number of pages this file yields (TIFF directories; 1 otherwise, GIF included).
+    /// Number of pages this file yields (TIFF directories or PDF pages; 1 otherwise, GIF
+    /// included).
     pub frames: u32,
     /// True when the display images are converted copies, so the original must be kept.
     pub needs_conversion: bool,
@@ -155,6 +181,8 @@ pub struct Source {
     /// What inspection learned about the file.
     pub info: Inspection,
     bytes: Vec<u8>,
+    /// The open document, for a PDF. Its pages are rendered from this, never from `bytes`.
+    pdf: Option<pdf::PdfDoc>,
 }
 
 impl Source {
@@ -182,9 +210,20 @@ fn sniff(bytes: &[u8]) -> Option<InputKind> {
         InputKind::Tiff
     } else if at(0, b"\0\0\0\x0cjP  \r\n\x87\n") || at(0, &[0xFF, 0x4F, 0xFF, 0x51]) {
         InputKind::Jp2
+    } else if has_pdf_header(bytes) {
+        InputKind::Pdf
     } else {
         return None;
     })
+}
+
+/// Whether `%PDF-` starts within the first 1024 bytes. Readers such as Acrobat accept leading
+/// junk there, so some valid PDFs do not start at byte 0. The slice runs four bytes past the
+/// window, so a header starting at byte 1023 is still found.
+fn has_pdf_header(bytes: &[u8]) -> bool {
+    bytes[..bytes.len().min(PDF_HEADER_WINDOW + 4)]
+        .windows(5)
+        .any(|w| w == b"%PDF-")
 }
 
 /// Read and classify a file, deciding whether it must be converted. Decodes only what the
@@ -209,6 +248,9 @@ pub fn open(path: &Path) -> Result<Source, ConvertError> {
             ))
         }
     }
+    if kind == InputKind::Pdf {
+        return open_pdf(path, bytes);
+    }
     let frames = match kind {
         InputKind::Tiff => decode::tiff_frame_count(&bytes)?,
         _ => 1,
@@ -225,7 +267,28 @@ pub fn open(path: &Path) -> Result<Source, ConvertError> {
         needs_conversion,
         display_ext,
     };
-    Ok(Source { info, bytes })
+    Ok(Source {
+        info,
+        bytes,
+        pdf: None,
+    })
+}
+
+/// A PDF is opened once through pdfium. Every page is converted, so the PDF is always kept as
+/// an original. It is opened from `path`, while `bytes` stay the source of the checksum.
+fn open_pdf(path: &Path, bytes: Vec<u8>) -> Result<Source, ConvertError> {
+    let doc = pdf::open(path)?;
+    let info = Inspection {
+        kind: InputKind::Pdf,
+        frames: doc.page_count(),
+        needs_conversion: true,
+        display_ext: InputKind::Pdf.converted_ext(),
+    };
+    Ok(Source {
+        info,
+        bytes,
+        pdf: Some(doc),
+    })
 }
 
 /// Classify a file without keeping its bytes.
@@ -254,11 +317,21 @@ fn needs_display_conversion(kind: InputKind, bytes: &[u8]) -> Result<bool, Conve
 }
 
 impl Source {
+    /// The plain text of PDF page `frame`, or `None` for an image. A PDF page without text
+    /// gives an empty string. A page whose text pdfium cannot read counts as having none.
+    pub fn page_text(&self, frame: u32) -> Option<String> {
+        let doc = self.pdf.as_ref()?;
+        Some(doc.page_text(frame).unwrap_or_default())
+    }
+
     /// Produce the display image for frame `frame` (0-based).
     pub fn frame(&self, frame: u32) -> Result<DisplayImage, ConvertError> {
         let info = &self.info;
         if frame >= info.frames {
             return Err(unreadable(format!("frame {frame} of {}", info.frames)));
+        }
+        if let Some(doc) = &self.pdf {
+            return render_pdf_frame(doc, frame, info.display_ext);
         }
         if !info.needs_conversion {
             // The file is its own display image. Decode it anyway, so a damaged file is
@@ -283,6 +356,21 @@ impl Source {
             bytes: Some(encoded),
         })
     }
+}
+
+/// One PDF page as a JPEG. pdfium renders in sRGB, so no colour conversion follows.
+fn render_pdf_frame(
+    doc: &pdf::PdfDoc,
+    frame: u32,
+    ext: &'static str,
+) -> Result<DisplayImage, ConvertError> {
+    let img = DynamicImage::ImageRgb8(doc.render_page(frame)?);
+    Ok(DisplayImage {
+        ext,
+        width: img.width(),
+        height: img.height(),
+        bytes: Some(encode(&img, ext)?),
+    })
 }
 
 fn encode(img: &DynamicImage, ext: &str) -> Result<Vec<u8>, ConvertError> {

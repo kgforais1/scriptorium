@@ -157,6 +157,27 @@ repository secret speeds it up; without one the script sleeps about 7 seconds be
 - **Add or extend an exception:** add an `[[exceptions]]` row with `id`, `library`, `reason` and
   `expires` (`YYYY-MM-DD`). Extend only after re-checking, and keep the reason current.
 
+## pdfium bump policy
+
+PDF import loads a prebuilt pdfium library from
+[bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries) (the build without V8
+and XFA). `scripts/fetch_pdfium.sh` pins one release and a SHA-256 for each platform's archive.
+No tool watches pdfium: it has no NVD CPE, so `check_bundled_c_cves.py` cannot track it, and
+Dependabot does not see the script.
+
+- **Cadence:** the maintainer moves to the latest pdfium-binaries release at least once per app
+  release, and at once when pdfium publishes a security fix.
+- **How:** change `PDFIUM_RELEASE`, download each archive yourself, and replace each hash with
+  the `sha256sum` of what you downloaded. Never copy a hash from the release page unchecked.
+  The CI cache key hashes the script, so it changes by itself.
+- **Check the crate:** `pdfium-render` binds one pdfium API version (its `pdfium_latest` feature).
+  A newer pdfium than the crate's is fine until a function it needs is missing. If the crate has
+  a newer release, bump it in the same change. Run `cargo test`, which renders every PDF fixture.
+- **Notices:** replace the pdfium section of `THIRD_PARTY_NOTICES.md` with the `LICENSE` file and
+  `licenses/` directory of the new archive, and update the version line there.
+- **Advisories:** at each release, search for pdfium advisories against the pinned version and
+  record the result in the advisory section of `THIRD_PARTY_NOTICES.md`.
+
 ## Thresholds
 
 - Source lines: soft **600** / hard **1000** — [`policies/file-size-and-counts.md`](../policies/file-size-and-counts.md)

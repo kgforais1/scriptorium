@@ -9,7 +9,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 
 - [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default
 - [Drop the openjpeg-sys patch](#unplanned--small) — when an `openjpeg-sys` release bundles OpenJPEG 2.5.4
-- [M1.5 PDF import](plans/2026-08-23-product-roadmap.md#m15--pdf-import) — next milestone; needs a plan
+- [M1.5 PDF import](plans/2026-11-07-m15-pdf-import.md) — next milestone; implemented; PR open, manual checks in M1 follow-ups
 
 ## Active plans
 
@@ -17,6 +17,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 |---|---|---|
 | [Product roadmap](plans/2026-08-23-product-roadmap.md) | living | M0–M8 horizon; not a task queue |
 | [M1 follow-ups](plans/2026-11-02-m1-followups.md) | in-progress | Manual and platform remainder after 0.2.0 |
+| [M1.5 PDF import](plans/2026-11-07-m15-pdf-import.md) | in-progress | pdfium rasteriser, PDF originals, plain text under `ocr/` |
 
 ## Unplanned / small
 

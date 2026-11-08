@@ -12,7 +12,7 @@ export interface BookFolderInfo {
 /** A folder of scans that can become a book. */
 export interface ScansFolderInfo {
   kind: "scans";
-  /** The number of supported image files. */
+  /** The number of supported image and PDF files. */
   files: number;
   /** The number of pages the book would have: all frames of all files. */
   frames: number;

@@ -423,12 +423,17 @@ fn checksums_and_frames_are_verified() {
         other => panic!("expected an unreadable original, got {other:?}"),
     }
 
-    // A PDF original is checked by checksum only until M1.5.
+    // A PDF original is opened with pdfium, so a BMP recorded as a PDF is refused.
     let book = create_book_from_folder(&src, &lib, &opts("pdf")).unwrap();
     let mut meta = read_meta(&book);
     meta.sources.as_mut().unwrap()[1].format = crate::book_format::SourceFormat::Pdf;
     write_meta(&book, &meta);
-    assert!(load_book(&book).is_ok());
+    match load_book(&book) {
+        Err(BookError::InvalidPackage { reason }) => {
+            assert!(reason.contains("cannot be read"), "{reason}")
+        }
+        other => panic!("expected an unreadable PDF original, got {other:?}"),
+    }
 }
 
 #[cfg(unix)]
@@ -635,7 +640,7 @@ fn every_error_has_a_user_message() {
         (BookError::EmptyFolder { folder: p.clone() }, "no files"),
         (
             BookError::NoSupportedImages { folder: p.clone() },
-            "No supported images",
+            "No supported images or PDFs",
         ),
         (
             BookError::UnreadableFile {
@@ -679,6 +684,23 @@ fn every_error_has_a_user_message() {
         (
             BookError::PermissionDenied { path: p.clone() },
             "Permission denied",
+        ),
+        (
+            BookError::TooManyPages {
+                pages: 100_001,
+                max: 100_000,
+            },
+            "at most 100000",
+        ),
+        (
+            BookError::EncryptedPdf { file: p.clone() },
+            "password-protected",
+        ),
+        (
+            BookError::PdfiumUnavailable {
+                reason: "missing".into(),
+            },
+            "PDF component",
         ),
     ];
     for (err, want) in cases {

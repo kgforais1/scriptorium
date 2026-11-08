@@ -7,6 +7,7 @@ pub mod command_error;
 pub mod create;
 pub mod inspect;
 pub mod load;
+pub(crate) mod ocr;
 pub mod progress;
 pub mod slug;
 pub mod sort;
@@ -16,6 +17,8 @@ pub mod sweep;
 mod tests;
 #[cfg(test)]
 mod tests_callback;
+#[cfg(test)]
+mod tests_pdf;
 
 use std::path::{Path, PathBuf};
 
@@ -78,6 +81,23 @@ pub enum BookError {
         /// The path that was refused.
         path: PathBuf,
     },
+    /// The inputs add up to more pages than a book can hold.
+    TooManyPages {
+        /// Pages the inputs would produce.
+        pages: u64,
+        /// Most pages a book can hold.
+        max: u32,
+    },
+    /// A PDF needs a password, so its pages cannot be read.
+    EncryptedPdf {
+        /// The PDF that is protected.
+        file: PathBuf,
+    },
+    /// The PDF library could not be loaded, so no PDF can be imported.
+    PdfiumUnavailable {
+        /// Why it could not be loaded.
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for BookError {
@@ -87,7 +107,7 @@ impl std::fmt::Display for BookError {
             Self::EmptyFolder { folder } => write!(f, "The folder {} has no files.", folder.display()),
             Self::NoSupportedImages { folder } => write!(
                 f,
-                "No supported images found in {}. Use JPEG, PNG, WebP, BMP, GIF, TIFF, or JPEG 2000.",
+                "No supported images or PDFs found in {}. Use JPEG, PNG, WebP, BMP, GIF, TIFF, JPEG 2000, or PDF.",
                 folder.display()
             ),
             Self::UnreadableFile { file, reason } => write!(f, "Could not read {}: {reason}.", file.display()),
@@ -120,6 +140,19 @@ impl std::fmt::Display for BookError {
                 "The book's files are corrupted or were modified: {file} no longer matches its checksum."
             ),
             Self::PermissionDenied { path } => write!(f, "Permission denied: {}.", path.display()),
+            Self::TooManyPages { pages, max } => write!(
+                f,
+                "Too many pages: these files make {pages} pages and a book holds at most {max}."
+            ),
+            Self::EncryptedPdf { file } => write!(
+                f,
+                "{} is password-protected. Remove the password and try again.",
+                file.display()
+            ),
+            Self::PdfiumUnavailable { reason } => write!(
+                f,
+                "PDF import is unavailable because the PDF component could not be loaded ({reason})."
+            ),
         }
     }
 }

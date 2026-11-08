@@ -19,6 +19,11 @@ Agents start at [`AGENTS.md`](../AGENTS.md).
   `pnpm licenses:gen` and commit the file. Install the version pinned in `package.json` (`config.cargoAboutVersion`); the build prints the exact
   `cargo install` command if yours is missing or different.
   `pnpm tauri dev` does not need it.
+- **pdfium** — PDF import loads a pinned pdfium library. `pnpm tauri dev` and `pnpm tauri build`
+  fetch it first with `pnpm pdfium:fetch` (`scripts/fetch_pdfium.sh`, which needs `bash` and
+  `curl`; on Windows use Git Bash). Run that once yourself before a bare `cargo build`, `cargo
+  test`, or `cargo clippy`: the platform Tauri config lists the library as a resource, so a Rust
+  build fails without it. The script returns at once when the library is already there.
 - **direnv (optional)** — `cp .envrc.example .envrc && direnv allow` to auto-load
   project env vars. `.envrc.example` documents the available variables.
 

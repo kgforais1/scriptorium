@@ -18,13 +18,14 @@ this doc disagree, the schema wins on types, this doc wins on rules and intent.
 ├── meta.json          # required — see fields below
 ├── pages/             # required — display images, relative paths stored in meta.json
 ├── originals/         # v2, optional — untouched originals of converted pages (see sources[])
-├── ocr/               # reserved — page text lands here in M2 (layout below)
+├── ocr/               # reserved — PDF ingest writes plain page text here; M2 adds OCR (layout below)
 └── annotations.json   # reserved — empty form is `[]` (canonical); `{}` tolerated on read, never written
 ```
 
 ### Reserved layout for page text and annotations (provisional)
 
-M1 writes neither of these. The shapes are recorded now so M2 and M6 add files without a
+M1 writes neither of these. PDF ingest (M1.5) writes the plain text a PDF carries, as
+described below. The shapes are recorded now so M2 and M6 add files without a
 `formatVersion` bump, because neither lives in `meta.json`. They stay provisional until M2
 (text) and M6 (annotations) ship and may change before then.
 
@@ -34,6 +35,20 @@ M1 writes neither of these. The shapes are recorded now so M2 and M6 add files w
   `ocr`, `pdf`, or `curator`. Curator text keeps the OCR original and a correction history.
 - `ocr/index.json` holds per-page status (`status`, `engine`, `generatedAt`) and a book-level
   rollup. OCR status never goes in `meta.json`.
+
+**What PDF ingest writes** ([`ocr.v0.schema.json`](ocr.v0.schema.json) covers both files):
+
+- For each PDF page that has text, `ocr/<NNNN>.json` is `{ "source": "pdf", "text": "…" }`.
+  There are no boxes. `NNNN` is the page's 0-based position in the book, padded like `pages/`,
+  not the PDF's page number and not a count of pages with text.
+- `ocr/index.json` is `{ "engine": "pdfium", "generatedAt": <RFC 3339>, "pages": {…},
+  "summary": { "pdfPages": n, "withText": m } }`. `pages` maps a page position (decimal, no
+  padding) to `{ "status": "text" }` or `{ "status": "none" }`. A page with text is `text`.
+  A PDF page without text is `none`. Image pages are not listed.
+- A book with no PDF pages gets no `ocr/` files, only the empty directory.
+- Ingest validates both files against the schema before the package is renamed into place.
+  `load_book` does not read `ocr/` yet. M2 adds boxes to the page file and moves the schema
+  to v1.
 - `annotations.json` regions use the same normalized page coordinates, as `xywh` or a polygon.
 
 **Portability:** everything inside the package is addressed with **relative paths**.
@@ -93,6 +108,11 @@ converted, the untouched original is kept. Input formats and conversion rules ar
   it, at most one page per frame (ingest writes one page for every frame); a single-frame
   source is referenced by exactly one page.
 - `frames` is written at ingest. `load_book` checks it against the frame count the file reports.
+  For a PDF that is its page count, which needs pdfium. When pdfium is not loaded, a PDF
+  original is checked by checksum only, so a missing library does not make PDF books unreadable.
+- A PDF is always kept as an original, one page per frame. Each page is rendered at up to
+  300 DPI, scaled down to a long edge of at most 4000 px and at most 12 MP, flattened onto
+  white, and stored as a JPEG. An encrypted PDF is refused (`EncryptedPdf`).
 - `load_book` verifies each `sources[]` sha256 once. Drift is `ChecksumMismatch`.
 - Free-space preflight counts originals plus display copies in `estimated_bytes`.
 
@@ -186,7 +206,9 @@ ingest pipeline returns on failure.
 | **Input format** | A file's contents must match its extension (a TIFF named `.png` is refused), because the extension decides how the page is stored. | `UnreadableFile` |
 | **Orphan cleanup** | Before each ingest (and, once Phase 2 wires it, at app startup), delete `.ingest-tmp-*` directories older than 1 hour unless a running ingest holds their `.ingest.lock`, and `*.scriptorium-tmp` files older than 1 hour at the library root and inside each book. Only `.ingest-tmp-*` directories are ever deleted: a directory that merely ends in the temp suffix is treated as a book. | — |
 | **Checksums** | Compute `sha256` at ingest and store it in `meta.json`. `load_book` re-verifies the sha256 of each page file; drift is a hard failure. Skip re-verify only behind an explicit future flag — not in M1. | `ChecksumMismatch` |
-| **Free space** | Pre-flight check: refuse the copy if free space is less than `estimated_bytes × 1.1 + 50 MB` headroom. `estimated_bytes` is the total ingest will write: every display image plus every retained original (v2). | — |
+| **Free space** | Pre-flight check: refuse the copy if free space is less than `estimated_bytes × 1.1 + 50 MB` headroom. `estimated_bytes` is the total ingest will write: every display image plus every retained original (v2). A PDF page is budgeted at 12 MB, plus 64 KB for its `ocr/` text. | `InsufficientDiskSpace` |
+| **Page limit** | The pages of all inputs together, PDF pages included, must not exceed 100000. The check runs before any page is rendered. | `TooManyPages` |
+| **PDF import** | A PDF needs the bundled pdfium library. An encrypted PDF, a PDF with no pages, and a damaged PDF are refused. If the library cannot be loaded, only PDF import fails. | `EncryptedPdf`, `UnreadableFile`, `PdfiumUnavailable` |
 
 ## Planned: export and import (M5)
 

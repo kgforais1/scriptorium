@@ -1,6 +1,6 @@
 # Plan: M1 follow-ups after 0.2.0
 
-Last reviewed: 2026-11-05
+Last reviewed: 2026-11-07
 Date: 2026-11-02
 Author: Claude (release 0.2.0)
 Status: in-progress
@@ -27,6 +27,10 @@ run on 2026-11-02. These items are the rest. Section links point at the archived
       height, and mean fps over ten turns.
 - [ ] Run a Windows release build under WebView2, including page paths and the
       `https://asset.localhost` form.
+- [ ] M1.5: import a scanned public-domain PDF of at least 200 pages in the built macOS app, and
+      record the import time and peak memory.
+- [ ] M1.5: in Windows and Linux release builds, check that the pdfium library is bundled and
+      that a PDF imports. CI never runs `tauri build`.
 
 ### Engine gate ([Phase 0](archive/completed/2026-08-23-m1-scan-viewer.md#phase-0--integration-gate-adr-already-done))
 

@@ -31,7 +31,7 @@ people who read them.
 
 ## Features
 
-- **Make a book from scans.** Choose a folder of JPEG, PNG, WebP, TIFF, JPEG 2000, BMP or GIF pages. Scriptorium
+- **Make a book from scans.** Choose a folder of JPEG, PNG, WebP, TIFF, JPEG 2000, BMP, GIF or PDF pages. Scriptorium
   sorts them in natural order, so `page2` comes before `page10`, and copies them into your
   library.
 - **Turn pages naturally.** Drag a corner, click a page, use the arrow keys, or jump with the

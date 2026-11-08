@@ -10,6 +10,7 @@ uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- You can now make a book from a PDF. Choose a folder that holds the PDF, alone or with images. Each page of the PDF becomes one page of the book, drawn at up to 300 DPI, and the PDF itself is kept with the book. Any text in the PDF is saved for search later. Password-protected PDFs are refused with a clear message, and a book may have at most 100000 pages.
 - A macOS download for Apple silicon (macOS 13.3 or later) is on the [v0.2.0 release](https://github.com/kgforais1/scriptorium/releases/tag/v0.2.0). The README and the getting-started guide explain how to open it.
 
 ### Changed
