@@ -30,7 +30,8 @@ def _load_module() -> ModuleType:
     """Load the script as a module for direct calls."""
     path = ROOT / "scripts" / "ocr_spike.py"
     spec = importlib.util.spec_from_file_location("ocr_spike", path)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     # dataclasses look the module up in sys.modules while the class is built.
     sys.modules[spec.name] = module
