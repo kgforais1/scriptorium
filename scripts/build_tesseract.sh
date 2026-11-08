@@ -156,7 +156,7 @@ drop_shared_libs
 cmake_build libpng -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TESTS=OFF -DPNG_TOOLS=OFF -DPNG_FRAMEWORK=OFF
 cmake_build libjpeg-turbo -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF -DWITH_JAVA=OFF
 cmake_build libtiff -Dtiff-tools=OFF -Dtiff-tests=OFF -Dtiff-contrib=OFF -Dtiff-docs=OFF \
-    -Dlzma=OFF -Dzstd=OFF -Djbig=OFF -Dlerc=OFF -Dwebp=OFF -Dlibdeflate=OFF -Dcxx=OFF
+    -Dlzma=OFF -Dzstd=OFF -Djbig=OFF -Dlerc=OFF -Dwebp=OFF -Dlibdeflate=OFF -Dcxx=OFF -Djpeg12=OFF
 cmake_build libwebp -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
     -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF \
     -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF
