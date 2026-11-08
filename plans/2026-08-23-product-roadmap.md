@@ -98,6 +98,10 @@ Closed by [`2026-11-05-m05-harness-followups.md`](archive/completed/2026-11-05-m
 
 **Target:** app is “aware” of text while still showing scans; search, select, copy.
 
+M2 ships as four plans: M2a engine and pipeline
+([plan](2026-11-07-m2a-ocr-pipeline.md)), M2b search and text layer, M2c curator correction,
+and M2d page export with embedded text.
+
 - [ ] Bundled OCR: ship an OCR engine with the app (lead candidate: Tesseract as a Tauri
       sidecar, with language data for the corpora's languages), so OCR works offline with no
       separate install. Evaluate quality on the test corpora before choosing; keep the engine
