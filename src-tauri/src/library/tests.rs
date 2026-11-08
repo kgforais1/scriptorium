@@ -640,7 +640,7 @@ fn every_error_has_a_user_message() {
         (BookError::EmptyFolder { folder: p.clone() }, "no files"),
         (
             BookError::NoSupportedImages { folder: p.clone() },
-            "No images or PDFs",
+            "No supported images or PDFs",
         ),
         (
             BookError::UnreadableFile {

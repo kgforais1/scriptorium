@@ -17,6 +17,10 @@ fn open_fixture(name: &str) -> PdfDoc {
     open(&fixture(name)).unwrap_or_else(|err| panic!("{name}: {err}"))
 }
 
+fn is_dark(page: &image::RgbImage, x: u32, y: u32) -> bool {
+    page.get_pixel(x, y).0.iter().all(|&c| c < 64)
+}
+
 fn within_caps(width: u32, height: u32) -> bool {
     width.max(height) <= MAX_LONG_EDGE && u64::from(width) * u64::from(height) <= MAX_PIXELS
 }
@@ -77,6 +81,16 @@ fn rotated_page_renders_landscape() {
     let page = open_fixture("rotate90.pdf").render_page(0).unwrap();
     // A 200x300 pt page turned by 90 degrees is 300x200 pt, which is 1250x833 px.
     assert_eq!(page.dimensions(), (1250, 833));
+    // The square in the unrotated bottom-left corner turns to the top-left.
+    let (w, h) = page.dimensions();
+    assert!(is_dark(&page, w / 20, h / 20), "top-left holds the square");
+    for (x, y) in [
+        (w - w / 20, h / 20),
+        (w / 20, h - h / 20),
+        (w - w / 20, h - h / 20),
+    ] {
+        assert!(!is_dark(&page, x, y), "no square at ({x}, {y})");
+    }
 }
 
 #[test]
@@ -84,6 +98,16 @@ fn crop_box_sets_the_page_size() {
     let page = open_fixture("cropbox.pdf").render_page(0).unwrap();
     // The 200x100 pt crop box, not the 400x400 pt media box.
     assert_eq!(page.dimensions(), (833, 417));
+    // The square fills the crop box's bottom-left 50x50 pt: a quarter of the width and half
+    // the height. The square and text outside the crop box must not show.
+    let (w, h) = page.dimensions();
+    assert!(
+        is_dark(&page, w / 8, h * 3 / 4),
+        "bottom-left holds the square"
+    );
+    for (x, y) in [(w / 8, h / 4), (w * 5 / 8, h * 3 / 4), (w * 7 / 8, h / 4)] {
+        assert!(!is_dark(&page, x, y), "nothing at ({x}, {y})");
+    }
 }
 
 #[test]

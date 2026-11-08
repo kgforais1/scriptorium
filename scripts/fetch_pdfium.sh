@@ -90,7 +90,7 @@ if [[ -n "${CACHED}" && -f "${CACHED}" ]]; then
 else
     URL="https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_RELEASE//\//%2F}/pdfium-${PLATFORM}.tgz"
     echo "fetch_pdfium: downloading ${URL}"
-    curl --fail --silent --show-error --location --output "${ARCHIVE}" "${URL}"
+    curl --proto "=https" --proto-redir "=https" --tlsv1.2 --fail --silent --show-error --location --output "${ARCHIVE}" "${URL}"
 fi
 
 ACTUAL_SHA="$(sha256_of "${ARCHIVE}")"

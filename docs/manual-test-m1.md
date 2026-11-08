@@ -148,7 +148,7 @@ Each error opens a dialog with a heading, a message, and an **OK** button. Press
 Escape to dismiss it.
 
 - [ ] Open… an empty folder. Expected: heading "Folder is empty".
-- [ ] Open… a folder that holds only `.txt` files. Expected: heading "No images or PDFs".
+- [ ] Open… a folder that holds only `.txt` files. Expected: heading "No supported images or PDFs".
 - [ ] Make a folder with `a.png` and `a.jpg`, using copies of any two images. Open… it.
   Expected: heading "Two files share a name".
 - [ ] Open… a folder with an unreadable file, such as a text file renamed to `page.png`.

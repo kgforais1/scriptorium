@@ -45,8 +45,8 @@ CATALOG_DIRS = ("inventory",)
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(\s*([^)\s]+?)\s*\)")
 CATALOG_RE = re.compile(r"^Catalog reviewed through:\s*(\d{4}-\d{2}-\d{2})\s*$", re.MULTILINE)
-# Opens a fenced block: three or more backticks or tildes at the start of a line.
-FENCE_OPEN_RE = re.compile(r"^(`{3,}|~{3,})")
+# Opens a fenced block: three or more backticks or tildes, indented at most three spaces.
+FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 TIMEOUT = 10
 USER_AGENT = "template-repo-doc-link-check/1.0"
@@ -77,8 +77,15 @@ def strip_code(text: str) -> str:
     fence = ""  # the open fence's marker, or "" outside a block
     for line in text.splitlines(keepends=True):
         if fence:
-            # A block closes on a run of the same character at least as long.
-            if line.startswith(fence) and not line.rstrip("\r\n").lstrip(fence[0]):
+            # A block closes on a run of the same character at least as long, indented at most
+            # three spaces, with only spaces or tabs after it.
+            body = line.rstrip(" \t\r\n")
+            marker = body.lstrip(" ")
+            if (
+                len(body) - len(marker) <= 3
+                and marker.startswith(fence)
+                and not marker.lstrip(fence[0])
+            ):
                 fence = ""
             out.append("\n" if line.endswith("\n") else "")
             continue

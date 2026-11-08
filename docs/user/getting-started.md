@@ -41,9 +41,10 @@ Scriptorium reads these file types:
 - BMP and GIF files. A GIF uses its first frame.
 - TIFF files. Each page of a multi-page TIFF becomes one page of the book.
 - JPEG 2000 files (`.jp2`, `.j2k`, and `.jpf`).
-- PDF files. Each page of a PDF becomes one page of the book, drawn as an image. Scriptorium
-  keeps the PDF itself too, and saves any text the PDF holds. A PDF with a password is refused.
-  Pages are drawn at up to 300 DPI, and very large pages are scaled down.
+- PDF files, from the release after v0.2.0 or a build from source. Each page of a PDF becomes
+  one page of the book, drawn as an image. Scriptorium keeps the PDF itself too, and saves any
+  text the PDF holds. A PDF that needs a password to open is refused. Pages are drawn at up to
+  300 DPI, and very large pages are scaled down.
 
 Scriptorium puts the files in natural order. That means `page2` comes before `page10`, and
 capital letters do not matter. If you want a page in a certain place, number the file names.
@@ -134,7 +135,7 @@ A problem opens a dialog with a heading and a message. Press **OK** to close it.
 | Heading | What it means and what to do |
 |---|---|
 | Folder is empty | The folder has nothing in it. Choose the folder that holds your scans. |
-| No images or PDFs | The folder has no file of a type that Scriptorium reads. Check the file types above. |
+| No supported images or PDFs | The folder has no file of a type that Scriptorium reads. Check the file types above. |
 | Can't read a file | One file is damaged, or its type does not match its name. The message names the file. Replace it or take it out. |
 | Book already exists | Your library already has a book with that id. Choose another id in the dialog. |
 | Two files share a name | Two files differ only by their extension. Rename one of them. |

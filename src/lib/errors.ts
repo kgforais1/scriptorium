@@ -2,7 +2,7 @@ import type { CommandError } from "./bookTypes";
 
 const HEADINGS: Record<string, string> = {
   EmptyFolder: "Folder is empty",
-  NoSupportedImages: "No images or PDFs",
+  NoSupportedImages: "No supported images or PDFs",
   UnreadableFile: "Can't read a file",
   DestinationExists: "Book already exists",
   DuplicatePageStem: "Two files share a name",

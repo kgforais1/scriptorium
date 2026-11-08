@@ -107,7 +107,7 @@ impl std::fmt::Display for BookError {
             Self::EmptyFolder { folder } => write!(f, "The folder {} has no files.", folder.display()),
             Self::NoSupportedImages { folder } => write!(
                 f,
-                "No images or PDFs found in {}. Use JPEG, PNG, WebP, BMP, GIF, TIFF, JPEG 2000, or PDF.",
+                "No supported images or PDFs found in {}. Use JPEG, PNG, WebP, BMP, GIF, TIFF, JPEG 2000, or PDF.",
                 folder.display()
             ),
             Self::UnreadableFile { file, reason } => write!(f, "Could not read {}: {reason}.", file.display()),

@@ -217,10 +217,11 @@ fn sniff(bytes: &[u8]) -> Option<InputKind> {
     })
 }
 
-/// Whether `%PDF-` appears in the first 1024 bytes. Readers such as Acrobat accept leading
-/// junk there, so some valid PDFs do not start at byte 0.
+/// Whether `%PDF-` starts within the first 1024 bytes. Readers such as Acrobat accept leading
+/// junk there, so some valid PDFs do not start at byte 0. The slice runs four bytes past the
+/// window, so a header starting at byte 1023 is still found.
 fn has_pdf_header(bytes: &[u8]) -> bool {
-    bytes[..bytes.len().min(PDF_HEADER_WINDOW)]
+    bytes[..bytes.len().min(PDF_HEADER_WINDOW + 4)]
         .windows(5)
         .any(|w| w == b"%PDF-")
 }

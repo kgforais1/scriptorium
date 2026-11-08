@@ -11,31 +11,28 @@ Fixtures written:
     cropbox.pdf      a 400x400 pt media box with a 200x100 pt crop box
     transparent.pdf  an image-only page whose left half is fully transparent
     a0.pdf           one A0 page (2384x3370 pt), over both render caps at 300 DPI
-    encrypted.pdf    a user-password-protected PDF (RC4 40-bit, password "user")
+    encrypted.pdf    a PDF that needs a password (standard handler, R2) and matches none
     zero_pages.pdf   a valid PDF with an empty page tree
     junk_prefix.pdf  text3.pdf with 1000 bytes of junk before "%PDF-"
     truncated.pdf    text3.pdf cut off before its cross-reference table
 
 Usage:
     python3 scripts/generate_pdf_fixtures.py
-    python3 scripts/generate_pdf_fixtures.py --out some/other/dir
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
-import struct
 import sys
 import zlib
 from pathlib import Path
 
-DEFAULT_OUT = Path("tests/fixtures/pdf")
+OUT = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "pdf"
 JUNK_PREFIX_LEN = 1000
-# The standard security handler's 32-byte password padding string (PDF 32000-1, 7.6.3.3).
-PASSWORD_PAD = bytes.fromhex("28bf4e5e4e758a4164004e56fffa01082e2e00b6d0683e802f0ca9fe6453697a")
-ENCRYPT_USER_PASSWORD = b"user"
-ENCRYPT_OWNER_PASSWORD = b"owner"
+# The standard security handler's 32-byte /O and /U entries (PDF 32000-1, 7.6.3.4), as fixed
+# patterns. They match no password, so the document cannot be opened.
+ENCRYPT_O = bytes(range(32))
+ENCRYPT_U = bytes(range(32, 64))
 ENCRYPT_PERMISSIONS = -4
 # Every fixture puts its page tree at object 2.
 CATALOG = b"<< /Type /Catalog /Pages 2 0 R >>"
@@ -86,16 +83,21 @@ def page_tree(page_bodies: list[str], font_obj: int, first_page_obj: int = 3) ->
     return objects
 
 
-def text_content(text: str) -> bytes:
-    """Return a content stream that draws `text` near the top-left of the page."""
-    return f"BT /F1 24 Tf 20 {200} Td ({text}) Tj ET".encode("latin-1")
+def text_content(text: str, marks: str = "") -> bytes:
+    """Return a content stream that draws `text` near the top-left of the page, then `marks`,
+    extra drawing operators such as filled black squares.
+    """
+    return f"BT /F1 24 Tf 20 {200} Td ({text}) Tj ET {marks}".rstrip().encode("latin-1")
 
 
-def simple_pdf(page_extras: list[str], texts: list[str]) -> bytes:
-    """Build a PDF with one text page per entry. `page_extras` holds per-page boxes."""
+def simple_pdf(page_extras: list[str], texts: list[str], marks: list[str] | None = None) -> bytes:
+    """Build a PDF with one text page per entry. `page_extras` holds per-page boxes, and
+    `marks` optional per-page drawing.
+    """
     font_obj = 3 + 2 * len(texts)
     objects = page_tree(page_extras, font_obj)
-    objects += [stream_obj("", text_content(text)) for text in texts]
+    page_marks = marks or [""] * len(texts)
+    objects += [stream_obj("", text_content(t, m)) for t, m in zip(texts, page_marks, strict=True)]
     objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
     return build_pdf(objects)
 
@@ -107,14 +109,19 @@ def text3() -> bytes:
 
 
 def rotate90() -> bytes:
-    """One portrait 200x300 pt page rotated by 90 degrees."""
-    return simple_pdf(["/MediaBox [0 0 200 300] /Rotate 90"], ["Rotated"])
+    """One portrait 200x300 pt page rotated by 90 degrees, with a black square in the unrotated
+    page's bottom-left corner. Rotated clockwise for display, that corner is the top-left.
+    """
+    return simple_pdf(["/MediaBox [0 0 200 300] /Rotate 90"], ["Rotated"], ["0 g 0 0 50 50 re f"])
 
 
 def cropbox() -> bytes:
-    """A 400x400 pt media box with a 200x100 pt crop box."""
+    """A 400x400 pt media box with a 200x100 pt crop box. A black square fills the crop box's
+    bottom-left 50x50 pt, and a second square sits outside the crop box, where it must not show.
+    The text, at y=200, is outside the crop box too.
+    """
     box = "/MediaBox [0 0 400 400] /CropBox [50 50 250 150]"
-    return simple_pdf([box], ["Cropped"])
+    return simple_pdf([box], ["Cropped"], ["0 g 50 50 50 50 re f 300 300 50 50 re f"])
 
 
 def a0() -> bytes:
@@ -158,41 +165,12 @@ def zero_pages() -> bytes:
     )
 
 
-def rc4(key: bytes, data: bytes) -> bytes:
-    """RC4 stream cipher, which the legacy security handler uses."""
-    state = list(range(256))
-    j = 0
-    for i in range(256):
-        j = (j + state[i] + key[i % len(key)]) % 256
-        state[i], state[j] = state[j], state[i]
-    out = bytearray()
-    i = j = 0
-    for byte in data:
-        i = (i + 1) % 256
-        j = (j + state[i]) % 256
-        state[i], state[j] = state[j], state[i]
-        out.append(byte ^ state[(state[i] + state[j]) % 256])
-    return bytes(out)
-
-
-def pad_password(password: bytes) -> bytes:
-    """Pad or cut a password to 32 bytes with the standard padding string."""
-    return (password + PASSWORD_PAD)[:32]
-
-
-def encryption_entries() -> tuple[bytes, bytes]:
-    """Return the /O and /U entries for revision 2 (40-bit RC4) with a user password."""
-    owner_key = hashlib.md5(pad_password(ENCRYPT_OWNER_PASSWORD)).digest()[:5]
-    owner = rc4(owner_key, pad_password(ENCRYPT_USER_PASSWORD))
-    perms = struct.pack("<i", ENCRYPT_PERMISSIONS)
-    key_input = pad_password(ENCRYPT_USER_PASSWORD) + owner + perms + FILE_ID
-    file_key = hashlib.md5(key_input).digest()[:5]
-    return owner, rc4(file_key, PASSWORD_PAD)
-
-
 def encrypted() -> bytes:
-    """A password-protected document. The page has no content, so no stream needs encrypting."""
-    owner, user = encryption_entries()
+    """A document that needs a password. /O and /U are fixed bytes that match no password, the
+    empty one included, so a reader can only refuse it. Nothing is hashed or encrypted, because
+    the page has no content and only the refusal is under test.
+    """
+    owner, user = ENCRYPT_O, ENCRYPT_U
     encrypt = (
         f"<< /Filter /Standard /V 1 /R 2 /P {ENCRYPT_PERMISSIONS} "
         f"/O <{owner.hex()}> /U <{user.hex()}> >>"
@@ -235,14 +213,14 @@ def fixtures() -> dict[str, bytes]:
 
 
 def main(argv: list[str]) -> int:
-    """Write all fixtures into the output directory."""
-    parser = argparse.ArgumentParser(description="Generate the PDF import test fixtures.")
-    parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="output directory")
-    args = parser.parse_args(argv)
-    args.out.mkdir(parents=True, exist_ok=True)
+    """Write all fixtures into tests/fixtures/pdf/. The location is fixed, so there is nothing to
+    pass on the command line.
+    """
+    argparse.ArgumentParser(description="Generate the PDF import test fixtures.").parse_args(argv)
+    OUT.mkdir(parents=True, exist_ok=True)
     for name, data in fixtures().items():
-        (args.out / name).write_bytes(data)
-        print(f"{args.out / name}: {len(data)} bytes")
+        (OUT / name).write_bytes(data)
+        print(f"{OUT / name}: {len(data)} bytes")
     return 0
 
 

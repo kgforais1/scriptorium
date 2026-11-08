@@ -4,7 +4,7 @@ import { errorHeading, isCommandError, toCommandError } from "./errors";
 // Every BookError variant plus Internal, pinned by value so a wrong or duplicated heading fails.
 const HEADINGS: [string, string][] = [
   ["EmptyFolder", "Folder is empty"],
-  ["NoSupportedImages", "No images or PDFs"],
+  ["NoSupportedImages", "No supported images or PDFs"],
   ["UnreadableFile", "Can't read a file"],
   ["DestinationExists", "Book already exists"],
   ["DuplicatePageStem", "Two files share a name"],
