@@ -281,13 +281,13 @@ def build_recognizers(args: argparse.Namespace) -> Dict[str, Tuple[Optional[Reco
     return made
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Optional[Sequence[str]] = None) -> None:
     """Entry point: score each available engine and print (and optionally save) the table."""
     args = parse_args(argv)
     pages, missing = load_pages(args.truth, args.corpus)
     if not pages:
         print(f"No ground-truth files in {args.truth}.")
-        return 0
+        return
     if missing:
         print(
             f"{len(missing)} page image(s) missing under {args.corpus} "
@@ -295,7 +295,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "Rebuild them with the recipe in tests/fixtures/README.md "
             '("OCR ground-truth pages"), then rerun this script.'
         )
-        return 0
+        return
     results: List[EngineResult] = []
     for name, (recognize, reason) in build_recognizers(args).items():
         if recognize is None:
@@ -308,8 +308,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         args.json.write_text(
             json.dumps([r.__dict__ for r in results], indent=2) + "\n", encoding="utf-8"
         )
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
