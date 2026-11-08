@@ -218,10 +218,9 @@ checks only one holds it at a time, and the combined peak stays within 600 MB.
   "schema": 1,
   "engine": "tesseract 5.5.1 eng-fast",
   "updatedAt": "…",
-  "forced": { "runId": "…" },
   "pages": {
     "0": { "status": "done", "imageSha256": "…", "runId": "…" },
-    "1": { "status": "failed", "error": "timeout", "failedAt": "…" }
+    "1": { "status": "failed", "error": "timeout", "failedAt": "…", "afterRunId": "…" }
   },
   "summary": { "pages": 202, "done": 201, "failed": 1, "pending": 0, "skipped": 0, "withText": 180 }
 }
@@ -263,28 +262,33 @@ in two steps:
    - A `skipped` entry in the old index stays `skipped`, even over a matching `ocr` layer. A
      curator's "do not OCR" beats everything, so no run, forced or not, touches that page.
    - A page whose file is invalid is `failed`, with the validation error.
-   - A `failed` entry in the old index stays `failed` with its error if its `failedAt` is at or after
-     the page's `ocr` layer `generatedAt`, or the page has no `ocr` layer. So a forced run that
-     fails on a page that had good text stays failed until a later success. That success writes a
-     newer `generatedAt`, which clears it.
+   - A `failed` entry in the old index stays `failed` with its error if the page's `ocr` layer
+     still carries the `afterRunId` the failure recorded, or the page still has no `ocr` layer
+     and the failure recorded none. `afterRunId` is the `runId` of the layer that was on disk
+     when the page failed. So a forced run that fails on a page that had good text stays failed.
+     A later success writes a layer with a new `runId`, which no longer matches, and clears it.
+     This compares ids, not times, so a clock that moves backward cannot revive a failure.
    - An `ocr` layer with the current engine id and the page's current `sha256` is `done`, unless
-     the old index has `forced` set and the layer's `runId` is not that run's id (below). Then
+     `ocr/forced.json` names a forced run and the layer's `runId` is not that run's id (below). Then
      the page is `pending`. This holds after a crash too, when no job is running.
    - Any other page is `pending`.
 
-Every move to `failed` stamps `failedAt`: a live page failure, a timeout, and an invalid file
-found by the rebuild. Both timestamps are RFC 3339 with millisecond precision, and a tie goes the
-safe way: a failure at the same instant as a success wins.
+Every move to `failed` records `afterRunId`, and stamps `failedAt` for display only: a live page
+failure, a timeout, and an invalid file found by the rebuild. No rule compares timestamps.
 
-Every run gets a random `runId`, and every `ocr` layer it writes records it. `forced` appears in
-the index only while a forced run is unfinished, and names that run's id. A forced run's progress
+Every run gets a random `runId`, and every `ocr` layer it writes records it. A forced run is recorded
+in its own small file, `ocr/forced.json` (`{ "runId": "…" }`), written atomically. The file exists
+only while a forced run is unfinished. A forced run's progress
 is therefore an exact match, not a clock comparison, so clock changes cannot mark a page done.
 
-**A lost index during a forced run.** `forced` lives only in the index. If the index is missing
-or invalid when the job rebuilds, the forced intent cannot be recovered, and step 2 counts
-matching layers as `done`. The job does not guess. It records `forcedLost: true` in the new
-index, `ocr_status` reports it, and the reader says "A re-run was interrupted. Recognise text
-again to finish it." A test covers this.
+**Why a separate file.** The index is a cache and can be lost. Forced intent cannot be rebuilt from
+page files, so it lives apart from the index, and losing the index never loses it. A missing
+`forced.json` simply means no forced run, so a first run on an M1 book, which has no index and
+no `forced.json`, needs no special case and shows no warning. An invalid `forced.json` is the
+one case where intent is unknown. The job then deletes it, treats the run as not forced, and
+logs it. It shows no message, because no re-run is known to have happened. Tests cover a lost
+index during a forced run, which still resumes the forced pages, a first run with no files, and
+an invalid `forced.json`.
 
 Then it writes the rebuilt index atomically. The job runs `pending` pages, then retries each
 `failed` page once per run. M2c moves `skipped` into the page file, where it belongs. Reading 202
@@ -299,8 +303,8 @@ write takes that mutex, so two workers' writes never race.
 **`ocr_status`.** It never parses page files. While a job runs, it returns the registry's live
 snapshot only, and computes the summary from that snapshot, because the index on disk lags. With
 no job running, it reads `index.json`. It checks each `done` entry's `imageSha256` against
-`meta.json`, and the index's `engine` against the engine the app ships now. If `forced` is set,
-a `done` entry whose `runId` is not the forced run's id is unfinished. It also checks that each
+`meta.json`, and the index's `engine` against the engine the app ships now. If `ocr/forced.json`
+names a run, a `done` entry whose `runId` is not the forced run's id is unfinished. It also checks that each
 `done` entry's page file exists, which is a cheap `stat` and no read. Any of these reports that
 page as `pending`, so the reader never says "Text ready" over stale text or text
 from an older engine. A page file that exists but is invalid is caught by the next job's
@@ -323,11 +327,18 @@ file leaves the file unchanged and marks the page `failed`.
 
 - One job runs per book at a time, across app instances too. The app does not stop a second
   instance from opening, so a job takes an exclusive lock on `ocr/.job.lock`, with the same
-  `lock_dir` helper, before it rebuilds the index. Only the lock holder writes the index or the
-  `ocr` layers, so two instances cannot overwrite each other's index or erase a failure. The lock
+  `lock_dir` helper, before it rebuilds the index. Only the lock holder writes the index, the
+  `ocr` layers, or `ocr/forced.json`, so two instances cannot overwrite each other's index or erase a failure. The lock
   is released when the job finishes, fails, or is cancelled, and the OS releases it if the app
   crashes. An instance that cannot take the lock reports the state `busy`, writes nothing, and
-  its reader shows "Reading text in another window". It retries when asked again. M2c's editor
+  its reader shows "Reading text in another window". A forced request there is refused
+  with `busy` and writes no `forced.json`. "Recognise text again" is disabled while `busy`, and
+  the curator asks again once the other window is done. While `busy`, the reader calls `ocr_status`
+  every 5 seconds. `ocr_status` tries the lock without blocking, and releases it at once if it
+  gets it. Getting it means the other instance has finished, failed, or crashed, since the OS
+  frees the lock of a dead process. The state then leaves `busy` for `idle` or `finished`, read
+  from the index, and Resume reappears if pages are unfinished. Tests cover the other instance
+  finishing and being killed, and check the reader leaves `busy` within one poll. M2c's editor
   takes the same lock for its writes. Within one instance, a second non-forced request returns
   the running job, and a forced one upgrades it, as described below. A test holds the lock from a
   second process and checks the first writes nothing.
@@ -345,15 +356,15 @@ file leaves the file unchanged and marks the page `failed`.
 - `run_ocr` takes `force: bool`. A forced run re-runs every page that is not `skipped`, including
   fresh `done` pages with the same engine and checksum. It still writes only the `ocr` layer. The
   automatic run after ingest is not forced.
-- A forced run is made durable by `forced.runId` in the index, written atomically before its
-  first page. While `forced` is set, a page counts as unfinished until its `ocr` layer carries
+- A forced run is made durable by `ocr/forced.json`, written atomically before its
+  first page. While it exists, a page counts as unfinished until its `ocr` layer carries
   that `runId`. So a forced run that is cancelled, or ends in a crash, resumes on its unfinished
-  pages only, and existing text stays readable meanwhile. `forced` is cleared when the forced
+  pages only, and existing text stays readable meanwhile. The file is deleted when the forced
   run has been through every page.
-- A forced request while a run is going does not just return that run. It writes `forced` with a new
-  `runId` to the index atomically at once, under the per-book mutex. The running job adopts that
+- A forced request while a run is going does not just return that run. It writes `ocr/forced.json` with a new
+  `runId` atomically at once, under the per-book mutex. The running job adopts that
   id for every page it writes from then on, and then makes one more pass over the pages whose
-  layers carry a different id. Because `forced` is on disk
+  layers carry a different id. Because the file is on disk
   before the request returns, a cancel or crash before that pass does not lose it. So
   "Recognise text again" during the automatic run is never lost. A test covers this overlap.
 - Before the first page, the job checks the engine once. For Tesseract that means the binary
@@ -569,8 +580,9 @@ Per-page failures are statuses, not errors.
       truncated `eng.traineddata`, which `--list-langs` would still list, caught by the
       test-image recognition.
 - [ ] Test `force`: a forced run redoes a fresh page and keeps a `skipped` one. Test that a
-      forced run cancelled halfway resumes on exactly the pages without its `runId`, and that a
-      lost index sets `forcedLost`. Test that a page
+      forced run cancelled halfway resumes on exactly the pages without its `runId`, that a
+      lost index keeps the forced run through `forced.json`, and that a failure survives a
+      successful-looking clock skew because only `afterRunId` decides. Test that a page
       failure is in the index on disk at once. Test that `ocr_status` reports a `done` page from
       an older engine as `pending`.
 - [ ] Test the stale run-directory sweep. Test `recognize` with an empty `langs`.
