@@ -128,7 +128,9 @@ writes a PNG to a temp file. Engine inputs and outputs live in a per-run directo
 `std::env::temp_dir()`, held by a guard that removes it on drop, so nothing temporary lands in the
 book. The existing sweep only scans a book's top level, so it would not have caught files in
 `ocr/` anyway. Boxes are normalised by the size of the image the engine saw,
-so scaling does not move them. A test runs a 16 MP TIFF page and a WebP page through this step.
+so scaling does not move them. The input is always the display image path from `meta.json`.
+Ingest has already turned TIFF and JPEG 2000 into JPEG or PNG, so the step sees only JPEG, PNG,
+and WebP. A test runs a 16 MP display JPEG and a WebP display page through it.
 
 ### Storage: `ocr/` schema v1
 
@@ -177,42 +179,68 @@ so scaling does not move them. A test runs a 16 MP TIFF page and a WebP page thr
   "schema": 1,
   "engine": "tesseract 5.5.1 eng-fast",
   "updatedAt": "…",
-  "pages": { "0": { "status": "done" }, "1": { "status": "failed", "error": "timeout" } },
-  "summary": { "pages": 202, "done": 201, "failed": 1, "pending": 0, "withText": 180 }
+  "pages": {
+    "0": { "status": "done", "imageSha256": "…" },
+    "1": { "status": "failed", "error": "timeout" }
+  },
+  "summary": { "pages": 202, "done": 201, "failed": 1, "pending": 0, "skipped": 0, "withText": 180 }
 }
 ```
 
 `status` is one of `pending`, `done`, `failed`, or `skipped`. A plate with no text is `done`
 with an empty `text` and no lines. `skipped` is reserved for M2c ("curator says do not OCR").
-`pages` lists every page in the book, not only PDF pages.
+`pages` lists every page in the book, not only PDF pages. A `done` entry repeats its page's
+`imageSha256`, so `ocr_status` can spot a stale page without opening page files.
+
+`summary.pages` is `meta.json`'s page count. `done`, `failed`, `pending`, and `skipped` count the
+statuses, and add up to `pages`. `withText` counts pages whose published text is not empty.
+
+**Which pages have a file.** A page file exists only once some layer has content. Ingest writes
+one for each PDF page that has text, with a `pdf` layer, as M1.5 does now. The job writes one for
+every page it finishes, including a plate with an empty `ocr` layer. So "no file" always means
+"nothing recorded yet", and is valid.
 
 **Reading v0.** M1.5 writes v0, which has no `schema` field. A file is read as v0 only if it
 validates against `ocr.v0.schema.json`. A file that is neither valid v0 nor valid v1 is invalid,
-and the rule under Errors applies. The loader turns a valid v0 page file into a v1 file with only
-a `pdf` layer. That layer needs no checksum, because only the `ocr` layer is ever checked for
-staleness. It writes v1 the next
-time the job touches the page. v0 has never shipped in a release, so this is a small, tested
-shim, not a migration. M1.5's ingest switches to writing v1 in Phase 2, and `ocr.v0.schema.json`
-is kept for the shim's tests.
+and the rule under Errors applies. A valid v0 page file reads as a v1 file with only a `pdf`
+layer. That layer needs no checksum, because only the `ocr` layer is checked for staleness. The
+file is written as v1 the next time the job finishes that page. v0 has never shipped in a
+release, so this is a small, tested shim, not a migration. M1.5's ingest switches to writing v1
+in Phase 2, and `ocr.v0.schema.json` is kept for the shim's tests.
 
 **Writing.** Today `library/ocr.rs` writes with plain `std::fs::write`, which is not crash-safe.
 Phase 2 switches it to the existing `write_atomic` in `library/mod.rs`, so a crash leaves the old
 file or the new one. Every `ocr/` write goes through it.
 
-**The index is a cache.** The page files are the truth. The job writes the index at most once per
-second, so after a crash it can lag. The job therefore rebuilds the index before it starts. It
-walks `0..meta.pages.len()` from `meta.json` and compares each page file against that page's
-`sha256`: each page is `done` if its `ocr` layer is fresh (same engine id and same
-`imageSha256`), `pending` if it is missing or stale, and `failed` if the file is invalid. A
-`failed` status from a timeout is not on disk, so it becomes `pending` and is retried once per run.
-A `skipped` status is kept from the old index. M2c moves it into the page file, where it belongs.
+**The index is a cache.** The page files are the truth for `done`. The job writes the index at
+most once per second, so after a crash it can lag. Before it starts, the job rebuilds the index
+in three steps:
+
+1. It reads the old index if it is valid v1. A missing, v0, or invalid old index counts as empty.
+2. It walks `0..meta.pages.len()` from `meta.json`. A page whose file has an `ocr` layer with the
+   current engine id and the page's current `sha256` is `done`. A page whose file is invalid is
+   `failed`, with the validation error. Any other page is `pending`.
+3. It carries two things over from the old index, for pages step 2 did not mark `done` or
+   invalid. A `skipped` entry stays `skipped`. A `failed` entry stays `failed` with its error,
+   so a failure survives a crash and the UI's count is durable.
+
+Then it writes the rebuilt index atomically. The job runs `pending` pages, then retries each
+`failed` page once per run. M2c moves `skipped` into the page file, where it belongs. Reading 202
+small JSON files takes milliseconds. Tests cover a crash after a few pages, a missing and an
+invalid old index (no page comes back `skipped`), and a carried-over failure.
+
+**Cancel and timeout.** A page in flight when `cancel_ocr` lands goes back to `pending`, because
+it never failed. A page that hits the deadline or crashes the engine is `failed`, and that status
+is written to the index like any other.
+
+**`ocr_status`.** It reads only `index.json`, and checks each `done` entry's `imageSha256` against
+`meta.json`. A mismatch reports that page as `pending`, so the reader never says "Text ready" over
+stale text. A crashed run may still show a few finished pages as `pending` until the next job
+starts. That errs the safe way.
 
 **Books with no v1 index.** `ocr_status` treats a missing `index.json`, which every M1 image book
-has, as every page `pending`. It treats a valid v0 index as `pending` for every page, with the
-v0 `withText` count as a hint. It never fails on either. The next job writes a v1 index.
-Reading 202 small JSON files takes milliseconds. `ocr_status` trusts the index as written, so it
-stays cheap, and may lag a crashed run until the next job starts. A test kills the job after a
-few pages, and checks that the rebuilt index matches the files.
+has, as every page `pending`. It treats a valid v0 index the same way. It never fails on either.
+The next job writes a v1 index.
 
 **Guarantee.** The job writes only the `ocr` layer of a page file. It reads the file, replaces
 `layers.ocr`, and writes it back. It never rewrites a file it cannot parse and validate, so a
@@ -279,8 +307,12 @@ M2a adds only status, since showing text is M2b:
   `src-tauri/binaries/` and `src-tauri/tessdata/`, as `bind_pdfium` falls back to
   `src-tauri/pdfium/`. A `SCRIPTORIUM_TESSERACT` variable overrides the binary path for tests. No
   shell plugin and no frontend capability are added, so the WebView cannot start it.
-- `TESSDATA_PREFIX` is set, for the child only, to the directory that holds `eng.traineddata`.
-  Tesseract 5 reads it as the tessdata directory itself. The integration test pins this.
+- The resource maps to `<resource_dir>/tessdata/eng.traineddata`, and the dev copy sits at
+  `src-tauri/tessdata/eng.traineddata`. The child gets `TESSDATA_PREFIX` set to that `tessdata`
+  directory and passes `--tessdata-dir` with the same path, so the lookup does not depend on
+  Tesseract's search order. The child's environment is cleared first, keeping only what the
+  platform needs to start a process, so a system Tesseract or a user's `TESSDATA_PREFIX` can
+  never be picked up.
 - macOS: Tauri signs external binaries with the app. Phase 3 checks the built app runs the
   sidecar under the hardened runtime.
 - Licences: Tesseract (Apache-2.0), Leptonica (BSD-2-Clause), libpng, libjpeg-turbo, libtiff,
@@ -324,7 +356,9 @@ Per-page failures are statuses, not errors.
 - `docs/ocr.md` (new): engine choice, spike results, how to bump the engine.
 - `docs/ocr.v1.schema.json` (new). `docs/book-format.md`: the v1 layout and precedence rule.
 - `tests/fixtures/ocr/*.txt` (ground truth) and `tests/fixtures/README.md`.
-- `scripts/ocr_spike.py` (Phase 1 only, kept for re-running the comparison on a bump).
+- `scripts/ocr_spike.py` (Phase 1 only, kept for re-running the comparison on a bump). It
+  exits with a notice when the page images are missing. The fixture README lists the exact
+  corpus files and the commands that rebuild them.
 - `scripts/build_tesseract.sh`, `scripts/fetch_tesseract.sh`, `.github/workflows/tesseract.yml`.
 - `src-tauri/src/ocr/{mod.rs, engine.rs, tesseract.rs, fake.rs, job.rs, store.rs}` (new).
 - `src-tauri/src/library/ocr.rs`: write v1, keep v0 reading for the shim.
@@ -372,11 +406,17 @@ Per-page failures are statuses, not errors.
 - [ ] Write `fetch_tesseract.sh`, and run it in the Rust CI jobs as pdfium is fetched.
 - [ ] Write `ocr/tesseract.rs`: spawn, timeout, TSV parsing. Unit-test the parser on recorded TSV,
       including empty rows, `-1` confidences, and a multi-block page.
-- [ ] Add one integration test that runs the real binary on a small committed fixture image. It
-      runs in CI on every platform.
-- [ ] Add the sidecar, resource, and capability config. Run `pnpm tauri build` on macOS and check
-      the built app recognises a page. Add Windows and Linux bundle checks to the M1 follow-ups
-      manual list.
+- [ ] Add one integration test that runs the fetched binary on a small committed fixture image,
+      through the same path resolution and cleared environment the app uses. It runs in CI on
+      macOS, Windows, and Linux. It first asserts that no `tesseract` is on the runner's `PATH`,
+      so a pass cannot come from a system install.
+- [ ] Add the sidecar and resource config. Run `pnpm tauri build` on macOS and check the built
+      app recognises a page.
+- [ ] Add a CI job on Windows and Linux that runs `pnpm tauri build`, and then runs the bundled
+      sidecar from the bundle's own layout on one fixture page. CI does not build bundles today,
+      so this is the first such job. It runs on PRs that touch the OCR scripts or config, and
+      weekly. Installing and launching the built app on Windows and Linux stays on the M1
+      follow-ups manual list.
 - [ ] Add the notices and the bump policy entry.
 
 ### Phase 4: job, commands, and UI
@@ -384,7 +424,7 @@ Per-page failures are statuses, not errors.
 - [ ] Write `ocr/job.rs`: pool, ordering, skip rule, progress, cancel, and per-page failure.
 - [ ] Add `run_ocr`, `cancel_ocr`, and `ocr_status`, and start a job after ingest.
 - [ ] Write the engine-input step: decode, scale to the caps, write a temp PNG. Test it on a
-      16 MP TIFF and a WebP page.
+      16 MP display JPEG and a WebP display page.
 - [ ] Tests with `FakeEngine`: resume after cancel, cancel returning within a second while a page
       is in flight, a failing page, a second request joining the running job, two books sharing
       the pool, progress throttling, and cancel on exit.
@@ -392,8 +432,7 @@ Per-page failures are statuses, not errors.
       missing file, and at a file that is not executable.
 - [ ] Test the Tesseract engine's kill path with a stub binary that sleeps: both `stop` and the
       deadline end it, and no child is left running.
-- [ ] Add the home-screen status, the reader menu items, and the error mapping, with frontend
-      tests.
+- [ ] Add the reader status, the Text button, and the error mapping, with frontend tests.
 - [ ] Update `book-format.md`, `development.md`, user docs, and both changelogs.
 
 ## Verification
