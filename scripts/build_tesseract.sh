@@ -185,6 +185,10 @@ sed -i.bak '/^if ()$/{N;/WebP/s/^if ()/if (1)/;}' "${PREFIX}/lib/cmake/leptonica
 # CMAKE_CXX_STANDARD_LIBRARIES is a command-line string, so a prefix with spaces is unsupported.
 # Apple's linker does not need this, and an extra archive at the end is harmless there.
 TAIL_LIBS="${PREFIX}/lib/libjpeg.a ${ZLIB_A}"
+# Under MSYS2 the native MinGW linker cannot open MSYS paths (/d/a/...), so pass Windows paths.
+if command -v cygpath > /dev/null 2>&1; then
+    TAIL_LIBS="$(cygpath -m "${PREFIX}/lib/libjpeg.a") $(cygpath -m "${ZLIB_A}")"
+fi
 cmake_build tesseract -DSW_BUILD=OFF -DDISABLE_CURL=ON -DDISABLE_ARCHIVE=ON -DOPENMP_BUILD=OFF \
     -DUSE_SYSTEM_ICU=OFF -DBUILD_TRAINING_TOOLS=OFF -DBUILD_TESTS=OFF -DGRAPHICS_DISABLED=ON \
     -DOPENCL=OFF -DDISABLE_TIFF=OFF \
