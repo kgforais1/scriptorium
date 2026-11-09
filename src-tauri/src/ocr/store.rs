@@ -334,13 +334,15 @@ struct Forced {
 #[cfg_attr(not(test), allow(dead_code))] // Phase 4's job is the consumer.
 pub(crate) fn read_forced(book: &Path) -> Result<Option<String>, BookError> {
     let path = book.join("ocr/forced.json");
-    let text = match std::fs::read_to_string(&path) {
-        Ok(t) => t,
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(io_error(&path, &e)),
     };
-    // The v1 schema's `forced` shape checks the id; the struct rejects a page or an index.
-    let parsed = serde_json::from_str::<Value>(&text)
+    // Damaged bytes, including invalid UTF-8, take the same delete-and-continue path as bad
+    // JSON, so one broken marker cannot block every later rebuild. The v1 schema's `forced`
+    // shape checks the id; the struct rejects a page or an index.
+    let parsed = serde_json::from_slice::<Value>(&bytes)
         .ok()
         .filter(|v| validate_v1(v).is_ok())
         .and_then(|v| serde_json::from_value::<Forced>(v).ok());

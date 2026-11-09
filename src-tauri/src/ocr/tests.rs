@@ -351,6 +351,11 @@ fn an_invalid_forced_file_is_deleted_and_the_run_is_not_forced() {
         assert_eq!(index.pages[&0], done("old"), "{body}");
         assert!(!book.0.join("ocr/forced.json").exists(), "{body}");
     }
+    // Invalid UTF-8 is a damaged marker too, not a read failure that stops the rebuild.
+    std::fs::write(book.0.join("ocr/forced.json"), [0xff, 0xfe, b'{']).unwrap();
+    let index = rebuild_index(&book.0, &meta(), &engine()).unwrap();
+    assert_eq!(index.pages[&0], done("old"));
+    assert!(!book.0.join("ocr/forced.json").exists());
     assert_eq!(
         read_forced(&book.0).unwrap(),
         None,

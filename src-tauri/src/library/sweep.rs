@@ -73,9 +73,15 @@ fn is_old(entry: &std::fs::DirEntry, max_age: Duration) -> bool {
         .is_some_and(|age| age >= max_age)
 }
 
-/// Remove old `*.scriptorium-tmp` files (never directories) directly inside one book.
+/// Remove old `*.scriptorium-tmp` files (never directories) directly inside one book and its
+/// `ocr/` folder, where atomic page-text writes put theirs.
 fn sweep_book(book: &Path, max_age: Duration) -> usize {
-    let Ok(entries) = std::fs::read_dir(book) else {
+    sweep_tmp_files(book, max_age) + sweep_tmp_files(&book.join("ocr"), max_age)
+}
+
+/// Remove old `*.scriptorium-tmp` files (never directories) directly inside `dir`.
+fn sweep_tmp_files(dir: &Path, max_age: Duration) -> usize {
+    let Ok(entries) = std::fs::read_dir(dir) else {
         return 0;
     };
     entries
