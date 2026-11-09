@@ -483,17 +483,52 @@ considered and rejected (decided 2026-11-09): ocrs is about ten times less accur
 disagreements would be its own errors, and the confidence score gives the same signal from one
 engine.
 
-The threshold is not guessed. Phase 4 extends `scripts/ocr_spike.py` to measure it:
+The threshold is not guessed, and it is not set from the 12 spike pages alone. Twelve pages from
+two books hold a few thousand words, all in two typefaces, which is too narrow to set a threshold
+every curator will rely on.
+
+**Calibration set.** Phase 4 builds a separate, larger set: at least 120 pages from at least 12
+public-domain English books, with at least 5 pages from each, spread across the late 18th to the early 20th century. It mixes
+roman and italic text, verse, small caps, footnotes, two-column pages, captions, and worn or
+show-through print. The source is Wikisource's proofread scans. Wikisource transcribes many
+public-domain books page by page against a specific scan, and marks a page "validated" once two
+people have proofread it. So each page comes with a human-checked transcription of exactly that
+scan, and no one has to transcribe by hand. Only validated pages are used.
+
+- `scripts/fetch_calibration_set.py` reads each `Page:<file>/<n>` page with
+  `action=query&prop=revisions|proofread`, and keeps it only if its proofread quality is 4
+  (validated). Page `n` is page `n` of the scan file, so no offset is needed. It gets the image
+  from the scan on Commons with `prop=imageinfo&iiurlwidth=<width>&iiurlparam=page<n>-<width>px`, which renders one
+  page of a DjVu or PDF. Books whose scans are not a DjVu or PDF on Commons are skipped.
+- It keeps only the page body. The header and footer sections, which hold running heads and page
+  numbers, are dropped. It removes templates and tags such as `{{rh}}`, `{{c}}`, `{{sc}}`, and
+  `<ref>`, keeping their text where they wrap text and dropping footnote bodies.
+- It sends a descriptive `User-Agent`, uses `maxlag=5`, keeps to one request at a time with
+  backoff, and records each page's book, page, revision id, source URL, and licence in the
+  manifest. Only scans marked public domain in the US are used.
+- The manifest is committed as `tests/fixtures/ocr-calibration/manifest.json`. The images and
+  texts stay in gitignored `tmp/`, and the script rebuilds them from the pinned revisions.
+- Wikisource texts follow the scan but may modernise long s, ligatures, and hyphenation. The
+  script normalises those on both sides before comparing, and lists the rules in `docs/ocr.md`.
+- The 12 spike pages are kept as a second check. The threshold must hold on both sets.
+
+Phase 4 extends `scripts/ocr_spike.py` to measure the threshold on that set:
 
 1. It runs Tesseract in TSV mode, the mode the app uses, and drops rows with empty text or a
    confidence of -1, as `tesseract.rs` does.
 2. For each page it aligns the OCR words with the ground-truth words, both normalised as the
    spike already does, using `difflib.SequenceMatcher` on the two word lists. An aligned pair is
    right if the words are equal and wrong otherwise. An OCR word with no partner is wrong. A
-   missed ground-truth word has no confidence, so it is counted separately and not used.
+   missed ground-truth word has no confidence, so it is counted separately and not used. On
+   calibration pages, OCR words before the first aligned pair and after the last one are left
+   out, since they are usually the running head and page number that Wikisource keeps apart.
 3. For each threshold from 0.05 to 0.95 in steps of 0.05, it prints how many wrong words fall
-   below it, and how many right words it would flag. It reports counts as well as rates, since
-   the 12 pages hold only a few thousand words.
+   below it, and how many right words it would flag. It reports counts as well as rates, overall
+   and per book, so one book's typeface cannot hide behind the average.
+
+The result is one global threshold. 120 pages hold tens of thousands of words, enough for that at
+0.05 steps, but not for a separate threshold per typeface or layout. If the per-book results
+differ widely, `docs/ocr.md` says so, and M2c lets the curator change the threshold.
 
 `docs/ocr.md` records the result, and M2c picks the threshold from it.
 
@@ -622,8 +657,10 @@ Per-page failures are statuses, not errors.
 - [ ] Test the Tesseract engine's kill path with a stub binary that sleeps: both `stop` and the
       deadline end it, and no child is left running.
 - [ ] Add the reader status, the Text button, and the error mapping, with frontend tests.
-- [ ] Extend `scripts/ocr_spike.py` to measure word confidence against the ground truth, as
-      described under "Word confidence", and record the result in `docs/ocr.md`.
+- [ ] Write `scripts/fetch_calibration_set.py` and commit the manifest of at least 120 validated
+      Wikisource pages from at least 12 books, as described under "Word confidence".
+- [ ] Extend `scripts/ocr_spike.py` to measure word confidence on the calibration set and on the
+      12 spike pages, overall and per book, and record the result in `docs/ocr.md`.
 - [ ] Update `book-format.md`, `development.md`, user docs, and both changelogs.
 - [ ] In the user docs, add a section on where OCR is weak, from the Phase 1 spike: small caps,
       decorative and display type, faint captions under plates, and languages other than
@@ -663,6 +700,7 @@ Per-page failures are statuses, not errors.
 | A bad page hangs or crashes the engine | low | med | The sidecar has a timeout and is killed. The page is marked `failed` and retried once on the next run. |
 | A damaged page file holds curator text | low | high | The job never rewrites a file it cannot validate. |
 | The job and a later curator edit race on one page file | low | high | M2a never writes `curator`. Both take the per-book mutex for each read-change-write. |
+| Wikisource transcriptions differ from the scan in spelling or layout | med | med | Use validated pages only, normalise long s, ligatures, and hyphenation, and spot-check a sample by eye. |
 | Installer size grows | high | low | Tesseract plus `eng` fast data is about 10 MB. The spike records the number. |
 | Tesseract writes a large TSV or stderr and stalls on a full pipe | med | med | Output goes to files, never undrained pipes. |
 | Sidecar spawning widens the app's attack surface | low | med | Only Rust spawns it, with fixed arguments. The WebView gets no shell access. |
