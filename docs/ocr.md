@@ -51,9 +51,10 @@ gitignored.
 [`.github/workflows/tesseract.yml`](../.github/workflows/tesseract.yml) builds it on all three
 platforms, checks that no system Tesseract is on `PATH`, and OCRs
 [`tests/fixtures/ocr/smoke.png`](../tests/fixtures/ocr/smoke.png). It runs on pull requests that
-touch the build script, the workflow, or the smoke image, and on demand. On macOS the binary also runs ad-hoc signed
-under the hardened runtime with a cleared environment, and matches Homebrew's output byte for
-byte.
+touch the build script, the workflow, or the smoke image, and on demand. The smoke run uses TSV
+output, as the app will. On macOS the binary was also checked by hand on 2026-11-09: it ran
+ad-hoc signed under the hardened runtime with a cleared environment, and matched Homebrew's
+output byte for byte. CI does not repeat that check. Phase 3 adds it for the built app.
 
 The English model is `eng.traineddata` from
 [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast), 4.1 MB, SHA-256

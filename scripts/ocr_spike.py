@@ -69,6 +69,7 @@ EXPECTED_PAGES = frozenset(
 )
 ENGINES = ("tesseract-fast", "tesseract-best", "ocrs")
 PAGE_TIMEOUT_S = 300
+BATCH_SUFFIXES = (".bat", ".cmd")
 
 
 @dataclass
@@ -130,6 +131,9 @@ def load_pages(truth_dir: Path, corpus: Path) -> Tuple[List[Page], List[Path]]:
 
 def run_engine(cmd: List[str], env: Dict[str, str]) -> str:
     """Run one OCR command and return its stdout; raise on a non-zero exit or timeout."""
+    # Engine setup already skips batch files; this guards any other caller.
+    if is_batch_file(cmd[0]):
+        raise RuntimeError(f"refusing to run a batch file as an engine: {cmd[0]}")
     # The argv is a list built from resolved binary paths, and no shell runs it.
     proc = subprocess.run(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
         cmd,
@@ -159,6 +163,11 @@ def which_or_none(name: str) -> Optional[str]:
     return shutil.which(name)
 
 
+def is_batch_file(exe: str) -> bool:
+    """True for a Windows .bat or .cmd file, which cmd.exe runs and re-parses."""
+    return Path(exe).suffix.lower() in BATCH_SUFFIXES
+
+
 def make_tesseract(
     binary: Optional[str], tessdata: Optional[str]
 ) -> Tuple[Optional[Recognizer], str]:
@@ -166,6 +175,8 @@ def make_tesseract(
     exe = which_or_none(binary or "tesseract")
     if exe is None:
         return None, "tesseract binary not found (set --tesseract or TESSERACT_BIN)"
+    if is_batch_file(exe):
+        return None, f"tesseract is a batch file, which is not run: {exe}"
     if not tessdata or not (Path(tessdata) / "eng.traineddata").is_file():
         return None, "eng.traineddata not found in the tessdata directory"
     env = single_thread_env()
@@ -185,6 +196,8 @@ def make_ocrs(
     exe = which_or_none(binary or "ocrs")
     if exe is None:
         return None, "ocrs binary not found (set --ocrs or OCRS_BIN)"
+    if is_batch_file(exe):
+        return None, f"ocrs is a batch file, which is not run: {exe}"
     if not detect or not rec or not Path(detect).is_file() or not Path(rec).is_file():
         return None, "ocrs models not found (set --ocrs-detect-model and --ocrs-rec-model)"
     env = single_thread_env()

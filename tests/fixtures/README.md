@@ -126,7 +126,9 @@ Transcription rules: text exactly as printed, with printed line breaks, end-of-l
 punctuation (including the spaces before `!` `?` `;` `:` in the Dulac text), running heads and
 page numbers; italics and small caps as plain text; a blank line between paragraphs. Decorative
 display lettering is transcribed as the words it spells. Artists' signatures painted inside
-an illustration and handwriting in the margin are not transcribed. Textless pages have an
+an illustration and handwriting in the margin are not transcribed. A credit line typeset
+outside the illustration, such as `© D.McK` under the plate in `princess-and-goblin-0021`, is
+printed text and is transcribed. Textless pages have an
 empty file.
 
 | File | Category |
@@ -138,7 +140,7 @@ empty file.
 | `dulac-picture-book-0109.txt` | Dense plain prose with a running head (plain-text page) |
 | `dulac-picture-book-0154.txt` | Speckled tissue guard, no text (empty) |
 | `princess-and-goblin-0003.txt` | Textless illustration, no text (empty) |
-| `princess-and-goblin-0007.txt` | Half-title page |
+| `princess-and-goblin-0007.txt` | Title page |
 | `princess-and-goblin-0015.txt` | Chapter opening with a drop cap and italic dialogue |
 | `princess-and-goblin-0019.txt` | Chapter opening with a drop cap and prose |
 | `princess-and-goblin-0021.txt` | Caption under a colour plate |

@@ -1,6 +1,6 @@
 # Plan: M2a OCR engine and pipeline
 
-Last reviewed: 2026-11-07
+Last reviewed: 2026-11-09
 Date: 2026-11-07
 Author: planning pass (branch `plan/m2-ocr`)
 Status: in-progress
@@ -60,9 +60,10 @@ first. Phase 1 compares two engines on the test corpora and on packaging cost:
 The spike measures, for each engine:
 
 1. **Accuracy.** Character error rate (CER) and word error rate against a hand-checked ground
-   truth of 12 pages: 6 from Dulac and 6 from Princess and Goblin, chosen to include a plain text
-   page, a caption under a plate, a title page, a page with a drop cap, a page with foxing, and
-   a plate with no text. Ground truth goes in `tests/fixtures/ocr/` as text files. The page
+   truth of 12 pages: 6 from Dulac and 6 from Princess and Goblin. They include plain prose, a
+   small-caps contents page, display titles, a title page, drop caps, captions under plates,
+   aged paper with show-through, and pages with no text. The fixtures README lists each one.
+   A foxed page was wanted, but neither book has one. Ground truth goes in `tests/fixtures/ocr/` as text files. The page
    images stay in gitignored `tmp/`, because they are large. The fixture README records how to
    rebuild them.
 2. **Speed.** Seconds per page on an 11 MP display image, on the dev Mac, single-threaded.
@@ -116,7 +117,10 @@ normalises them to 0–1 by the display image's size. A `FakeEngine` in tests re
 results, so most tests need no engine binary.
 
 The Tesseract engine runs the sidecar as `tesseract <input> <tmpbase> -l <langs> --psm 3 --oem 1
-tsv`, which writes `<tmpbase>.tsv`. `<langs>` is `langs` joined with `+`, as Tesseract expects,
+-c tessedit_create_tsv=1 -c tessedit_create_txt=0`, which writes only `<tmpbase>.tsv`. It sets
+the options directly, not through the `tsv` config name, because that name is a file in
+`<tessdata>/configs/`, which the app does not bundle. Without it Tesseract only warns and writes
+plain text, so every page would fail. `<langs>` is `langs` joined with `+`, as Tesseract expects,
 for example `eng+fra`. An empty `langs` is a caller bug. `recognize` returns
 `OcrError::NoLanguage` before it spawns anything, and never guesses a default. M2a's job always
 passes `[eng]`. Output goes to a file, not a pipe, and stderr goes to a capped temp
@@ -159,13 +163,17 @@ the only buffers are the three counted. A small page follows the same rule. The 
 enforce the budget with a counting allocator. The result is written as a PNG to a temp
 file. Engine inputs and outputs live in a per-run directory under
 `std::env::temp_dir()`, held by a guard that removes it on drop, so nothing temporary lands in the
-book. A crash skips the guard, so each run directory is named `scriptorium-ocr-<random>` and holds
+book. A crash skips the guard, so each run directory is named `scriptorium-ocr-run-<random>` and holds
 an exclusively locked `.ocr.lock`. `library/sweep.rs` hard-codes `.ingest.lock` today, so Phase
-4 generalises its helper to `lock_dir(dir, name)` and uses it for both. At startup, and before each job, the app removes `scriptorium-ocr-*`
-directories that are older than 1 hour and whose lock it can take. A live job holds its lock, so
+4 generalises its helper to `lock_dir(dir, name)` and uses it for both. The existing sweep only
+reads the library folder, and these directories live in the OS temp folder. So Phase 4 adds a
+second, separate sweep rooted at `std::env::temp_dir()`. It looks only at the top level, and
+only at directories whose name starts with `scriptorium-ocr-run-`. It never follows a symlink. At
+startup, and before each job, it removes those directories that are older than 1 hour and whose
+lock it can take. A live job holds its lock, so
 its directory is never removed. A test leaves a stale directory and a live one, and checks only
-the stale one goes. The existing sweep only scans a book's top level, so it would not have caught files in
-`ocr/` anyway. Boxes are normalised by the size of the image the engine saw,
+the stale one goes. The `-run-` part keeps the sweep away from other `scriptorium-ocr-` names,
+such as the one a test in `library/ocr.rs` creates. Boxes are normalised by the size of the image the engine saw,
 so scaling does not move them. The input is always the display image path from `meta.json`.
 Ingest has already turned TIFF and JPEG 2000 into JPEG or PNG, so the step sees only JPEG, PNG,
 and WebP. Tests run a 16 MP display JPEG, a 100 MP JPEG, a 16 MP PNG, a WebP display page, a
@@ -441,7 +449,8 @@ M2a adds only status, since showing text is M2b:
   features. It also links static libwebp, so WebP pages work even without the job's PNG step.
   It outputs one binary named for Tauri's sidecar convention, `tesseract-<target-triple>`, with
   `.exe` on Windows, into `src-tauri/binaries/`, which is gitignored. That suffixed name is also
-  what debug builds and tests look for. CI builds it for each platform and uploads it as a pinned
+  what debug builds and tests look for. Today the workflow keeps each build only as a
+  short-lived workflow artifact. Phase 3 adds a step that uploads the three binaries as a pinned
   release asset on this repo, because a full build takes too long to run in every CI job.
 - `scripts/fetch_tesseract.sh` downloads that asset and `eng.traineddata`, checks both
   hashes, and installs them the way `fetch_pdfium.sh` does, with the same `--proto =https`
@@ -519,13 +528,15 @@ scan, and no one has to transcribe by hand. Only validated pages are used.
   from `iiprop=timestamp|sha1`, and the SHA-256 of each rendered page image.
 - The manifest is committed as `tests/fixtures/ocr-calibration/manifest.json`. The images and
   texts stay in gitignored `tmp/`, and the script rebuilds them from the pinned revisions. On a
-  rebuild it checks the file's timestamp and SHA-1 first. If Commons now holds a newer upload,
-  the script finds the pinned version in the file's history (`iilimit`) by its timestamp and
-  SHA-1. It renders that version's page if Commons serves archived pages, and otherwise
-  downloads the archived original and renders the page locally. If neither works, it drops that
-  book and says so, and a replacement book is picked by hand. It then checks each rendered image's SHA-256. A mismatch
-  with an unchanged file means the renderer changed. The script stops and reports it, and never
-  calibrates on an image it cannot verify.
+  rebuild it checks the file's timestamp and SHA-1 first, then each page image's SHA-256.
+- The rendered page images are also kept durably. When the manifest is first built, the script
+  packs the images into one archive and uploads it as a pinned release asset on this repo, as
+  the Tesseract binaries are. The images are public domain, so they may be redistributed. A
+  rebuild fetches from Commons first. If Commons has a newer upload, no longer serves the page,
+  or renders it to different bytes, the script fetches the pinned image from the release asset
+  instead. It never renders a page locally, because a local render would not match the pinned
+  bytes. Every image, from either source, must match its SHA-256 before it is used, and the
+  script stops and reports any page it cannot verify.
 - Wikisource texts follow the scan but may modernise long s, ligatures, and hyphenation. The
   script normalises those on both sides before comparing, and lists the rules in `docs/ocr.md`.
 - The 12 spike pages are kept as a second check. The threshold must hold on both sets.
@@ -537,18 +548,28 @@ Phase 4 extends `scripts/ocr_spike.py` to measure the threshold on that set:
 2. For each page it aligns the OCR words with the ground-truth words, both normalised as the
    spike already does, using `difflib.SequenceMatcher` on the two word lists. An aligned pair is
    right if the words are equal and wrong otherwise. An OCR word with no partner is wrong. A
-   missed ground-truth word has no confidence, so it is counted separately and not used.
+   ground-truth word the OCR left out has no confidence, so no threshold can flag it. It still
+   counts as an error, and as one no threshold catches.
    Before aligning a calibration page, it removes whole OCR lines that are a running head or a
-   page number. A line is removed only if it is the first or last line of the page, and it
-   either matches the page's Wikisource header or footer text after normalising, or holds only
-   a number or roman numeral. Every other OCR word stays in. So a misread body word at the edge
-   of the page, such as "Beginnlng", still counts as wrong.
-3. For each threshold from 0.05 to 0.95 in steps of 0.05, it prints how many wrong words fall
-   below it, and how many right words it would flag. It reports counts as well as rates, overall
-   and per book, so one book's typeface cannot hide behind the average.
+   page number. Only the first and last lines of the page are candidates. Each is compared with
+   the page's Wikisource header or footer text after normalising, with a
+   `difflib.SequenceMatcher` ratio, so a misread running head such as "THE PRlNCESS" still
+   matches. A line with a ratio of 0.8 or more is removed. A line that holds only a number or
+   roman numeral is removed only when it equals the page number in the header or footer. A
+   chapter numeral or a year at the edge of the page therefore stays in. Every other line stays
+   in, so a misread body word at the edge, such as "Beginnlng", still counts as wrong. The
+   script lists every removed line, so a sample can be checked by eye.
+3. A word is flagged when its confidence is strictly below the threshold, the same rule M2c
+   uses. The candidate thresholds are every distinct confidence observed in the data, plus one
+   value above the highest, which flags every word. Each candidate flags exactly the words below
+   one observed score, so every possible cut between two scores is tried, including cuts above
+   0.95, not only a fixed grid. For each candidate it counts the wrong words flagged, the
+   errors not caught, including omitted words, and the right words flagged. It reports counts
+   as well as rates, overall and per book, so one book's typeface cannot hide behind the
+   average. The printed table shows the 0.05 steps for reading, and the chosen value is exact.
 
-The result is one global threshold. 120 pages hold tens of thousands of words, enough for that at
-0.05 steps, but not for a separate threshold per typeface or layout. If the per-book results
+The result is one global threshold. 120 pages hold tens of thousands of words, enough for one
+threshold, but not for a separate threshold per typeface or layout. If the per-book results
 differ widely, `docs/ocr.md` says so, and M2c lets the curator change the threshold.
 
 **Choosing the threshold.** A missed error costs more than an extra flag, because a curator who
@@ -557,12 +578,20 @@ the threshold is chosen on the calibration set as the one with the highest F2 sc
 weights catching errors twice as much as avoiding flags. F2 is a standard measure for this
 trade-off, so no new target value is invented. The steps are:
 
-1. Pick the threshold with the highest F2 on the calibration set.
-2. At that threshold, report the share of wrong words caught and the share of words flagged, on
+1. Pick the candidate with the highest F2 on the calibration set. The share of errors caught
+   counts omitted words as errors that were not caught, so the threshold is not credited for
+   errors it could never show.
+2. At that threshold, report the share of errors caught and the share of words flagged, on
    the calibration set, on the 12 spike pages, and per book, each with a 95% confidence interval.
 3. The threshold holds if the spike set's share caught falls inside the calibration set's
-   interval. If it does not, or if some book catches far fewer errors than the rest, the result
-   goes to the user before M2c adopts it.
+   interval. No minimum catch rate has an established basis yet, so none is set here. Instead,
+   the result goes to the user before M2c adopts it in any of these cases: the threshold
+   catches no errors, the calibration interval for errors caught includes zero, the spike set
+   falls outside that interval, or some book catches far fewer errors than the rest.
+
+Highlighting can only flag words the OCR wrote. A word it left out has nothing to highlight. The
+user-docs section on OCR weak spots says so, and tells the curator to compare a page with its
+scan rather than rely on the highlights alone.
 
 `docs/ocr.md` records the result, and M2c takes the threshold from it. The per-book reporting
 and the curator's own setting in M2c stay as described above.
@@ -649,7 +678,7 @@ Per-page failures are statuses, not errors.
 ### Phase 3: Tesseract engine and bundling
 
 - [ ] Extend `build_tesseract.sh` and `tesseract.yml` (both from Phase 1) to publish the pinned
-      binaries. The Windows build's triple is `x86_64-pc-windows-gnu`, but the app targets
+      binaries as a release asset. The Windows build's triple is `x86_64-pc-windows-gnu`, but the app targets
       `x86_64-pc-windows-msvc`, so set `TESSERACT_TARGET_TRIPLE` to name it for the app's target.
       Publish the Linux binary from Ubuntu 22.04 (glibc 2.35), as the workflow now builds it.
 - [ ] Write `fetch_tesseract.sh`, and run it in the Rust CI jobs as pdfium is fetched.
@@ -690,7 +719,8 @@ Per-page failures are statuses, not errors.
       successful-looking clock skew because only `afterRunId` decides. Test that a page
       failure is in the index on disk at once. Test that `ocr_status` reports a `done` page from
       an older engine as `pending`.
-- [ ] Test the stale run-directory sweep. Test `recognize` with an empty `langs`.
+- [ ] Test the stale run-directory sweep in the temp folder, including that it leaves alone a
+      directory without the `scriptorium-ocr-run-` prefix and a symlink to one with it. Test `recognize` with an empty `langs`.
 - [ ] Test the Tesseract engine's kill path with a stub binary that sleeps: both `stop` and the
       deadline end it, and no child is left running.
 - [ ] Add the reader status, the Text button, and the error mapping, with frontend tests.
@@ -704,7 +734,8 @@ Per-page failures are statuses, not errors.
 - [ ] In the user docs, add a section on where OCR is weak, from the Phase 1 spike: small caps,
       decorative and display type, faint captions under plates, and languages other than
       English. It says plain printed text comes out well, and that the curator can correct the
-      rest once M2c ships. Keep it short enough to reuse in a help menu later.
+      rest once M2c ships. It warns that highlighting cannot show a word the OCR left out, so
+      the curator should still compare each page with its scan. Keep it short enough to reuse in a help menu later.
 
 ## Verification
 
@@ -760,8 +791,11 @@ Per-page failures are statuses, not errors.
       and on non-Latin scripts, and at what size with ONNX Runtime. Both existing sets are
       English, so they cannot answer the non-Latin question. The follow-up adds validated
       Wikisource pages with their transcriptions for each script it evaluates: Cyrillic, Greek,
-      Arabic, Chinese, and Japanese. Results are reported separately for each script. If it
-      wins, it becomes an optional second engine behind `OcrEngine`.
+      Arabic, Chinese, and Japanese. Results are reported separately for each script. On each
+      script, Tesseract runs with that script's own `tessdata_fast` model, never the English
+      one: `rus`, `grc`, `ara`, `chi_sim` or `chi_tra`, and `jpn`, with `jpn_vert` and the
+      `_vert` Chinese models on vertical pages. Only that comparison decides whether PaddleOCR
+      becomes an optional second engine behind `OcrEngine`.
 - [ ] Deferred (2026-11-09): EasyOCR. It needs Python and PyTorch, several hundred MB at least,
       which is too large to bundle or to ask curators to install.
 - [ ] Follow-up: a help menu in the app that shows the OCR weak-spots section, and later other

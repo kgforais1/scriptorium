@@ -62,15 +62,18 @@ class TextMetrics(unittest.TestCase):
     """Normalisation, edit distance, and error ratios."""
 
     def test_normalize_collapses_whitespace(self) -> None:
+        """Normalize collapses whitespace."""
         self.assertEqual(spike.normalize("  a\n\nb \t c  "), "a b c")
 
     def test_edit_distance(self) -> None:
+        """Edit distance."""
         self.assertEqual(spike.edit_distance("kitten", "sitting"), 3)
         self.assertEqual(spike.edit_distance("", "abc"), 3)
         self.assertEqual(spike.edit_distance("abc", ""), 3)
         self.assertEqual(spike.edit_distance(["a", "b"], ["a", "b"]), 0)
 
     def test_ratio_handles_zero(self) -> None:
+        """Ratio handles zero."""
         self.assertEqual(spike.ratio(1, 4), 0.25)
         self.assertEqual(spike.ratio(3, 0), 0.0)
 
@@ -79,13 +82,17 @@ class Scoring(unittest.TestCase):
     """Scoring an engine over a set of pages."""
 
     def _pages(self) -> list:
+        """Return the pages this test uses."""
         return [
             spike.Page("book-0001", Path("a.jpg"), "the cat sat"),
             spike.Page("book-0002", Path("b.jpg"), ""),
         ]
 
     def test_perfect_engine(self) -> None:
+        """Perfect engine."""
+
         def recognize(image: Path) -> str:
+            """Return the fake engine's text for a page."""
             return "the  cat\nsat" if image.name == "a.jpg" else ""
 
         res = spike.score_engine("fake", recognize, self._pages(), ["book-0001"])
@@ -96,7 +103,10 @@ class Scoring(unittest.TestCase):
         self.assertEqual(res.failures, 0)
 
     def test_errors_and_invented_text(self) -> None:
+        """Errors and invented text."""
+
         def recognize(image: Path) -> str:
+            """Return the fake engine's text for a page."""
             return "the bat sat" if image.name == "a.jpg" else "x y"
 
         res = spike.score_engine("fake", recognize, self._pages(), ["book-0001"])
@@ -107,7 +117,10 @@ class Scoring(unittest.TestCase):
         self.assertEqual(res.invented, 2)
 
     def test_failure_counts_as_empty(self) -> None:
+        """Failure counts as empty."""
+
         def recognize(image: Path) -> str:
+            """Return the fake engine's text for a page."""
             raise RuntimeError("exit 1: boom")
 
         res = spike.score_engine("fake", recognize, self._pages(), [])
@@ -117,11 +130,13 @@ class Scoring(unittest.TestCase):
         self.assertIn("2 page(s) failed", spike.format_table([res]))
 
     def test_no_plain_pages_is_unavailable(self) -> None:
+        """No plain pages is unavailable."""
         res = spike.score_engine("fake", lambda image: "", self._pages(), [])
         self.assertIsNone(res.plain_cer)
         self.assertIn("n/a", spike.format_table([res]))
 
     def test_table_has_one_row_per_engine(self) -> None:
+        """Table has one row per engine."""
         rows = spike.format_table([spike.EngineResult("one"), spike.EngineResult("two")])
         self.assertEqual(len(rows.splitlines()), 4)
 
@@ -130,6 +145,7 @@ class Loading(unittest.TestCase):
     """Pairing ground-truth files with page images."""
 
     def test_pairs_truth_with_images(self) -> None:
+        """Pairs truth with images."""
         with tempfile.TemporaryDirectory() as tmp:
             truth, corpus = _corpus(Path(tmp), {"my-book-0007": "hi"})
             pages, missing = spike.load_pages(truth, corpus)
@@ -138,6 +154,7 @@ class Loading(unittest.TestCase):
         self.assertEqual(pages[0].image.parts[-3:], ("my-book", "jpg", "0007.jpg"))
 
     def test_reports_missing_images(self) -> None:
+        """Reports missing images."""
         with tempfile.TemporaryDirectory() as tmp:
             truth, corpus = _corpus(Path(tmp), {"book-0001": "hi"}, with_images=False)
             _, missing = spike.load_pages(truth, corpus)
@@ -148,6 +165,7 @@ class Engines(unittest.TestCase):
     """Building the Tesseract and ocrs recognizers."""
 
     def test_tesseract_needs_binary_and_data(self) -> None:
+        """Tesseract needs binary and data."""
         with mock.patch.object(spike, "which_or_none", return_value=None):
             rec, reason = spike.make_tesseract(None, "/nowhere")
         self.assertIsNone(rec)
@@ -158,6 +176,7 @@ class Engines(unittest.TestCase):
         self.assertIn("traineddata", reason)
 
     def test_tesseract_command(self) -> None:
+        """Tesseract command."""
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "eng.traineddata").write_bytes(b"")
             with mock.patch.object(spike, "which_or_none", return_value="/bin/tess"):
@@ -171,12 +190,14 @@ class Engines(unittest.TestCase):
         self.assertEqual(env["OMP_THREAD_LIMIT"], "1")
 
     def test_ocrs_needs_models(self) -> None:
+        """Ocrs needs models."""
         with mock.patch.object(spike, "which_or_none", return_value="/bin/ocrs"):
             rec, reason = spike.make_ocrs(None, None, None)
         self.assertIsNone(rec)
         self.assertIn("models", reason)
 
     def test_ocrs_command(self) -> None:
+        """Ocrs command."""
         with tempfile.TemporaryDirectory() as tmp:
             det, rec_model = Path(tmp) / "d.onnx", Path(tmp) / "r.onnx"
             det.write_bytes(b"")
@@ -190,38 +211,63 @@ class Engines(unittest.TestCase):
         self.assertEqual(run.call_args.args[1]["RTEN_NUM_THREADS"], "1")
 
     def test_run_engine_raises_on_failure(self) -> None:
+        """Run engine raises on failure."""
         with self.assertRaises(RuntimeError):
             spike.run_engine([sys.executable, "-c", "import sys; sys.exit(3)"], dict(os.environ))
         out = spike.run_engine([sys.executable, "-c", "print('hi')"], dict(os.environ))
         self.assertEqual(out.strip(), "hi")
+
+    def test_engines_skip_batch_files(self) -> None:
+        """A batch-file engine is skipped once at setup, not failed page by page."""
+        with mock.patch.object(spike, "which_or_none", return_value=r"C:\tools\tesseract.CMD"):
+            rec, reason = spike.make_tesseract(None, "unused")
+            self.assertIsNone(rec)
+            self.assertIn("batch file", reason)
+            rec, reason = spike.make_ocrs(None, "d", "r")
+            self.assertIsNone(rec)
+            self.assertIn("batch file", reason)
+
+    def test_run_engine_refuses_batch_files(self) -> None:
+        """Run engine refuses batch files."""
+        for name in ("engine.bat", "ENGINE.CMD"):
+            with mock.patch.object(spike.subprocess, "run") as run:
+                with self.assertRaises(RuntimeError):
+                    spike.run_engine([name, "page.png"], {})
+            run.assert_not_called()
 
 
 class Inventory(unittest.TestCase):
     """Checking the committed ground-truth set is complete."""
 
     def _pages(self, keys: set[str]) -> list:
+        """Return the pages this test uses."""
         return [spike.Page(k, Path(f"{k}.jpg"), "x") for k in sorted(keys)]
 
     def test_committed_set_is_complete(self) -> None:
+        """Committed set is complete."""
         pages = self._pages(set(spike.EXPECTED_PAGES))
         self.assertEqual(spike.inventory_problems(pages, spike.DEFAULT_TRUTH, []), [])
 
     def test_default_dir_reports_missing_and_extra(self) -> None:
+        """Default dir reports missing and extra."""
         keys = set(spike.EXPECTED_PAGES) - {"dulac-picture-book-0154"} | {"stray-0001"}
         problems = spike.inventory_problems(self._pages(keys), spike.DEFAULT_TRUTH, [])
         self.assertTrue(any("dulac-picture-book-0154" in p for p in problems))
         self.assertTrue(any("stray-0001" in p for p in problems))
 
     def test_custom_dir_skips_the_set_check(self) -> None:
+        """Custom dir skips the set check."""
         pages = self._pages({"book-0001"})
         self.assertEqual(spike.inventory_problems(pages, Path("/elsewhere"), []), [])
 
     def test_unknown_plain_key(self) -> None:
+        """Unknown plain key."""
         pages = self._pages({"book-0001"})
         problems = spike.inventory_problems(pages, Path("/elsewhere"), ["book-0002"])
         self.assertIn("book-0002", problems[0])
 
     def test_the_committed_files_match(self) -> None:
+        """The committed files match."""
         pages, _ = spike.load_pages(spike.DEFAULT_TRUTH, Path("/no-corpus"))
         self.assertEqual({p.key for p in pages}, set(spike.EXPECTED_PAGES))
 
@@ -230,17 +276,20 @@ class Main(unittest.TestCase):
     """The command-line entry point."""
 
     def _run(self, argv: list[str]) -> tuple[str, str]:
+        """Run main and capture its output."""
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
             spike.main(argv)
         return out.getvalue(), err.getvalue()
 
     def test_no_truth_files(self) -> None:
+        """No truth files."""
         with tempfile.TemporaryDirectory() as tmp:
             out, _ = self._run(["--truth", tmp, "--corpus", tmp])
         self.assertIn("No ground-truth files", out)
 
     def test_missing_images_prints_notice(self) -> None:
+        """Missing images prints notice."""
         with tempfile.TemporaryDirectory() as tmp:
             truth, corpus = _corpus(Path(tmp), {"book-0001": "hi"}, with_images=False)
             out, _ = self._run(
@@ -249,6 +298,7 @@ class Main(unittest.TestCase):
         self.assertIn("Rebuild them", out)
 
     def test_bad_plain_key_exits(self) -> None:
+        """Bad plain key exits."""
         with tempfile.TemporaryDirectory() as tmp:
             truth, corpus = _corpus(Path(tmp), {"book-0001": "hi"})
             with self.assertRaises(SystemExit) as caught:
@@ -256,7 +306,10 @@ class Main(unittest.TestCase):
         self.assertEqual(caught.exception.code, 2)
 
     def test_scores_and_writes_json(self) -> None:
+        """Scores and writes json."""
+
         def fake(_: object) -> dict[str, tuple[object, str]]:
+            """Stand in for score_engine."""
             return {"fake": (lambda image: "hi", ""), "gone": (None, "not installed")}
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -275,6 +328,7 @@ class Main(unittest.TestCase):
         self.assertEqual(data[0]["cer"], 0.0)
 
     def test_build_recognizers_maps_names(self) -> None:
+        """Build recognizers maps names."""
         args = spike.parse_args(["--engines", "tesseract-fast", "tesseract-best", "ocrs"])
         with mock.patch.object(spike, "which_or_none", return_value=None):
             made = spike.build_recognizers(args)
