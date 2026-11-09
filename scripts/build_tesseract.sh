@@ -110,7 +110,7 @@ cmake_build() {
     echo "build_tesseract: building ${name}"
     cmake -S "${BUILD_DIR}/src/${name}" -B "${BUILD_DIR}/build/${name}" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
-        -DCMAKE_PREFIX_PATH="${PREFIX}" -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_PREFIX_PATH="${PREFIX}" -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 "${PLATFORM_ARGS[@]}" "$@" > "${BUILD_DIR}/${name}.log" 2>&1 \
         || { tail -30 "${BUILD_DIR}/${name}.log" >&2; exit 1; }
     cmake --build "${BUILD_DIR}/build/${name}" --parallel "${JOBS}" >> "${BUILD_DIR}/${name}.log" 2>&1 \
@@ -155,8 +155,12 @@ cmake_build zlib
 drop_shared_libs
 cmake_build libpng -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TESTS=OFF -DPNG_TOOLS=OFF -DPNG_FRAMEWORK=OFF
 cmake_build libjpeg-turbo -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF -DWITH_JAVA=OFF
+# Every library must land in ${PREFIX}/lib, or a later find step can fall back to a system copy.
+for lib in libjpeg.a libz.a; do
+    [[ -f "${PREFIX}/lib/${lib}" ]] || { echo "build_tesseract: ${lib} is not in ${PREFIX}/lib" >&2; exit 1; }
+done
 cmake_build libtiff -Dtiff-tools=OFF -Dtiff-tests=OFF -Dtiff-contrib=OFF -Dtiff-docs=OFF \
-    -Dlzma=OFF -Dzstd=OFF -Djbig=OFF -Dlerc=OFF -Dwebp=OFF -Dlibdeflate=OFF -Dcxx=OFF -Djpeg12=OFF
+    -Dlzma=OFF -Dzstd=OFF -Djbig=OFF -Dlerc=OFF -Dwebp=OFF -Dlibdeflate=OFF -Dcxx=OFF
 cmake_build libwebp -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
     -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF \
     -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF
@@ -169,9 +173,18 @@ cmake_build leptonica -DSW_BUILD=OFF -DENABLE_GIF=OFF -DENABLE_OPENJPEG=OFF -DEN
 # Leptonica's generated package file leaves its WebP dependency condition empty, so the
 # WebP::webp target it exports is never defined. Switch the condition on.
 sed -i.bak '/^if ()$/{N;/WebP/s/^if ()/if (1)/;}' "${PREFIX}/lib/cmake/leptonica/LeptonicaConfig.cmake"
+# GNU ld reads static archives once, left to right. Leptonica's link line puts libjpeg.a before
+# libtiff.a, which needs it (libtiff's own CMake package, which carried that dependency, is
+# deleted above). Repeating libjpeg and zlib at the end of the line resolves libtiff's references.
+# libjpeg-turbo 3 makes libtiff build 12-bit JPEG support (tif_jpeg_12.c) unconditionally, so its
+# jpeg12_* references must resolve too; libtiff's jpeg12 option has no effect in that mode.
+# CMAKE_CXX_STANDARD_LIBRARIES is a command-line string, so a prefix with spaces is unsupported.
+# Apple's linker does not need this, and an extra archive at the end is harmless there.
+TAIL_LIBS="${PREFIX}/lib/libjpeg.a ${PREFIX}/lib/libz.a"
 cmake_build tesseract -DSW_BUILD=OFF -DDISABLE_CURL=ON -DDISABLE_ARCHIVE=ON -DOPENMP_BUILD=OFF \
     -DUSE_SYSTEM_ICU=OFF -DBUILD_TRAINING_TOOLS=OFF -DBUILD_TESTS=OFF -DGRAPHICS_DISABLED=ON \
-    -DOPENCL=OFF -DDISABLE_TIFF=OFF
+    -DOPENCL=OFF -DDISABLE_TIFF=OFF \
+    -DCMAKE_CXX_STANDARD_LIBRARIES="${TAIL_LIBS}"
 
 mkdir -p "${OUT_DIR}"
 OUT="${OUT_DIR}/tesseract-${TRIPLE}${EXE_SUFFIX}"
