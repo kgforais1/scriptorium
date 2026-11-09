@@ -2,9 +2,10 @@
 
 Last reviewed: 2026-11-09
 
-Scriptorium bundles **Tesseract 5.5.3** with the `tessdata_fast` English model as its OCR
-engine. It runs as a sidecar binary, so a crash on a bad page cannot take down the app. This
-page records why, how the binary is built, and how to bump it. The plan is
+Scriptorium will bundle **Tesseract 5.5.3** with the `tessdata_fast` English model as its OCR
+engine. The app does not bundle or run Tesseract yet. M2a Phase 3 adds it as a sidecar binary,
+so a crash on a bad page cannot take down the app. This page records why Tesseract was chosen,
+how the binary is built, and how to bump it. The plan is
 [M2a OCR engine and pipeline](../plans/2026-11-07-m2a-ocr-pipeline.md).
 
 ## Decision (2026-11-09)
@@ -50,7 +51,7 @@ gitignored.
 [`.github/workflows/tesseract.yml`](../.github/workflows/tesseract.yml) builds it on all three
 platforms, checks that no system Tesseract is on `PATH`, and OCRs
 [`tests/fixtures/ocr/smoke.png`](../tests/fixtures/ocr/smoke.png). It runs on pull requests that
-touch the build script or the workflow, and on demand. On macOS the binary also runs ad-hoc signed
+touch the build script, the workflow, or the smoke image, and on demand. On macOS the binary also runs ad-hoc signed
 under the hardened runtime with a cleared environment, and matches Homebrew's output byte for
 byte.
 

@@ -1,5 +1,5 @@
 # tesseract.yml — packaging proof for the self-contained Tesseract sidecar (M2a Phase 1).
-# Runs on PRs that touch the build script or this workflow, and on demand.
+# Runs on PRs that touch the build script, this workflow, or the smoke image, and on demand.
 # Action refs are pinned to full commit SHAs.
 
 name: Tesseract build
@@ -10,6 +10,7 @@ on:
     paths:
       - scripts/build_tesseract.sh
       - .github/workflows/tesseract.yml
+      - tests/fixtures/ocr/smoke.png
 
 permissions:
   contents: read

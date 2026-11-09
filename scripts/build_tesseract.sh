@@ -183,16 +183,20 @@ sed -i.bak '/^if ()$/{N;/WebP/s/^if ()/if (1)/;}' "${PREFIX}/lib/cmake/leptonica
 # deleted above). Repeating libjpeg and zlib at the end of the line resolves libtiff's references.
 # libjpeg-turbo 3 makes libtiff build 12-bit JPEG support (tif_jpeg_12.c) unconditionally, so its
 # jpeg12_* references must resolve too; libtiff's jpeg12 option has no effect in that mode.
-# CMAKE_CXX_STANDARD_LIBRARIES is a command-line string, so a prefix with spaces is unsupported.
+# CMAKE_CXX_STANDARD_LIBRARIES is pasted into the link command as written, so each path is
+# double-quoted to stay one argument even if the prefix contains spaces.
 # Apple's linker does not need this, and an extra archive at the end is harmless there.
-TAIL_LIBS="${PREFIX}/lib/libjpeg.a ${ZLIB_A}"
+JPEG_A="${PREFIX}/lib/libjpeg.a"
 # Under MSYS2 the native MinGW linker cannot open MSYS paths (/d/a/...), so pass Windows paths.
 if command -v cygpath > /dev/null 2>&1; then
-    TAIL_LIBS="$(cygpath -m "${PREFIX}/lib/libjpeg.a") $(cygpath -m "${ZLIB_A}")"
+    JPEG_A="$(cygpath -m "${JPEG_A}")"
+    ZLIB_A="$(cygpath -m "${ZLIB_A}")"
 fi
+TAIL_LIBS="\"${JPEG_A}\" \"${ZLIB_A}\""
 cmake_build tesseract -DSW_BUILD=OFF -DDISABLE_CURL=ON -DDISABLE_ARCHIVE=ON -DOPENMP_BUILD=OFF \
     -DUSE_SYSTEM_ICU=OFF -DBUILD_TRAINING_TOOLS=OFF -DBUILD_TESTS=OFF -DGRAPHICS_DISABLED=ON \
     -DOPENCL=OFF -DDISABLE_TIFF=OFF \
+    -DLeptonica_DIR="${PREFIX}/lib/cmake/leptonica" \
     -DCMAKE_CXX_STANDARD_LIBRARIES="${TAIL_LIBS}"
 
 mkdir -p "${OUT_DIR}"
@@ -206,4 +210,11 @@ else
 fi
 echo "build_tesseract: stripped size $(wc -c < "${OUT}") bytes"
 show_dependencies "${OUT}"
+# The binary must not load any of the libraries this script builds statically. A match means a
+# system copy was linked instead of the private one.
+# otool's first line names the binary itself, so lines ending in ':' are skipped.
+if show_dependencies "${OUT}" | grep -v ':$' | grep -iE 'lept|tesseract|libpng|jpeg|tiff|webp|libz[.-]|zlib'; then
+    echo "build_tesseract: ${OUT} depends on a shared copy of a bundled library" >&2
+    exit 1
+fi
 echo "build_tesseract: wrote ${OUT} in $(($(date +%s) - START))s"

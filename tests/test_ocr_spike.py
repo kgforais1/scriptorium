@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -111,6 +112,11 @@ class Scoring(unittest.TestCase):
         self.assertIn("boom", res.pages[0]["error"])
         self.assertIn("2 page(s) failed", spike.format_table([res]))
 
+    def test_no_plain_pages_is_unavailable(self) -> None:
+        res = spike.score_engine("fake", lambda image: "", self._pages(), [])
+        self.assertIsNone(res.plain_cer)
+        self.assertIn("n/a", spike.format_table([res]))
+
     def test_table_has_one_row_per_engine(self) -> None:
         rows = spike.format_table([spike.EngineResult("one"), spike.EngineResult("two")])
         self.assertEqual(len(rows.splitlines()), 4)
@@ -153,6 +159,7 @@ class Engines(unittest.TestCase):
                 self.assertEqual(rec(Path("p.jpg")), "ok")
         cmd, env = run.call_args.args
         self.assertEqual(cmd[:3], ["/bin/tess", "p.jpg", "stdout"])
+        self.assertEqual(cmd[cmd.index("--tessdata-dir") + 1], tmp)
         self.assertEqual(env["OMP_THREAD_LIMIT"], "1")
 
     def test_ocrs_needs_models(self) -> None:
@@ -176,8 +183,37 @@ class Engines(unittest.TestCase):
 
     def test_run_engine_raises_on_failure(self) -> None:
         with self.assertRaises(RuntimeError):
-            spike.run_engine(["python3", "-c", "import sys; sys.exit(3)"], {})
-        self.assertEqual(spike.run_engine(["python3", "-c", "print('hi')"], {}).strip(), "hi")
+            spike.run_engine([sys.executable, "-c", "import sys; sys.exit(3)"], dict(os.environ))
+        out = spike.run_engine([sys.executable, "-c", "print('hi')"], dict(os.environ))
+        self.assertEqual(out.strip(), "hi")
+
+
+class Inventory(unittest.TestCase):
+    def _pages(self, keys: set[str]) -> list:
+        return [spike.Page(k, Path(f"{k}.jpg"), "x") for k in sorted(keys)]
+
+    def test_committed_set_is_complete(self) -> None:
+        pages = self._pages(set(spike.EXPECTED_PAGES))
+        self.assertEqual(spike.inventory_problems(pages, spike.DEFAULT_TRUTH, []), [])
+
+    def test_default_dir_reports_missing_and_extra(self) -> None:
+        keys = set(spike.EXPECTED_PAGES) - {"dulac-picture-book-0154"} | {"stray-0001"}
+        problems = spike.inventory_problems(self._pages(keys), spike.DEFAULT_TRUTH, [])
+        self.assertTrue(any("dulac-picture-book-0154" in p for p in problems))
+        self.assertTrue(any("stray-0001" in p for p in problems))
+
+    def test_custom_dir_skips_the_set_check(self) -> None:
+        pages = self._pages({"book-0001"})
+        self.assertEqual(spike.inventory_problems(pages, Path("/elsewhere"), []), [])
+
+    def test_unknown_plain_key(self) -> None:
+        pages = self._pages({"book-0001"})
+        problems = spike.inventory_problems(pages, Path("/elsewhere"), ["book-0002"])
+        self.assertIn("book-0002", problems[0])
+
+    def test_the_committed_files_match(self) -> None:
+        pages, _ = spike.load_pages(spike.DEFAULT_TRUTH, Path("/no-corpus"))
+        self.assertEqual({p.key for p in pages}, set(spike.EXPECTED_PAGES))
 
 
 class Main(unittest.TestCase):
@@ -195,8 +231,17 @@ class Main(unittest.TestCase):
     def test_missing_images_prints_notice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             truth, corpus = _corpus(Path(tmp), {"book-0001": "hi"}, with_images=False)
-            out, _ = self._run(["--truth", str(truth), "--corpus", str(corpus)])
+            out, _ = self._run(
+                ["--truth", str(truth), "--corpus", str(corpus), "--plain", "book-0001"]
+            )
         self.assertIn("Rebuild them", out)
+
+    def test_bad_plain_key_exits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            truth, corpus = _corpus(Path(tmp), {"book-0001": "hi"})
+            with self.assertRaises(SystemExit) as caught:
+                self._run(["--truth", str(truth), "--corpus", str(corpus), "--plain", "nope-0001"])
+        self.assertEqual(caught.exception.code, 2)
 
     def test_scores_and_writes_json(self) -> None:
         def fake(_: object) -> dict[str, tuple[object, str]]:
@@ -207,7 +252,10 @@ class Main(unittest.TestCase):
             report = Path(tmp) / "out.json"
             with mock.patch.object(spike, "build_recognizers", side_effect=fake):
                 out, err = self._run(
-                    ["--truth", str(truth), "--corpus", str(corpus), "--json", str(report)]
+                    [
+                        *("--truth", str(truth), "--corpus", str(corpus)),
+                        *("--plain", "book-0001", "--json", str(report)),
+                    ]
                 )
             data = json.loads(report.read_text(encoding="utf-8"))
         self.assertIn("fake", out)

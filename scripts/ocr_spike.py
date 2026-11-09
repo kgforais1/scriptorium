@@ -50,6 +50,23 @@ DEFAULT_CORPUS = REPO / "tmp" / "fixtures" / "corpus"
 DEFAULT_TRUTH = REPO / "tests" / "fixtures" / "ocr"
 # Plain prose pages: no display type, drop cap, or plate. The 3% gate uses these.
 DEFAULT_PLAIN = ("dulac-picture-book-0109", "princess-and-goblin-0036")
+# The committed ground truth. A run on the default directory scores only this complete set.
+EXPECTED_PAGES = frozenset(
+    {
+        "dulac-picture-book-0013",
+        "dulac-picture-book-0025",
+        "dulac-picture-book-0031",
+        "dulac-picture-book-0049",
+        "dulac-picture-book-0109",
+        "dulac-picture-book-0154",
+        "princess-and-goblin-0003",
+        "princess-and-goblin-0007",
+        "princess-and-goblin-0015",
+        "princess-and-goblin-0019",
+        "princess-and-goblin-0021",
+        "princess-and-goblin-0036",
+    }
+)
 ENGINES = ("tesseract-fast", "tesseract-best", "ocrs")
 PAGE_TIMEOUT_S = 300
 
@@ -70,7 +87,7 @@ class EngineResult:
     engine: str
     cer: float = 0.0
     wer: float = 0.0
-    plain_cer: float = 0.0
+    plain_cer: Optional[float] = None
     invented: int = 0
     median_s: float = 0.0
     failures: int = 0
@@ -117,6 +134,8 @@ def run_engine(cmd: List[str], env: Dict[str, str]) -> str:
         cmd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
         timeout=PAGE_TIMEOUT_S,
         check=False,
@@ -195,7 +214,8 @@ def score_engine(
         res.pages.append(record)
     res.cer = ratio(totals["c_err"], totals["c_len"])
     res.wer = ratio(totals["w_err"], totals["w_len"])
-    res.plain_cer = ratio(totals["p_err"], totals["p_len"])
+    # No plain-prose characters means there is nothing to score, not a perfect score.
+    res.plain_cer = ratio(totals["p_err"], totals["p_len"]) if totals["p_len"] else None
     res.median_s = statistics.median(times) if times else 0.0
     return res
 
@@ -241,13 +261,35 @@ def format_table(results: List[EngineResult]) -> str:
     head = f"{'engine':<16}{'CER':>8}{'WER':>8}{'plain CER':>11}{'invented':>10}{'s/page':>9}"
     rows = [head, "-" * len(head)]
     for r in results:
+        plain = "n/a" if r.plain_cer is None else f"{r.plain_cer:.2%}"
         rows.append(
-            f"{r.engine:<16}{r.cer:>8.2%}{r.wer:>8.2%}{r.plain_cer:>11.2%}"
+            f"{r.engine:<16}{r.cer:>8.2%}{r.wer:>8.2%}{plain:>11}"
             f"{r.invented:>10d}{r.median_s:>9.2f}"
         )
         if r.failures:
             rows.append(f"  ({r.failures} page(s) failed; counted as empty output)")
     return "\n".join(rows)
+
+
+def inventory_problems(pages: List[Page], truth_dir: Path, plain: Sequence[str]) -> List[str]:
+    """Describe what is wrong with the loaded pages, or return an empty list.
+
+    The committed set is checked only for the default directory, so a custom --truth still works.
+    Plain-page keys must name loaded pages in every case.
+    """
+    keys = {p.key for p in pages}
+    problems: List[str] = []
+    if truth_dir.resolve() == DEFAULT_TRUTH.resolve():
+        missing = sorted(EXPECTED_PAGES - keys)
+        extra = sorted(keys - EXPECTED_PAGES)
+        if missing:
+            problems.append(f"missing ground-truth files: {', '.join(missing)}")
+        if extra:
+            problems.append(f"unexpected ground-truth files: {', '.join(extra)}")
+    unknown = sorted(set(plain) - keys)
+    if unknown:
+        problems.append(f"--plain names pages with no ground truth: {', '.join(unknown)}")
+    return problems
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -288,6 +330,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     if not pages:
         print(f"No ground-truth files in {args.truth}.")
         return
+    problems = inventory_problems(pages, args.truth, args.plain)
+    if problems:
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        sys.exit(2)
     if missing:
         print(
             f"{len(missing)} page image(s) missing under {args.corpus} "
