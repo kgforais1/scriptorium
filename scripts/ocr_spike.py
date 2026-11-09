@@ -170,6 +170,7 @@ def make_tesseract(
     env = single_thread_env()
 
     def recognize(image: Path) -> str:
+        """Return Tesseract's plain text for one page image."""
         cmd = [exe, str(image), "stdout", "--tessdata-dir", tessdata, "-l", "eng"]
         return run_engine(cmd, env)
 
@@ -188,6 +189,7 @@ def make_ocrs(
     env = single_thread_env()
 
     def recognize(image: Path) -> str:
+        """Return ocrs's plain text for one page image."""
         return run_engine([exe, "--detect-model", detect, "--rec-model", rec, str(image)], env)
 
     return recognize, ""

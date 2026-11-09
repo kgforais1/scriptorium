@@ -500,14 +500,32 @@ scan, and no one has to transcribe by hand. Only validated pages are used.
   (validated). Page `n` is page `n` of the scan file, so no offset is needed. It gets the image
   from the scan on Commons with `prop=imageinfo&iiurlwidth=<width>&iiurlparam=page<n>-<width>px`, which renders one
   page of a DjVu or PDF. Books whose scans are not a DjVu or PDF on Commons are skipped.
-- It keeps only the page body. The header and footer sections, which hold running heads and page
-  numbers, are dropped. It removes templates and tags such as `{{rh}}`, `{{c}}`, `{{sc}}`, and
-  `<ref>`, keeping their text where they wrap text and dropping footnote bodies.
+- Every page, from the calibration set and the spike set alike, goes through the app's own OCR
+  input path: the Phase 4 engine-input step, then `tesseract.rs` with the same arguments
+  (`--psm 3 --oem 1`, `tessdata_fast`). So the measured confidences are the ones M2c will see.
+  The script calls `ocr_page`, a small dev-only binary target in `src-tauri` that wraps that
+  path, rather than its own Tesseract command.
+- It keeps the page body as the reference. The header and footer sections, which hold running
+  heads and page numbers, are kept apart for step 2 below. It removes templates and tags such as
+  `{{rh}}`, `{{c}}`, and `{{sc}}`, keeping the text they wrap.
+- Footnotes are kept on both sides. Each `<ref>` body is moved to the end of the reference, in
+  order, as the printed page sets it. So a footnote Tesseract reads correctly aligns with its
+  reference and counts as right. A page whose footnotes Wikisource has moved off the page, for
+  example to a chapter's end, is dropped from the set.
 - It sends a descriptive `User-Agent`, uses `maxlag=5`, keeps to one request at a time with
   backoff, and records each page's book, page, revision id, source URL, and licence in the
   manifest. Only scans marked public domain in the US are used.
+- The manifest also pins each scan. It records the Commons file's upload timestamp and SHA-1,
+  from `iiprop=timestamp|sha1`, and the SHA-256 of each rendered page image.
 - The manifest is committed as `tests/fixtures/ocr-calibration/manifest.json`. The images and
-  texts stay in gitignored `tmp/`, and the script rebuilds them from the pinned revisions.
+  texts stay in gitignored `tmp/`, and the script rebuilds them from the pinned revisions. On a
+  rebuild it checks the file's timestamp and SHA-1 first. If Commons now holds a newer upload,
+  the script finds the pinned version in the file's history (`iilimit`) by its timestamp and
+  SHA-1. It renders that version's page if Commons serves archived pages, and otherwise
+  downloads the archived original and renders the page locally. If neither works, it drops that
+  book and says so, and a replacement book is picked by hand. It then checks each rendered image's SHA-256. A mismatch
+  with an unchanged file means the renderer changed. The script stops and reports it, and never
+  calibrates on an image it cannot verify.
 - Wikisource texts follow the scan but may modernise long s, ligatures, and hyphenation. The
   script normalises those on both sides before comparing, and lists the rules in `docs/ocr.md`.
 - The 12 spike pages are kept as a second check. The threshold must hold on both sets.
@@ -519,9 +537,12 @@ Phase 4 extends `scripts/ocr_spike.py` to measure the threshold on that set:
 2. For each page it aligns the OCR words with the ground-truth words, both normalised as the
    spike already does, using `difflib.SequenceMatcher` on the two word lists. An aligned pair is
    right if the words are equal and wrong otherwise. An OCR word with no partner is wrong. A
-   missed ground-truth word has no confidence, so it is counted separately and not used. On
-   calibration pages, OCR words before the first aligned pair and after the last one are left
-   out, since they are usually the running head and page number that Wikisource keeps apart.
+   missed ground-truth word has no confidence, so it is counted separately and not used.
+   Before aligning a calibration page, it removes whole OCR lines that are a running head or a
+   page number. A line is removed only if it is the first or last line of the page, and it
+   either matches the page's Wikisource header or footer text after normalising, or holds only
+   a number or roman numeral. Every other OCR word stays in. So a misread body word at the edge
+   of the page, such as "Beginnlng", still counts as wrong.
 3. For each threshold from 0.05 to 0.95 in steps of 0.05, it prints how many wrong words fall
    below it, and how many right words it would flag. It reports counts as well as rates, overall
    and per book, so one book's typeface cannot hide behind the average.
@@ -530,7 +551,21 @@ The result is one global threshold. 120 pages hold tens of thousands of words, e
 0.05 steps, but not for a separate threshold per typeface or layout. If the per-book results
 differ widely, `docs/ocr.md` says so, and M2c lets the curator change the threshold.
 
-`docs/ocr.md` records the result, and M2c picks the threshold from it.
+**Choosing the threshold.** A missed error costs more than an extra flag, because a curator who
+trusts the highlighting never sees the error. An extra flag costs a few seconds of reading. So
+the threshold is chosen on the calibration set as the one with the highest F2 score, which
+weights catching errors twice as much as avoiding flags. F2 is a standard measure for this
+trade-off, so no new target value is invented. The steps are:
+
+1. Pick the threshold with the highest F2 on the calibration set.
+2. At that threshold, report the share of wrong words caught and the share of words flagged, on
+   the calibration set, on the 12 spike pages, and per book, each with a 95% confidence interval.
+3. The threshold holds if the spike set's share caught falls inside the calibration set's
+   interval. If it does not, or if some book catches far fewer errors than the rest, the result
+   goes to the user before M2c adopts it.
+
+`docs/ocr.md` records the result, and M2c takes the threshold from it. The per-book reporting
+and the curator's own setting in M2c stay as described above.
 
 ### Errors
 
@@ -571,6 +606,8 @@ Per-page failures are statuses, not errors.
 - `src-tauri/src/ocr/{mod.rs, engine.rs, tesseract.rs, fake.rs, job.rs, store.rs}` (new).
 - `src-tauri/src/library/ocr.rs`: write v1, keep v0 reading for the shim.
 - `src-tauri/src/commands/`: `run_ocr`, `cancel_ocr`, `ocr_status`.
+- `src-tauri/src/bin/ocr_page.rs` (new, dev only): one page through the app's OCR path, for
+  the calibration script.
 - `src-tauri/src/lib.rs`: register the commands, cancel jobs on exit.
 - `src-tauri/tauri.conf.json`: the sidecar and its language data.
 - `src/features/reader/` (`ReaderStatus`, `ReaderHeader`): status and the Text button. `src/lib/errors.ts`.
@@ -657,6 +694,8 @@ Per-page failures are statuses, not errors.
 - [ ] Test the Tesseract engine's kill path with a stub binary that sleeps: both `stop` and the
       deadline end it, and no child is left running.
 - [ ] Add the reader status, the Text button, and the error mapping, with frontend tests.
+- [ ] Add the `ocr_page` dev binary target, which runs one image through the engine-input step
+      and `tesseract.rs` and prints the TSV words with their confidences.
 - [ ] Write `scripts/fetch_calibration_set.py` and commit the manifest of at least 120 validated
       Wikisource pages from at least 12 books, as described under "Word confidence".
 - [ ] Extend `scripts/ocr_spike.py` to measure word confidence on the calibration set and on the
@@ -718,8 +757,11 @@ Per-page failures are statuses, not errors.
 - [ ] Follow-up: test PaddleOCR's mobile models through ONNX (for example RapidOCR) in
       `scripts/ocr_spike.py`, on the 12 spike pages and the calibration set. The question is
       whether it beats Tesseract on the hard pages (display type, small caps, faint captions)
-      and on non-Latin scripts, and at what size with ONNX Runtime. If it does, it becomes an
-      optional second engine behind `OcrEngine`.
+      and on non-Latin scripts, and at what size with ONNX Runtime. Both existing sets are
+      English, so they cannot answer the non-Latin question. The follow-up adds validated
+      Wikisource pages with their transcriptions for each script it evaluates: Cyrillic, Greek,
+      Arabic, Chinese, and Japanese. Results are reported separately for each script. If it
+      wins, it becomes an optional second engine behind `OcrEngine`.
 - [ ] Deferred (2026-11-09): EasyOCR. It needs Python and PyTorch, several hundred MB at least,
       which is too large to bundle or to ask curators to install.
 - [ ] Follow-up: a help menu in the app that shows the OCR weak-spots section, and later other

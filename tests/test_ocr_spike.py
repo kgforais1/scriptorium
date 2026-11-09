@@ -59,6 +59,8 @@ def _corpus(root: Path, pages: dict[str, str], with_images: bool = True) -> tupl
 
 
 class TextMetrics(unittest.TestCase):
+    """Normalisation, edit distance, and error ratios."""
+
     def test_normalize_collapses_whitespace(self) -> None:
         self.assertEqual(spike.normalize("  a\n\nb \t c  "), "a b c")
 
@@ -74,6 +76,8 @@ class TextMetrics(unittest.TestCase):
 
 
 class Scoring(unittest.TestCase):
+    """Scoring an engine over a set of pages."""
+
     def _pages(self) -> list:
         return [
             spike.Page("book-0001", Path("a.jpg"), "the cat sat"),
@@ -123,6 +127,8 @@ class Scoring(unittest.TestCase):
 
 
 class Loading(unittest.TestCase):
+    """Pairing ground-truth files with page images."""
+
     def test_pairs_truth_with_images(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             truth, corpus = _corpus(Path(tmp), {"my-book-0007": "hi"})
@@ -139,6 +145,8 @@ class Loading(unittest.TestCase):
 
 
 class Engines(unittest.TestCase):
+    """Building the Tesseract and ocrs recognizers."""
+
     def test_tesseract_needs_binary_and_data(self) -> None:
         with mock.patch.object(spike, "which_or_none", return_value=None):
             rec, reason = spike.make_tesseract(None, "/nowhere")
@@ -189,6 +197,8 @@ class Engines(unittest.TestCase):
 
 
 class Inventory(unittest.TestCase):
+    """Checking the committed ground-truth set is complete."""
+
     def _pages(self, keys: set[str]) -> list:
         return [spike.Page(k, Path(f"{k}.jpg"), "x") for k in sorted(keys)]
 
@@ -217,6 +227,8 @@ class Inventory(unittest.TestCase):
 
 
 class Main(unittest.TestCase):
+    """The command-line entry point."""
+
     def _run(self, argv: list[str]) -> tuple[str, str]:
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
