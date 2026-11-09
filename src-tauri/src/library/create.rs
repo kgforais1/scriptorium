@@ -138,7 +138,7 @@ fn unreadable(file: &Path, err: convert::ConvertError) -> BookError {
 }
 
 /// Zero-padded page or source number, at least four digits.
-pub(super) fn numbered(i: usize, count: usize) -> String {
+pub(crate) fn numbered(i: usize, count: usize) -> String {
     let width = count.saturating_sub(1).to_string().len().max(4);
     format!("{i:0width$}")
 }
@@ -398,7 +398,7 @@ impl Builder {
             reason: e.to_string(),
         })?;
         parse_meta(&text)?;
-        self.ocr.finish(&self.tmp)?;
+        self.ocr.finish(&self.tmp, self.page_count)?;
         for (name, body) in [
             ("meta.json", text + "\n"),
             ("annotations.json", "[]\n".to_string()),

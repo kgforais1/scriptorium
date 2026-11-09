@@ -9,6 +9,7 @@ pub mod book_format;
 mod commands;
 pub mod ingest;
 pub mod library;
+mod ocr;
 
 use tauri::{Manager, RunEvent, WindowEvent};
 

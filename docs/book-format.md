@@ -1,6 +1,6 @@
 # Scriptorium book package format
 
-Last reviewed: 2026-10-29
+Last reviewed: 2026-11-09
 
 Normative spec for a Scriptorium **book package** (formatVersion 2; formatVersion 1 is still read). A package is a
 self-contained directory that the app can open, verify, and re-locate on disk without
@@ -18,37 +18,55 @@ this doc disagree, the schema wins on types, this doc wins on rules and intent.
 ├── meta.json          # required — see fields below
 ├── pages/             # required — display images, relative paths stored in meta.json
 ├── originals/         # v2, optional — untouched originals of converted pages (see sources[])
-├── ocr/               # reserved — PDF ingest writes plain page text here; M2 adds OCR (layout below)
+├── ocr/               # page text, one layer per source (schema v1, below)
 └── annotations.json   # reserved — empty form is `[]` (canonical); `{}` tolerated on read, never written
 ```
 
-### Reserved layout for page text and annotations (provisional)
+### Page text (`ocr/`, schema v1) and reserved annotations
 
-M1 writes neither of these. PDF ingest (M1.5) writes the plain text a PDF carries, as
-described below. The shapes are recorded now so M2 and M6 add files without a
-`formatVersion` bump, because neither lives in `meta.json`. They stay provisional until M2
-(text) and M6 (annotations) ship and may change before then.
+Neither lives in `meta.json`, so both add files without a `formatVersion` bump.
+[`ocr.v1.schema.json`](ocr.v1.schema.json) covers both `ocr/` files. M2a fixes the `ocr/`
+layout. Annotations stay provisional until M6.
 
-- `ocr/<NNNN>.json` holds one page's text, named by its 0-based page position like
-  `pages/`. It carries the plain text, word and line boxes in **normalized page coordinates**
-  (`x`, `y`, `w`, `h` from 0 to 1, origin top-left of the display image), and a `source` of
-  `ocr`, `pdf`, or `curator`. Curator text keeps the OCR original and a correction history.
-- `ocr/index.json` holds per-page status (`status`, `engine`, `generatedAt`) and a book-level
-  rollup. OCR status never goes in `meta.json`.
+- `ocr/<NNNN>.json` holds one page, named by its 0-based position in the book and padded like
+  `pages/`. It is `{ "schema": 1, "layers": { … } }`, with one layer per source:
+  - `ocr` holds `engine`, `generatedAt`, `runId`, `imageSha256` (the page's `sha256` when it
+    ran), `text` (lines joined with `\n`, paragraphs with `\n\n`), and `lines`. Each line has a
+    `bbox` and `words`. Each word has `text`, `bbox`, and `conf` from 0 to 1. A plate with no
+    text has an empty `text` and no lines.
+  - `pdf` holds `{ "text": … }`, the text the PDF carried. It has no boxes.
+  - `curator` is reserved for M2c and its shape is open. OCR never writes or removes it.
+- A `bbox` is `[x, y, w, h]` in **normalized page coordinates**, from 0 to 1, origin top-left
+  of the display image, rounded to 5 decimal places.
+- **Published text** is the first layer present in the order `curator`, `ocr`, `pdf`. A
+  `curator` layer counts once it has a `text`. `ocr` beats `pdf` so the published text and its
+  boxes come from one transcript.
+- A page file exists only once some layer has content. No file means nothing recorded yet.
+- OCR replaces only `layers.ocr`. It never rewrites a file it cannot parse and validate; that
+  page is marked `failed` and the file is left as it is.
+- `ocr/index.json` is a cache, rebuilt from the page files before each OCR run. It is
+  `{ "schema": 1, "engine", "updatedAt", "pages": {…}, "summary": {…} }`. `pages` maps every
+  page position (decimal, no padding) to a `status` of `pending`, `done` (with `imageSha256`
+  and `runId`), `failed` (with `error`, `failedAt`, and an optional `afterRunId`), or
+  `skipped`. `summary` counts `pages`, each status, and `withText`, the pages whose published
+  text is not empty. OCR status never goes in `meta.json`.
+- `ocr/forced.json` is `{ "runId": … }` and exists only while a forced re-run is unfinished.
 
-**What PDF ingest writes** ([`ocr.v0.schema.json`](ocr.v0.schema.json) covers both files):
+**Reading v0.** M1.5 wrote v0 page files, `{ "source": "pdf", "text": "…" }`
+([`ocr.v0.schema.json`](ocr.v0.schema.json)). A valid v0 page reads as v1 with only a `pdf`
+layer. A file that is neither valid v0 nor valid v1 is invalid. A v0 index reads as missing.
 
-- For each PDF page that has text, `ocr/<NNNN>.json` is `{ "source": "pdf", "text": "…" }`.
-  There are no boxes. `NNNN` is the page's 0-based position in the book, padded like `pages/`,
-  not the PDF's page number and not a count of pages with text.
-- `ocr/index.json` is `{ "engine": "pdfium", "generatedAt": <RFC 3339>, "pages": {…},
-  "summary": { "pdfPages": n, "withText": m } }`. `pages` maps a page position (decimal, no
-  padding) to `{ "status": "text" }` or `{ "status": "none" }`. A page with text is `text`.
-  A PDF page without text is `none`. Image pages are not listed.
-- A book with no PDF pages gets no `ocr/` files, only the empty directory.
-- Ingest validates both files against the schema before the package is renamed into place.
-  `load_book` does not read `ocr/` yet. M2 adds boxes to the page file and moves the schema
-  to v1.
+**What PDF ingest writes:**
+
+- For each PDF page that has text, `ocr/<NNNN>.json` is
+  `{ "schema": 1, "layers": { "pdf": { "text": "…" } } }`. `NNNN` is the page's position in the
+  book, not the PDF's page number.
+- `ocr/index.json` lists every page of the book as `pending`, with `engine` `pdfium` and
+  `withText` counting the PDF pages with text.
+- A book with no PDF pages gets no `ocr/` files, only the empty directory. A missing index
+  reads as every page `pending`.
+- Every `ocr/` write is atomic, and ingest validates both files against the v1 schema before
+  the package is renamed into place. `load_book` does not read `ocr/`.
 - `annotations.json` regions use the same normalized page coordinates, as `xywh` or a polygon.
 
 **Portability:** everything inside the package is addressed with **relative paths**.

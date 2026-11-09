@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scriptorium.local/ocr.v1.schema.json",
+  "title": "Scriptorium book package page text, v1",
+  "description": "Covers ocr/<NNNN>.json, ocr/index.json, and ocr/forced.json. A document is valid when it matches exactly one of the three shapes. Replaces ocr.v0.schema.json, which is kept for reading M1.5 books. See docs/book-format.md.",
+  "oneOf": [
+    { "$ref": "#/$defs/page" },
+    { "$ref": "#/$defs/index" },
+    { "$ref": "#/$defs/forced" }
+  ],
+  "$defs": {
+    "unit": { "type": "number", "minimum": 0, "maximum": 1 },
+    "bbox": {
+      "description": "[x, y, w, h], normalised to the display image, origin top-left.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/unit" },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "runId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+    "word": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "bbox", "conf"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "bbox": { "$ref": "#/$defs/bbox" },
+        "conf": { "$ref": "#/$defs/unit" }
+      }
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bbox", "words"],
+      "properties": {
+        "bbox": { "$ref": "#/$defs/bbox" },
+        "words": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/word" } }
+      }
+    },
+    "page": {
+      "description": "ocr/<NNNN>.json: one page's text, one layer per source.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "layers"],
+      "properties": {
+        "schema": { "const": 1 },
+        "layers": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "ocr": {
+              "description": "Written by the OCR job. A plate with no text has an empty text and no lines.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["engine", "generatedAt", "runId", "imageSha256", "text", "lines"],
+              "properties": {
+                "engine": { "type": "string", "minLength": 1 },
+                "generatedAt": { "type": "string", "format": "date-time" },
+                "runId": { "$ref": "#/$defs/runId" },
+                "imageSha256": { "$ref": "#/$defs/sha256" },
+                "text": { "type": "string" },
+                "lines": { "type": "array", "items": { "$ref": "#/$defs/line" } }
+              }
+            },
+            "pdf": {
+              "description": "Text extracted from the PDF at ingest. No boxes.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["text"],
+              "properties": {
+                "text": { "type": "string", "minLength": 1 }
+              }
+            },
+            "curator": {
+              "description": "Reserved for M2c. Its shape is left open; OCR never writes or removes it.",
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "entry": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": { "status": { "enum": ["pending", "skipped"] } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "imageSha256", "runId"],
+          "properties": {
+            "status": { "const": "done" },
+            "imageSha256": { "$ref": "#/$defs/sha256" },
+            "runId": { "$ref": "#/$defs/runId" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "error", "failedAt"],
+          "properties": {
+            "status": { "const": "failed" },
+            "error": { "type": "string", "minLength": 1 },
+            "failedAt": { "type": "string", "format": "date-time" },
+            "afterRunId": { "oneOf": [{ "$ref": "#/$defs/runId" }, { "type": "null" }] }
+          }
+        }
+      ]
+    },
+    "forced": {
+      "description": "ocr/forced.json: the id of the forced run that is still unfinished.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId"],
+      "properties": { "runId": { "$ref": "#/$defs/runId" } }
+    },
+    "count": { "type": "integer", "minimum": 0 },
+    "index": {
+      "description": "ocr/index.json: a cache of every page's OCR status, and a book-level rollup.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "engine", "updatedAt", "pages", "summary"],
+      "properties": {
+        "schema": { "const": 1 },
+        "engine": { "type": "string", "minLength": 1 },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "pages": {
+          "description": "Page position (0-based, decimal, no padding) to that page's status. Every page of the book is listed.",
+          "type": "object",
+          "propertyNames": { "pattern": "^(0|[1-9][0-9]{0,5})$" },
+          "additionalProperties": { "$ref": "#/$defs/entry" }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pages", "done", "failed", "pending", "skipped", "withText"],
+          "properties": {
+            "pages": { "$ref": "#/$defs/count" },
+            "done": { "$ref": "#/$defs/count" },
+            "failed": { "$ref": "#/$defs/count" },
+            "pending": { "$ref": "#/$defs/count" },
+            "skipped": { "$ref": "#/$defs/count" },
+            "withText": { "$ref": "#/$defs/count" }
+          }
+        }
+      }
+    }
+  }
+}
