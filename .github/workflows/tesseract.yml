@@ -21,7 +21,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        # Linux builds on 22.04 (glibc 2.35), so the binary also runs on older distributions.
+        os: [macos-latest, ubuntu-22.04, windows-latest]
     defaults:
       run:
         shell: bash
@@ -34,7 +35,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Windows builds inside MSYS2 MinGW64 (UNTESTED); the other runners use their own toolchain.
+      # Windows builds inside MSYS2 MinGW64; the other runners use their own toolchain.
       - name: Set up MSYS2
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0

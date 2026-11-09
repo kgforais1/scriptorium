@@ -81,6 +81,11 @@ percentage point of Tesseract's CER at less than half its added size. The spike 
 choice are recorded in this plan and in `docs/ocr.md` before Phase 2 starts. If neither engine
 reaches 3% CER on the plain text pages, stop and revisit the plan with the user.
 
+**Result (2026-11-09):** Tesseract with `tessdata_fast` is chosen. On the 12 pages it scores 5.06%
+CER overall and 1.13% on plain prose, against ocrs's 12.24% and 11.54%. A self-contained build
+runs on macOS arm64, Linux x64, and Windows x64. [`docs/ocr.md`](../docs/ocr.md) has the full
+results and the build notes. Neither book has a clearly foxed page, so foxing is not covered.
+
 The rest of this plan is written for Tesseract. Where ocrs would differ, the difference is noted
 in brackets.
 
@@ -521,15 +526,15 @@ Per-page failures are statuses, not errors.
 
 ### Phase 1: engine spike and decision
 
-- [ ] Pick the 12 ground-truth pages and transcribe them. Check each by eye against the scan.
-- [ ] Write `scripts/ocr_spike.py`. It runs each engine on the 12 pages and prints CER, WER, and
+- [x] Pick the 12 ground-truth pages and transcribe them. Check each by eye against the scan.
+- [x] Write `scripts/ocr_spike.py`. It runs each engine on the 12 pages and prints CER, WER, and
       seconds per page. It must pass ruff and basedpyright.
-- [ ] Run Tesseract with `tessdata_fast` and with `tessdata_best`, and ocrs.
-- [ ] Prove the packaging route for the leading engine on macOS arm64: a binary that runs with
+- [x] Run Tesseract with `tessdata_fast` and with `tessdata_best`, and ocrs.
+- [x] Prove the packaging route for the leading engine on macOS arm64: a binary that runs with
       Homebrew moved aside, signed ad hoc under the hardened runtime, inside a built app. Build
       the Linux x64 and Windows x64 binaries in CI, and run each on a runner with no Tesseract
       installed. A failure on any platform fails the gate for Tesseract.
-- [ ] Apply the gate, write `docs/ocr.md`, and update this plan. Get the choice reviewed before
+- [x] Apply the gate, write `docs/ocr.md`, and update this plan. Get the choice reviewed before
       Phase 2.
 
 ### Phase 2: schema, store, and engine interface
@@ -546,7 +551,10 @@ Per-page failures are statuses, not errors.
 
 ### Phase 3: Tesseract engine and bundling
 
-- [ ] Write `build_tesseract.sh` and the workflow that publishes the pinned binaries.
+- [ ] Extend `build_tesseract.sh` and `tesseract.yml` (both from Phase 1) to publish the pinned
+      binaries. The Windows build's triple is `x86_64-pc-windows-gnu`, but the app targets
+      `x86_64-pc-windows-msvc`, so set `TESSERACT_TARGET_TRIPLE` to name it for the app's target.
+      Publish the Linux binary from Ubuntu 22.04 (glibc 2.35), as the workflow now builds it.
 - [ ] Write `fetch_tesseract.sh`, and run it in the Rust CI jobs as pdfium is fetched.
 - [ ] Write `ocr/tesseract.rs`: spawn, timeout, TSV parsing. Unit-test the parser on recorded TSV,
       including empty rows, `-1` confidences, and a multi-block page.
@@ -605,8 +613,8 @@ Per-page failures are statuses, not errors.
 
 - [x] Should embedded PDF text beat OCR text? Decided 2026-11-07: no, `ocr` beats `pdf` until
       PDF text has boxes, so the text layer matches its own boxes.
-- [ ] `tessdata_fast` or `tessdata_best`? The spike decides. `best` is about 4 times larger and
-      slower, for a small accuracy gain on clean print.
+- [x] `tessdata_fast` or `tessdata_best`? Decided 2026-11-09: `fast`. The spike found them equally
+      accurate, and `fast` is quicker and a quarter of the size.
 - [ ] Should OCR start automatically after ingest, or wait for the curator? The recommendation is
       automatic, because it is offline and cancellable.
 - [ ] Follow-up: word boxes for embedded PDF text, from pdfium's character boxes. Only needed if

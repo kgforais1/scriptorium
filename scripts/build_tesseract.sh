@@ -7,8 +7,9 @@
 # The result is src-tauri/binaries/tesseract-<target-triple>[.exe], which depends only on
 # system libraries.
 #
-# Status: macOS arm64 is built and verified. The Linux x64 and Windows x64 (MSYS2 MinGW64
-# shell) paths are UNTESTED; they are exercised first by .github/workflows/tesseract.yml.
+# Status: macOS arm64, Linux x64, and Windows x64 (MSYS2 MinGW64 shell) all build and run in
+# .github/workflows/tesseract.yml. Set TESSERACT_TARGET_TRIPLE to name the output for a target
+# other than the host, e.g. x86_64-pc-windows-msvc for the app's Windows target.
 #
 # Environment:
 #   TESSERACT_BUILD_DIR  work directory (default: <repo>/tmp/tesseract-build)
@@ -48,7 +49,7 @@ detect_platform() {
     local os arch
     os="$(uname -s)"
     arch="$(uname -m)"
-    TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
+    TRIPLE="${TESSERACT_TARGET_TRIPLE:-$(rustc -vV | sed -n 's/^host: //p')}"
     EXE_SUFFIX=""
     PLATFORM_ARGS=()
     case "${os}-${arch}" in
@@ -57,11 +58,11 @@ detect_platform() {
                 "-DCMAKE_IGNORE_PREFIX_PATH=/opt/homebrew;/usr/local" "-DCMAKE_FIND_FRAMEWORK=NEVER")
             ;;
         Linux-x86_64)
-            # UNTESTED. Only glibc, libstdc++ and libgcc_s are expected to remain dynamic.
+            # Only glibc, libstdc++ and libgcc_s remain dynamic.
             PLATFORM_ARGS+=("-DCMAKE_POSITION_INDEPENDENT_CODE=ON")
             ;;
         MINGW*-x86_64 | MSYS*-x86_64)
-            # UNTESTED. Run from an MSYS2 MINGW64 shell with mingw-w64-x86_64-{gcc,cmake,ninja,
+            # Run from an MSYS2 MINGW64 shell with mingw-w64-x86_64-{gcc,cmake,ninja,
             # nasm}. Static libgcc/libstdc++ keep the .exe free of MinGW runtime DLLs.
             EXE_SUFFIX=".exe"
             PLATFORM_ARGS+=("-G" "Ninja" "-DCMAKE_EXE_LINKER_FLAGS=-static -static-libgcc -static-libstdc++")
