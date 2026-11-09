@@ -130,7 +130,8 @@ def load_pages(truth_dir: Path, corpus: Path) -> Tuple[List[Page], List[Path]]:
 
 def run_engine(cmd: List[str], env: Dict[str, str]) -> str:
     """Run one OCR command and return its stdout; raise on a non-zero exit or timeout."""
-    proc = subprocess.run(
+    # The argv is a list built from resolved binary paths, and no shell runs it.
+    proc = subprocess.run(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
         cmd,
         capture_output=True,
         text=True,
