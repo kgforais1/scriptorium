@@ -25,7 +25,8 @@ Binaries and data come from flags or environment variables (flag wins):
     --ocrs-rec-model / OCRS_REC_MODEL        text-recognition model file
 
 An engine whose binary or data is missing is reported as skipped. If the page images are
-missing the script says how to rebuild them (tests/fixtures/README.md) and exits 0.
+missing the script says how to rebuild them (tests/fixtures/README.md) and exits 0. If the
+default ground-truth set is incomplete or empty, it names the missing files and exits 2.
 
 Usage:
     python3 scripts/ocr_spike.py [--json out.json]
@@ -343,7 +344,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     """Entry point: score each available engine and print (and optionally save) the table."""
     args = parse_args(argv)
     pages, missing = load_pages(args.truth, args.corpus)
-    if not pages:
+    # An empty custom directory is a notice; the default set must be complete, so it falls
+    # through to the inventory check and fails there.
+    if not pages and args.truth.resolve() != DEFAULT_TRUTH.resolve():
         print(f"No ground-truth files in {args.truth}.")
         return
     problems = inventory_problems(pages, args.truth, args.plain)

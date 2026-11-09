@@ -554,7 +554,12 @@ Phase 4 extends `scripts/ocr_spike.py` to measure the threshold on that set:
    page number. Only the first and last lines of the page are candidates. Each is compared with
    the page's Wikisource header or footer text after normalising, with a
    `difflib.SequenceMatcher` ratio, so a misread running head such as "THE PRlNCESS" still
-   matches. A line with a ratio of 0.8 or more is removed. A line that holds only a number or
+   matches. A line with a ratio of 0.8 or more is removed automatically only when the match is
+   unambiguous, that is when the line does not also reach 0.8 against the reference's own first
+   or last body line. Some books repeat the chapter title as the running head, so such a line
+   may be body text. An ambiguous line is kept and scored, and the script lists it for review. A
+   reviewer can then mark it as a running head in the manifest, and later runs remove it. A
+   line that holds only a number or
    roman numeral is removed only when it equals the page number in the header or footer. A
    chapter numeral or a year at the edge of the page therefore stays in. Every other line stays
    in, so a misread body word at the edge, such as "Beginnlng", still counts as wrong. The
@@ -656,8 +661,10 @@ Per-page failures are statuses, not errors.
 - [x] Write `scripts/ocr_spike.py`. It runs each engine on the 12 pages and prints CER, WER, and
       seconds per page. It must pass ruff and basedpyright.
 - [x] Run Tesseract with `tessdata_fast` and with `tessdata_best`, and ocrs.
-- [x] Prove the packaging route for the leading engine on macOS arm64: a binary that runs with
-      Homebrew moved aside, signed ad hoc under the hardened runtime, inside a built app. Build
+- [ ] Prove the packaging route for the leading engine on macOS arm64: a binary that runs with
+      Homebrew moved aside, signed ad hoc under the hardened runtime, inside a built app. The
+      standalone binary passed on 2026-11-09. This stays open until the built-app check in
+      Phase 3 passes. Build
       the Linux x64 and Windows x64 binaries in CI, and run each on a runner with no Tesseract
       installed. A failure on any platform fails the gate for Tesseract.
 - [x] Apply the gate, write `docs/ocr.md`, and update this plan. Get the choice reviewed before

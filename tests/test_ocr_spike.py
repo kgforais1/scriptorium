@@ -288,6 +288,14 @@ class Main(unittest.TestCase):
             out, _ = self._run(["--truth", tmp, "--corpus", tmp])
         self.assertIn("No ground-truth files", out)
 
+    def test_empty_default_truth_exits(self) -> None:
+        """An empty default ground-truth directory fails the inventory check."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(spike, "DEFAULT_TRUTH", Path(tmp)):
+                with self.assertRaises(SystemExit) as stop:
+                    self._run(["--truth", tmp, "--corpus", tmp])
+        self.assertEqual(stop.exception.code, 2)
+
     def test_missing_images_prints_notice(self) -> None:
         """Missing images prints notice."""
         with tempfile.TemporaryDirectory() as tmp:
