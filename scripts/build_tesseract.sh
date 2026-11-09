@@ -156,9 +156,13 @@ drop_shared_libs
 cmake_build libpng -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TESTS=OFF -DPNG_TOOLS=OFF -DPNG_FRAMEWORK=OFF
 cmake_build libjpeg-turbo -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF -DWITH_JAVA=OFF
 # Every library must land in ${PREFIX}/lib, or a later find step can fall back to a system copy.
-for lib in libjpeg.a libz.a; do
-    [[ -f "${PREFIX}/lib/${lib}" ]] || { echo "build_tesseract: ${lib} is not in ${PREFIX}/lib" >&2; exit 1; }
+[[ -f "${PREFIX}/lib/libjpeg.a" ]] || { echo "build_tesseract: libjpeg.a is not in ${PREFIX}/lib" >&2; exit 1; }
+# zlib's CMake names its static library libz.a on Unix and libzlibstatic.a on MinGW.
+ZLIB_A=""
+for lib in libz.a libzlibstatic.a; do
+    [[ -f "${PREFIX}/lib/${lib}" ]] && { ZLIB_A="${PREFIX}/lib/${lib}"; break; }
 done
+[[ -n "${ZLIB_A}" ]] || { echo "build_tesseract: no static zlib in ${PREFIX}/lib" >&2; exit 1; }
 cmake_build libtiff -Dtiff-tools=OFF -Dtiff-tests=OFF -Dtiff-contrib=OFF -Dtiff-docs=OFF \
     -Dlzma=OFF -Dzstd=OFF -Djbig=OFF -Dlerc=OFF -Dwebp=OFF -Dlibdeflate=OFF -Dcxx=OFF
 cmake_build libwebp -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
@@ -180,7 +184,7 @@ sed -i.bak '/^if ()$/{N;/WebP/s/^if ()/if (1)/;}' "${PREFIX}/lib/cmake/leptonica
 # jpeg12_* references must resolve too; libtiff's jpeg12 option has no effect in that mode.
 # CMAKE_CXX_STANDARD_LIBRARIES is a command-line string, so a prefix with spaces is unsupported.
 # Apple's linker does not need this, and an extra archive at the end is harmless there.
-TAIL_LIBS="${PREFIX}/lib/libjpeg.a ${PREFIX}/lib/libz.a"
+TAIL_LIBS="${PREFIX}/lib/libjpeg.a ${ZLIB_A}"
 cmake_build tesseract -DSW_BUILD=OFF -DDISABLE_CURL=ON -DDISABLE_ARCHIVE=ON -DOPENMP_BUILD=OFF \
     -DUSE_SYSTEM_ICU=OFF -DBUILD_TRAINING_TOOLS=OFF -DBUILD_TESTS=OFF -DGRAPHICS_DISABLED=ON \
     -DOPENCL=OFF -DDISABLE_TIFF=OFF \
