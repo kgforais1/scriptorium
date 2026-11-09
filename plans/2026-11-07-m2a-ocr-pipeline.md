@@ -685,6 +685,30 @@ Per-page failures are statuses, not errors.
       accurate, and `fast` is quicker and a quarter of the size.
 - [ ] Should OCR start automatically after ingest, or wait for the curator? The recommendation is
       automatic, because it is offline and cancellable.
+- [ ] Follow-up, in the same plan as the language manager: bundle 14 languages in the
+      installer, so a curator with no internet can OCR them from the start. They are English,
+      French, German, Spanish, Italian, Portuguese, Dutch, Latin, Russian, Ancient Greek, Chinese
+      (simplified and traditional), Japanese, and Arabic, with the codes `eng`, `fra`, `deu`,
+      `spa`, `ita`, `por`, `nld`, `lat`, `rus`, `grc` (Ancient, not modern `ell`), `chi_sim`,
+      `chi_tra`, `jpn`, and `ara`. Their `tessdata_fast` files total 37.8 MB, measured
+      2026-11-09 (Dutch is the largest at 6.1 MB). The 40 MB line was set on 2026-11-09 as the
+      most the languages may add to one installer, and 37.8 MB is under it, so there is one
+      installer with all 14, not a light and a full one.
+      - The vertical models `jpn_vert`, `chi_sim_vert`, and `chi_tra_vert` add 6.8 MB, which
+        would pass the line, so they are not bundled. Vertical Japanese and Chinese pages are a
+        known gap until the language manager installs those models.
+      - Bundled languages stay read-only in the resource folder, and the manager installs into
+        the app's data folder. Tesseract takes one `--tessdata-dir`, so at startup the app links
+        or copies the bundled files into the data folder, and every run uses that folder. The
+        follow-up plan picks between a link and a copy per platform.
+      - A book's language list should stay short, usually one or two, because every extra
+        language slows recognition and lets scripts mix in the output. The engine pre-check runs
+        its test image once per requested language, with one small image per script, instead of
+        one image for all of them.
+      - M2b must handle Arabic's right-to-left text in the text layer, search, and highlight,
+        and Chinese and Japanese text without spaces, where Tesseract's word boxes are less
+        reliable. M2a itself still ships English only. Recheck the total at each tessdata bump; if it
+      passes 40 MB, offer a light installer with English only beside the full one.
 - [ ] Follow-up: an in-app language manager, as its own small plan after M2a. The app ships a
       pinned list of `tessdata_fast` languages with their URLs and SHA-256 values. Settings
       downloads a chosen language into the app's data folder over HTTPS, or installs a file the
@@ -714,6 +738,6 @@ Per-page failures are statuses, not errors.
 | A damaged page file holds curator text | low | high | The job never rewrites a file it cannot validate. |
 | The job and a later curator edit race on one page file | low | high | M2a never writes `curator`. Both take the per-book mutex for each read-change-write. |
 | Wikisource transcriptions differ from the scan in spelling or layout | med | med | Use validated pages only, normalise long s, ligatures, and hyphenation, and spot-check a sample by eye. |
-| Installer size grows | high | low | Tesseract plus `eng` fast data is about 10 MB. The spike records the number. |
+| Installer size grows | high | low | M2a adds about 11 MB: the 6.8 MB Tesseract binary and 4.1 MB of English data. The 14-language follow-up adds another 33.7 MB, about 45 MB in all. |
 | Tesseract writes a large TSV or stderr and stalls on a full pipe | med | med | Output goes to files, never undrained pipes. |
 | Sidecar spawning widens the app's attack surface | low | med | Only Rust spawns it, with fixed arguments. The WebView gets no shell access. |

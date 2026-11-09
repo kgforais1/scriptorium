@@ -37,8 +37,8 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to-plans.md) or move to
 [`plans/deferred/`](plans/deferred/) when a real plan exists.
 
-- **OCR language manager** — download or install Tesseract languages from Settings, per-book
-  languages → [M2a plan](plans/2026-11-07-m2a-ocr-pipeline.md) follow-ups
+- **OCR language manager** — 14 bundled languages (37.8 MB), plus download or install more
+  from Settings, per-book languages → [M2a plan](plans/2026-11-07-m2a-ocr-pipeline.md) follow-ups
 - **PaddleOCR spike** — score PaddleOCR mobile (ONNX) against Tesseract on the hard pages and
   non-Latin scripts → [M2a plan](plans/2026-11-07-m2a-ocr-pipeline.md) follow-ups
 - **In-app help menu** — show the user docs in the app, starting with where OCR is weak →
