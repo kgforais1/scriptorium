@@ -46,6 +46,7 @@ Quick navigation guide for this template's documentation. Use this to find what 
 
 ### Domain
 - [`docs/book-format.md`](../docs/book-format.md) — book package format spec (formatVersion 2, reads 1); schema + ingest rules
+- [`docs/ocr.md`](../docs/ocr.md) — OCR engine choice (Tesseract), spike results, sidecar build, and bump steps
 - [`docs/book-format.v2.schema.json`](../docs/book-format.v2.schema.json) / [`v1`](../docs/book-format.v1.schema.json) — JSON Schemas for `meta.json`
 - [`tests/fixtures/README.md`](../tests/fixtures/README.md) — regenerate fixtures via `scripts/generate-fixture-book.py`
 - [`docs/manual-test-m1.md`](../docs/manual-test-m1.md) — step-by-step manual test for creating, opening, and paging a book (includes the release-build CSP check)

@@ -109,3 +109,66 @@ whatever the server chooses, so do not use it for the gate corpus.
 ```sh
 python3 scripts/fetch-iiif-corpus.py <manifest-url> tmp/fixtures/corpus/<name> [--limit N]
 ```
+
+## OCR ground-truth pages
+
+`ocr/smoke.png` is a one-line image ("THE PRINCESS AND THE GOBLIN") that
+`.github/workflows/tesseract.yml` OCRs to prove the built binary runs. It was drawn with
+Pillow's default font.
+
+`ocr/` holds hand-checked transcriptions of 12 corpus pages for the M2a OCR engine spike
+(`../scripts/ocr_spike.py`). The page images are **not** committed. Rebuild them with the
+two zip recipes above (Dulac) and below (*The Princess and the Goblin*), which write
+`tmp/fixtures/corpus/<book>/jpg/NNNN.jpg`; pages are numbered from `0000`. File names are
+`<book>-<NNNN>.txt`, where `<book>` is the corpus folder name.
+
+Transcription rules: text exactly as printed, with printed line breaks, end-of-line hyphens,
+punctuation (including the spaces before `!` `?` `;` `:` in the Dulac text), running heads and
+page numbers; italics and small caps as plain text; a blank line between paragraphs. Decorative
+display lettering is transcribed as the words it spells. Artists' signatures painted inside
+an illustration and handwriting in the margin are not transcribed. A credit line typeset
+outside the illustration, such as `© D.McK` under the plate in `princess-and-goblin-0021`, is
+printed text and is transcribed. Textless pages have an
+empty file.
+
+| File | Category |
+|---|---|
+| `dulac-picture-book-0013.txt` | Contents page with dot leaders and small caps |
+| `dulac-picture-book-0025.txt` | Verse with a display title (aged paper, show-through) |
+| `dulac-picture-book-0031.txt` | Prose with a display title and italics (aged paper, show-through) |
+| `dulac-picture-book-0049.txt` | Caption under a colour plate (faint print on the mount) |
+| `dulac-picture-book-0109.txt` | Dense plain prose with a running head (plain-text page) |
+| `dulac-picture-book-0154.txt` | Speckled tissue guard, no text (empty) |
+| `princess-and-goblin-0003.txt` | Textless illustration, no text (empty) |
+| `princess-and-goblin-0007.txt` | Title page |
+| `princess-and-goblin-0015.txt` | Chapter opening with a drop cap and italic dialogue |
+| `princess-and-goblin-0019.txt` | Chapter opening with a drop cap and prose |
+| `princess-and-goblin-0021.txt` | Caption under a colour plate |
+| `princess-and-goblin-0036.txt` | Plain prose with a running head (plain-text page) |
+
+Neither book has a page with heavy foxing. The Dulac pages are the closest: yellowed, with
+show-through and speckle (`0154` is the most speckled).
+
+Rebuild the Princess and the Goblin images (same recipe as Dulac, other archive.org id):
+
+```sh
+set -euo pipefail
+id=princessgoblin00macd; out=tmp/fixtures/corpus/princess-and-goblin
+mkdir -p "$out/source" "$out/jpg"
+curl -fL --retry 3 -o "$out/source/jp2.zip" "https://archive.org/download/$id/${id}_jp2.zip"
+unzip -oq "$out/source/jp2.zip" -d "$out/source"
+test -d "$out/source/${id}_jp2" || { echo "unexpected zip layout"; exit 1; }
+for f in "$out/source/${id}_jp2"/*.jp2; do
+  b=$(basename "$f" .jp2); sips -s format jpeg -s formatOptions 92 "$f" --out "$out/jpg/${b##*_}.jpg" >/dev/null
+done
+```
+
+Then run the spike (engine data goes in gitignored `tmp/ocr-spike/`; see the script header
+for every flag and environment variable):
+
+```sh
+python3 scripts/ocr_spike.py --tessdata-fast tmp/ocr-spike/tessdata_fast \
+  --tessdata-best tmp/ocr-spike/tessdata_best --ocrs tmp/ocr-spike/cargo/bin/ocrs \
+  --ocrs-detect-model tmp/ocr-spike/ocrs-models/text-detection.onnx \
+  --ocrs-rec-model tmp/ocr-spike/ocrs-models/text-recognition.onnx --json tmp/ocr-spike/results.json
+```

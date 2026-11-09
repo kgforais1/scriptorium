@@ -1,0 +1,93 @@
+# tesseract.yml — packaging proof for the self-contained Tesseract sidecar (M2a Phase 1).
+# Runs on PRs that touch the build script, this workflow, or the smoke image, and on demand.
+# Action refs are pinned to full commit SHAs.
+
+name: Tesseract build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/build_tesseract.sh
+      - .github/workflows/tesseract.yml
+      - tests/fixtures/ocr/smoke.png
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and run (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux builds on 22.04 (glibc 2.35), so the binary also runs on older distributions.
+        os: [macos-latest, ubuntu-22.04, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      # Windows builds inside MSYS2 MinGW64; the other runners use their own toolchain.
+      - name: Set up MSYS2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: MINGW64
+          update: true
+          cache: false
+          install: >-
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-nasm mingw-w64-x86_64-rust curl tar
+
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake nasm
+
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        run: brew install cmake nasm
+
+      - name: Build Tesseract
+        if: runner.os != 'Windows'
+        run: bash scripts/build_tesseract.sh
+
+      - name: Build Tesseract (MSYS2)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: bash scripts/build_tesseract.sh
+
+      - name: Run the binary with no system Tesseract
+        run: |
+          set -euo pipefail
+          bin="$(ls src-tauri/binaries/tesseract-*)"
+          # Fail if a system Tesseract is visible on PATH.
+          if command -v tesseract > /dev/null 2>&1; then
+            echo "system tesseract on PATH"; exit 1
+          fi
+          mkdir -p tmp/tessdata
+          curl --proto "=https" --proto-redir "=https" --tlsv1.2 --fail --silent --show-error --location \
+            --output tmp/tessdata/eng.traineddata \
+            https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/eng.traineddata
+          echo "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2  tmp/tessdata/eng.traineddata" > tmp/eng.sha256
+          if command -v sha256sum > /dev/null 2>&1; then sha256sum -c tmp/eng.sha256; else shasum -a 256 -c tmp/eng.sha256; fi
+          # TSV mode, as the app runs it: options set directly, no configs/tsv file.
+          "$bin" tests/fixtures/ocr/smoke.png tmp/smoke --tessdata-dir tmp/tessdata \
+            --psm 3 --oem 1 -c tessedit_create_tsv=1 -c tessedit_create_txt=0
+          cat tmp/smoke.tsv
+          head -1 tmp/smoke.tsv | grep -q "^level"
+          grep -qi "PRINCESS" tmp/smoke.tsv
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tesseract-${{ matrix.os }}
+          path: src-tauri/binaries/tesseract-*
+          if-no-files-found: error
