@@ -685,6 +685,19 @@ Per-page failures are statuses, not errors.
       accurate, and `fast` is quicker and a quarter of the size.
 - [ ] Should OCR start automatically after ingest, or wait for the curator? The recommendation is
       automatic, because it is offline and cancellable.
+- [ ] Follow-up: an in-app language manager, as its own small plan after M2a. The app ships a
+      pinned list of `tessdata_fast` languages with their URLs and SHA-256 values. Settings
+      downloads a chosen language into the app's data folder over HTTPS, or installs a file the
+      curator already has, and keeps it only if the hash matches. Each book stores its language
+      list. A book whose language is not installed says which language to install instead of
+      failing. This is the app's first network feature, limited to that pinned list.
+- [ ] Follow-up: test PaddleOCR's mobile models through ONNX (for example RapidOCR) in
+      `scripts/ocr_spike.py`, on the 12 spike pages and the calibration set. The question is
+      whether it beats Tesseract on the hard pages (display type, small caps, faint captions)
+      and on non-Latin scripts, and at what size with ONNX Runtime. If it does, it becomes an
+      optional second engine behind `OcrEngine`.
+- [ ] Deferred (2026-11-09): EasyOCR. It needs Python and PyTorch, several hundred MB at least,
+      which is too large to bundle or to ask curators to install.
 - [ ] Follow-up: a help menu in the app that shows the OCR weak-spots section, and later other
       user docs. Recorded in `to_do.md` Icebox.
 - [ ] Follow-up: word boxes for embedded PDF text, from pdfium's character boxes. Only needed if
