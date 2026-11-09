@@ -37,6 +37,8 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to-plans.md) or move to
 [`plans/deferred/`](plans/deferred/) when a real plan exists.
 
+- **In-app help menu** — show the user docs in the app, starting with where OCR is weak →
+  [M2a plan](plans/2026-11-07-m2a-ocr-pipeline.md)
 - **Second skin (Gallery Daylight, mockup B) + skin picker** — M7 →
   [`design/DESIGN.md`](design/DESIGN.md#skins)
 - **Later product (M1.5–M8)** — PDF import, OCR and curator-supplied text (M2), bookshelf

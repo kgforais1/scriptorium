@@ -23,7 +23,7 @@ M2 is too large for one plan. It ships as four plans, in this order:
 |---|---|---|
 | **M2a (this plan)** | Engine choice, bundling, OCR job, `ocr/` schema v1 with boxes, precedence rules, status | M1.5 |
 | M2b | Full-text search UI, jump and highlight, hidden text layer for select and copy | M2a |
-| M2c | Curator correction editor, curator-supplied text, correction history, "reviewed" mark | M2a |
+| M2c | Curator correction editor, low-confidence word highlighting, curator-supplied text, correction history, "reviewed" mark | M2a |
 | M2d | Page export, with the page text embedded in exported JPEG, PNG, and PDF files | M2a |
 
 M2b and M2c can run in parallel once M2a merges. The roadmap's M2 checklist maps onto them as
@@ -108,7 +108,9 @@ pub trait OcrEngine: Send + Sync {
 ```
 
 `PageOcr` holds the pixel width and height of the image the engine read, and lines, each with
-a box and its words, each word with a box, text, and a confidence from 0 to 1. Boxes are in
+a box and its words, each word with a box, text, and a confidence from 0 to 1. Tesseract's TSV
+gives confidence as 0–100, so the engine divides by 100. M2c uses it to highlight words for
+review (see "Word confidence" below). Boxes are in
 pixels of that image. The job, not the engine,
 normalises them to 0–1 by the display image's size. A `FakeEngine` in tests returns fixed
 results, so most tests need no engine binary.
@@ -472,6 +474,29 @@ M2a adds only status, since showing text is M2b:
 which are bundled as resources. The crate's licence goes through the existing cargo licence
 check.]
 
+### Word confidence
+
+Every OCR word keeps its confidence, from 0 to 1, in the page file. M2a only stores it. M2c uses
+it: the correction editor highlights words below a threshold, so a curator reviews the doubtful
+words first instead of reading every page. A second OCR engine voting on disagreements was
+considered and rejected (decided 2026-11-09): ocrs is about ten times less accurate, so most
+disagreements would be its own errors, and the confidence score gives the same signal from one
+engine.
+
+The threshold is not guessed. Phase 4 extends `scripts/ocr_spike.py` to measure it:
+
+1. It runs Tesseract in TSV mode, the mode the app uses, and drops rows with empty text or a
+   confidence of -1, as `tesseract.rs` does.
+2. For each page it aligns the OCR words with the ground-truth words, both normalised as the
+   spike already does, using `difflib.SequenceMatcher` on the two word lists. An aligned pair is
+   right if the words are equal and wrong otherwise. An OCR word with no partner is wrong. A
+   missed ground-truth word has no confidence, so it is counted separately and not used.
+3. For each threshold from 0.05 to 0.95 in steps of 0.05, it prints how many wrong words fall
+   below it, and how many right words it would flag. It reports counts as well as rates, since
+   the 12 pages hold only a few thousand words.
+
+`docs/ocr.md` records the result, and M2c picks the threshold from it.
+
 ### Errors
 
 | Kind | When |
@@ -597,7 +622,13 @@ Per-page failures are statuses, not errors.
 - [ ] Test the Tesseract engine's kill path with a stub binary that sleeps: both `stop` and the
       deadline end it, and no child is left running.
 - [ ] Add the reader status, the Text button, and the error mapping, with frontend tests.
+- [ ] Extend `scripts/ocr_spike.py` to measure word confidence against the ground truth, as
+      described under "Word confidence", and record the result in `docs/ocr.md`.
 - [ ] Update `book-format.md`, `development.md`, user docs, and both changelogs.
+- [ ] In the user docs, add a section on where OCR is weak, from the Phase 1 spike: small caps,
+      decorative and display type, faint captions under plates, and languages other than
+      English. It says plain printed text comes out well, and that the curator can correct the
+      rest once M2c ships. Keep it short enough to reuse in a help menu later.
 
 ## Verification
 
@@ -617,6 +648,8 @@ Per-page failures are statuses, not errors.
       accurate, and `fast` is quicker and a quarter of the size.
 - [ ] Should OCR start automatically after ingest, or wait for the curator? The recommendation is
       automatic, because it is offline and cancellable.
+- [ ] Follow-up: a help menu in the app that shows the OCR weak-spots section, and later other
+      user docs. Recorded in `to_do.md` Icebox.
 - [ ] Follow-up: word boxes for embedded PDF text, from pdfium's character boxes. Only needed if
       OCR boxes prove a poor fit for PDF text in M2b.
 
