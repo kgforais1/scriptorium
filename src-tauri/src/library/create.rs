@@ -109,6 +109,8 @@ fn check_destination(library: &Path, id: &str) -> Result<(), BookError> {
     Ok(())
 }
 
+/// Fail unless the library's volume has room for `estimated` bytes plus a 10% margin and the
+/// fixed headroom.
 pub(crate) fn check_space(library: &Path, estimated: u64) -> Result<(), BookError> {
     let available = fs4::available_space(library).map_err(|e| io_error(library, &e))?;
     let needed = estimated
@@ -120,6 +122,7 @@ pub(crate) fn check_space(library: &Path, estimated: u64) -> Result<(), BookErro
     Ok(())
 }
 
+/// Turn a conversion error into the matching book error, attributed to `file`.
 fn unreadable(file: &Path, err: convert::ConvertError) -> BookError {
     match err {
         convert::ConvertError::UnreadableFile(reason) => BookError::UnreadableFile {
@@ -138,7 +141,7 @@ fn unreadable(file: &Path, err: convert::ConvertError) -> BookError {
 }
 
 /// Zero-padded page or source number, at least four digits.
-pub(super) fn numbered(i: usize, count: usize) -> String {
+pub(crate) fn numbered(i: usize, count: usize) -> String {
     let width = count.saturating_sub(1).to_string().len().max(4);
     format!("{i:0width$}")
 }
@@ -249,6 +252,8 @@ struct Builder {
 }
 
 impl Builder {
+    /// Create the temp package directory, take its ingest lock, and lay out `pages/` and
+    /// `ocr/` inside it.
     fn new(
         library: &Path,
         id: &str,
@@ -398,7 +403,7 @@ impl Builder {
             reason: e.to_string(),
         })?;
         parse_meta(&text)?;
-        self.ocr.finish(&self.tmp)?;
+        self.ocr.finish(&self.tmp, self.page_count)?;
         for (name, body) in [
             ("meta.json", text + "\n"),
             ("annotations.json", "[]\n".to_string()),

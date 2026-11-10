@@ -575,6 +575,9 @@ fn sweep_removes_only_old_temp_entries() {
     write("meta.json.scriptorium-tmp");
     write("a-real-book/meta.json");
     write("a-real-book/meta.json.1-0.scriptorium-tmp");
+    // Atomic page-text writes leave theirs in `ocr/`; the page files stay.
+    write("a-real-book/ocr/0000.json");
+    write("a-real-book/ocr/0000.json.1-2.scriptorium-tmp");
     // A valid book id may end in the temp suffix; such a directory is always a book.
     write("odd.scriptorium-tmp/meta.json");
     write("odd.scriptorium-tmp/meta.json.1-1.scriptorium-tmp");
@@ -592,9 +595,13 @@ fn sweep_removes_only_old_temp_entries() {
     );
     assert_eq!(
         sweep_orphans(&lib, Duration::ZERO),
-        5,
-        "three at the top, one inside each book"
+        6,
+        "three at the top, one inside each book, one in an ocr folder"
     );
+    assert!(lib.join("a-real-book/ocr/0000.json").exists());
+    assert!(!lib
+        .join("a-real-book/ocr/0000.json.1-2.scriptorium-tmp")
+        .exists());
     let mut left: Vec<_> = lib
         .read_dir()
         .unwrap()

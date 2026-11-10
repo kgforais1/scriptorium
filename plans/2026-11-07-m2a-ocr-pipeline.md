@@ -672,13 +672,13 @@ Per-page failures are statuses, not errors.
 
 ### Phase 2: schema, store, and engine interface
 
-- [ ] Write `docs/ocr.v1.schema.json` with schema tests: valid page, valid index, each refusal.
-- [ ] Write `ocr/store.rs`: read v0 and v1, write v1, replace only the `ocr` layer, the
+- [x] Write `docs/ocr.v1.schema.json` with schema tests: valid page, valid index, each refusal.
+- [x] Write `ocr/store.rs`: read v0 and v1, write v1, replace only the `ocr` layer, the
       published-text rule, and the index recovery rules.
-- [ ] Switch M1.5 ingest to write v1 page files with a `pdf` layer, and a v1 index.
-- [ ] Add the `OcrEngine` trait, `PageOcr`, normalisation, and `FakeEngine`.
-- [ ] Switch `library/ocr.rs` to `write_atomic`.
-- [ ] Tests: both layer guarantees, v0 reading, a file that is neither v0 nor v1, stale
+- [x] Switch M1.5 ingest to write v1 page files with a `pdf` layer, and a v1 index.
+- [x] Add the `OcrEngine` trait, `PageOcr`, normalisation, and `FakeEngine`.
+- [x] Switch `library/ocr.rs` to `write_atomic`.
+- [x] Tests: both layer guarantees, v0 reading, a file that is neither v0 nor v1, stale
       detection by checksum and by engine id, box normalisation at both edges, and the index
       rebuild after a simulated crash.
 
@@ -708,6 +708,9 @@ Per-page failures are statuses, not errors.
 
 - [ ] Write `ocr/job.rs`: pool, ordering, skip rule, progress, cancel, and per-page failure.
 - [ ] Add `run_ocr`, `cancel_ocr`, and `ocr_status`, and start a job after ingest.
+      Note: `ocr/store.rs` reports a schema violation as `InvalidPackage` today. When
+      `OcrStorage` is added, map write failures to `OcrStorage`, and keep schema errors (a bug,
+      not a disk problem) out of it.
 - [ ] Write the engine-input step: header size, scaled JPEG decode, the large-page permit, the
       refusals, and a temp PNG. Test it on a 16 MP and a 100 MP JPEG, a 16 MP PNG, a WebP page,
       a 60 MP PNG, 50 MP and 20 MP 16-bit PNGs, and a header claiming 200 MP, with the

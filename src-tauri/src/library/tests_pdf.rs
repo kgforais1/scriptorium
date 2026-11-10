@@ -95,40 +95,46 @@ fn pdf_text_sits_at_the_book_position_of_its_page() {
     let src = pdf_folder(&t, "src", "text3.pdf");
     let book = create_book_from_folder(&src, &lib, &opts("bk")).unwrap();
 
-    // Not the PDF's own page number. at the book position of its page, not the PDF's page number.
+    // Text sits at the book position of its page, not the PDF's own page number.
     assert_eq!(
         names(&book.join("ocr")),
         ["0001.json", "0002.json", "0003.json", "index.json"]
     );
     let page = read_json(&book.join("ocr/0002.json"));
-    assert_eq!(page["source"], "pdf");
-    assert!(page["text"].as_str().unwrap().contains("Page two"));
+    assert_eq!(page["schema"], 1);
+    assert!(page["layers"]["pdf"]["text"]
+        .as_str()
+        .unwrap()
+        .contains("Page two"));
     let index = read_json(&book.join("ocr/index.json"));
+    assert_eq!(index["schema"], 1);
     assert_eq!(index["engine"], "pdfium");
     assert_eq!(
         index["summary"],
-        serde_json::json!({ "pdfPages": 3, "withText": 3 })
+        serde_json::json!({
+            "pages": 5, "done": 0, "failed": 0, "pending": 5, "skipped": 0, "withText": 3
+        })
     );
-    assert_eq!(index["pages"]["1"]["status"], "text");
-    assert!(
-        index["pages"].get("0").is_none(),
-        "image pages are not listed"
-    );
+    for i in 0..5 {
+        assert_eq!(
+            index["pages"][i.to_string()]["status"],
+            "pending",
+            "every page is listed, image pages too"
+        );
+    }
 }
 
 #[test]
-fn a_pdf_page_without_text_is_marked_none() {
+fn a_pdf_page_without_text_gets_no_page_file() {
     let t = Tmp::new("pdf-notext");
     let lib = t.dir("lib");
     let src = pdf_folder(&t, "src", "transparent.pdf");
     let book = create_book_from_folder(&src, &lib, &opts("bk")).unwrap();
     assert_eq!(names(&book.join("ocr")), ["index.json"]);
     let index = read_json(&book.join("ocr/index.json"));
-    assert_eq!(index["pages"]["1"]["status"], "none");
-    assert_eq!(
-        index["summary"],
-        serde_json::json!({ "pdfPages": 1, "withText": 0 })
-    );
+    assert_eq!(index["pages"]["1"]["status"], "pending");
+    assert_eq!(index["summary"]["pages"], 3);
+    assert_eq!(index["summary"]["withText"], 0);
 }
 
 #[test]
