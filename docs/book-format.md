@@ -25,7 +25,8 @@ this doc disagree, the schema wins on types, this doc wins on rules and intent.
 ### Page text (`ocr/`, schema v1) and reserved annotations
 
 Neither lives in `meta.json`, so both add files without a `formatVersion` bump.
-[`ocr.v1.schema.json`](ocr.v1.schema.json) covers both `ocr/` files. M2a fixes the `ocr/`
+[`ocr.v1.schema.json`](ocr.v1.schema.json) covers the three `ocr/` files: the page files,
+`index.json`, and `forced.json`. M2a fixes the `ocr/`
 layout. Annotations stay provisional until M6.
 
 - `ocr/<NNNN>.json` holds one page, named by its 0-based position in the book and padded like

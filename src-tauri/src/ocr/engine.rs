@@ -113,6 +113,17 @@ fn round5(v: f64) -> f64 {
     (v * 100_000.0).round() / 100_000.0
 }
 
+/// Clamp a confidence to 0..1 and round it. `NaN` becomes 0, because JSON has no `NaN` and the
+/// schema would refuse the `null` serde writes for it.
+fn normalise_conf(conf: f32) -> f64 {
+    let c = f64::from(conf);
+    if c.is_nan() {
+        0.0
+    } else {
+        round5(c.clamp(0.0, 1.0))
+    }
+}
+
 /// Normalise a pixel box by the image size to `[x, y, w, h]` in 0..1. A box that runs past an
 /// edge is clamped to it, so `x + w` and `y + h` never exceed 1.
 pub fn normalise_box(b: PixelBox, width: u32, height: u32) -> [f64; 4] {
@@ -135,27 +146,32 @@ pub fn normalise(page: &PageOcr) -> (String, Vec<StoredLine>) {
     let lines = page
         .lines
         .iter()
-        // A line with no words has nothing to show and would leave a stray separator.
-        .filter(|line| !line.words.is_empty())
-        .map(|line| {
+        .filter_map(|line| {
+            // The schema refuses a word with empty text, so drop those first. A line left
+            // with no words has nothing to show and would leave a stray separator.
+            let words: Vec<StoredWord> = line
+                .words
+                .iter()
+                .filter(|w| !w.text.trim().is_empty())
+                .map(|w| StoredWord {
+                    text: w.text.clone(),
+                    bbox: normalise_box(w.bbox, page.width, page.height),
+                    conf: normalise_conf(w.conf),
+                })
+                .collect();
+            if words.is_empty() {
+                return None;
+            }
             if let Some(p) = prev {
                 text.push_str(if p == line.paragraph { "\n" } else { "\n\n" });
             }
             prev = Some(line.paragraph);
-            let words: Vec<&str> = line.words.iter().map(|w| w.text.as_str()).collect();
-            text.push_str(&words.join(" "));
-            StoredLine {
+            let joined: Vec<&str> = words.iter().map(|w| w.text.as_str()).collect();
+            text.push_str(&joined.join(" "));
+            Some(StoredLine {
                 bbox: normalise_box(line.bbox, page.width, page.height),
-                words: line
-                    .words
-                    .iter()
-                    .map(|w| StoredWord {
-                        text: w.text.clone(),
-                        bbox: normalise_box(w.bbox, page.width, page.height),
-                        conf: round5(f64::from(w.conf).clamp(0.0, 1.0)),
-                    })
-                    .collect(),
-            }
+                words,
+            })
         })
         .collect();
     (text, lines)
@@ -263,5 +279,33 @@ mod tests {
         let (text, lines) = normalise(&page);
         assert_eq!(text, "a");
         assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn empty_words_are_dropped_and_nan_confidence_is_zero() {
+        let word = |text: &str, conf: f32| Word {
+            text: text.into(),
+            bbox: px(0, 0, 1, 1),
+            conf,
+        };
+        let line = |words: Vec<Word>| Line {
+            bbox: px(0, 0, 10, 1),
+            paragraph: 1,
+            words,
+        };
+        let page = PageOcr {
+            width: 10,
+            height: 10,
+            lines: vec![
+                // A line whose only word is empty goes, so no stray separator is left.
+                line(vec![word("", 0.9)]),
+                line(vec![word("a", f32::NAN), word(" ", 0.9), word("b", 0.5)]),
+            ],
+        };
+        let (text, lines) = normalise(&page);
+        assert_eq!(text, "a b");
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].words.len(), 2);
+        assert_eq!(lines[0].words[0].conf, 0.0);
     }
 }
