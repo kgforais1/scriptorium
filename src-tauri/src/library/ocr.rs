@@ -53,6 +53,7 @@ impl OcrLog {
     }
 }
 
+/// Report `reason` as an invalid package.
 fn invalid(reason: String) -> BookError {
     BookError::InvalidPackage { reason }
 }

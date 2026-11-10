@@ -64,6 +64,7 @@ pub fn sweep_orphans(library: &Path, max_age: Duration) -> usize {
     removed
 }
 
+/// Whether `entry`'s modification time is at least `max_age` old.
 fn is_old(entry: &std::fs::DirEntry, max_age: Duration) -> bool {
     entry
         .metadata()

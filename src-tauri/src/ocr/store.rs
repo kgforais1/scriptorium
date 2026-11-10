@@ -20,6 +20,7 @@ const SCHEMA_V1: &str = include_str!("../../../docs/ocr.v1.schema.json");
 
 type Compiled = Result<jsonschema::Validator, String>;
 
+/// Compile the schema in `src` once into `cell` and return the cached validator.
 fn compile(
     cell: &'static OnceLock<Compiled>,
     src: &str,
@@ -35,6 +36,7 @@ fn compile(
     .map_err(|e| format!("built-in ocr schema failed to compile: {e}"))
 }
 
+/// Return the first schema violation in `value`, or `Ok(())` when it conforms.
 fn check(v: &jsonschema::Validator, value: &Value) -> Result<(), String> {
     v.iter_errors(value)
         .next()
@@ -296,6 +298,7 @@ impl OcrIndex {
     }
 }
 
+/// The path of a book's `ocr/index.json`.
 fn index_path(book: &Path) -> PathBuf {
     book.join("ocr/index.json")
 }

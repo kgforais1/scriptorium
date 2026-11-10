@@ -109,6 +109,8 @@ fn check_destination(library: &Path, id: &str) -> Result<(), BookError> {
     Ok(())
 }
 
+/// Fail unless the library's volume has room for `estimated` bytes plus a 10% margin and the
+/// fixed headroom.
 pub(crate) fn check_space(library: &Path, estimated: u64) -> Result<(), BookError> {
     let available = fs4::available_space(library).map_err(|e| io_error(library, &e))?;
     let needed = estimated
@@ -120,6 +122,7 @@ pub(crate) fn check_space(library: &Path, estimated: u64) -> Result<(), BookErro
     Ok(())
 }
 
+/// Turn a conversion error into the matching book error, attributed to `file`.
 fn unreadable(file: &Path, err: convert::ConvertError) -> BookError {
     match err {
         convert::ConvertError::UnreadableFile(reason) => BookError::UnreadableFile {
@@ -249,6 +252,8 @@ struct Builder {
 }
 
 impl Builder {
+    /// Create the temp package directory, take its ingest lock, and lay out `pages/` and
+    /// `ocr/` inside it.
     fn new(
         library: &Path,
         id: &str,
