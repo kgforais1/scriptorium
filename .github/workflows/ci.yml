@@ -198,17 +198,13 @@ jobs:
 
       - name: Install Tauri Linux system deps
         # https://v2.tauri.app/start/prerequisites/#linux
-        # Cached .debs skip the slow apt download (often 2-6 min). build-essential,
-        # curl, wget and file ship with ubuntu-latest. Bump `version` to refresh.
-        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
-        with:
-          packages: >-
-            libwebkit2gtk-4.1-dev
-            libxdo-dev
-            libssl-dev
-            libayatana-appindicator3-dev
-            librsvg2-dev
-          version: "1"
+        # Plain apt, not a .deb cache: the cache action swallowed a mirror 404 and saved an
+        # empty cache, which then broke every later run. build-essential, curl, wget and file
+        # ship with ubuntu-latest.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev \
+            libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install Rust toolchain
         run: |
@@ -296,15 +292,10 @@ jobs:
           echo "PDFIUM_DYNAMIC_LIB_PATH=${{ github.workspace }}/src-tauri/pdfium" >> "$GITHUB_ENV"
 
       - name: Install Tauri Linux system deps
-        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
-        with:
-          packages: >-
-            libwebkit2gtk-4.1-dev
-            libxdo-dev
-            libssl-dev
-            libayatana-appindicator3-dev
-            librsvg2-dev
-          version: "1"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev \
+            libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install Rust toolchain
         run: |
