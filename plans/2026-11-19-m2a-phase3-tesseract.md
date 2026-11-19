@@ -35,8 +35,8 @@ Those are Phase 4.
 4. **Every Rust build needs the sidecar file.** `tauri_build::build()` fails when a file named in
    `bundle.externalBin` is missing for the target triple. That covers `cargo build`, `cargo test`,
    and `cargo clippy`. So the fetch lands in every Rust CI job (`rust`, `rust-coverage`,
-   `rust-cross`, and any other job that compiles `src-tauri`) in the same chunk that adds
-   `externalBin`, and `beforeDevCommand` and `beforeBuildCommand` gain `pnpm tesseract:fetch`.
+   `rust-cross`, and any other job that compiles `src-tauri`) in Chunk 2, before Chunk 5 adds
+   `externalBin`. In Chunk 5, `beforeDevCommand` and `beforeBuildCommand` gain `pnpm tesseract:fetch`.
    `docs/development.md` says a fresh clone runs `pnpm tesseract:fetch` once before `cargo test`.
 5. **The override variable is debug only.** `SCRIPTORIUM_TESSERACT` and
    `SCRIPTORIUM_TESSDATA` are read only under `cfg(debug_assertions)`. A release build never takes
@@ -74,10 +74,13 @@ Each chunk is one commit. The implementer writes it. Claude and the reviewer bot
 
 - `tesseract.yml`: the Windows build sets `TESSERACT_TARGET_TRIPLE=x86_64-pc-windows-msvc`. Each
   build job checks its output's name matches the expected asset name.
-- On Windows, the build job also checks the `.exe` imports no MinGW runtime DLL
-  (`libgcc_s_seh-1.dll`, `libstdc++-6.dll`, `libwinpthread-1.dll`), with `objdump -p`.
-- Add the `publish` job from decision 2, with `concurrency` set so two publishes cannot race.
-  It refuses a tag that already exists.
+- On Windows, a separate step with `shell: msys2 {0}` checks the `.exe` imports no MinGW
+  runtime DLL (`libgcc_s_seh-1.dll`, `libstdc++-6.dll`, `libwinpthread-1.dll`), with the MSYS2
+  `objdump -p`. The job's default shell is Git Bash, whose `objdump` may be missing.
+- Add the `publish` job from decision 2, with `needs: [build]`. The matrix `build` job uploads
+  one artifact per runner, named `tesseract-<os>`. The publish job downloads all three, checks
+  each holds exactly the expected `tesseract-<triple>[.exe]`, and writes `SHA256SUMS`. It sets
+  `concurrency` so two publishes cannot race, and refuses a tag that `gh release view` finds.
 - Add `workflow_dispatch` input `release_tag`, with no default.
 - Check: the workflow runs green on the PR. The user approves, and the publish run is dispatched
   on the branch. The three asset hashes are recorded from `SHA256SUMS` and from a local download.
@@ -89,7 +92,8 @@ Each chunk is one commit. The implementer writes it. Claude and the reviewer bot
   executable, and installs `eng.traineddata` into `src-tauri/tessdata/`. It writes
   `.version` files holding the release tag and platform, and the tessdata tag, and exits early
   when both match. `TESSERACT_ASSET_CACHE` keeps downloads between runs, as
-  `PDFIUM_ARCHIVE_CACHE` does.
+  `PDFIUM_ARCHIVE_CACHE` does. On a hash mismatch it deletes the cached file before it exits,
+  so a corrupt download cannot fail every later run.
 - `package.json`: `"tesseract:fetch": "bash scripts/fetch_tesseract.sh"`.
 - `.gitignore`: `src-tauri/tessdata/` and `.tesseract-assets/`.
 - `ci.yml`: every job that compiles `src-tauri` caches `.tesseract-assets` keyed on the script's
@@ -135,8 +139,10 @@ Each chunk is one commit. The implementer writes it. Claude and the reviewer bot
 - First, it asserts no `tesseract` is on `PATH`.
 - When the binary is missing, the test fails if `SCRIPTORIUM_REQUIRE_TESSERACT=1`, and is skipped
   with a printed note otherwise. CI sets the variable, so CI can never pass by skipping.
-- It copies the image into a temp directory named `scriptorium-ocr-tést` and runs from there,
-  which covers decision 7 on all three platforms.
+- It copies the image and `eng.traineddata` into a temp directory named
+  `scriptorium-ocr-tést`, and points `--tessdata-dir` there through the debug override. This runs
+  both the relative image path and an absolute non-ASCII tessdata path, which covers decision 7
+  on all three platforms.
 - `ci.yml`: the `rust` job on Linux and the `rust-cross` matrix on macOS and Windows set
   `SCRIPTORIUM_REQUIRE_TESSERACT=1`.
 
@@ -145,11 +151,16 @@ Each chunk is one commit. The implementer writes it. Claude and the reviewer bot
 - `tauri.conf.json`: `bundle.externalBin: ["binaries/tesseract"]` and the resource
   `"tessdata/eng.traineddata": "tessdata/eng.traineddata"`. The fetch is added to both before-commands.
 - Run `pnpm tauri build` on macOS. Open the built app's `Contents/MacOS/tesseract` with
-  `codesign -dv` and check it carries the app's signature and the hardened runtime flag. Run it on
+  `codesign -dv` and check it carries the app's signature. The app is signed ad hoc
+  (`signingIdentity: "-"`), which may not set the hardened runtime flag. Record what Tauri
+  emits. If the flag is absent, the check asserts the signature only, and `docs/ocr.md` notes
+  that the hardened runtime check waits for a real signing identity. Run it on
   the smoke image from the bundle's own layout with the bundle's tessdata. Record the result in
   the PR.
-- New `ci.yml` job, `bundle`, on `windows-latest` and `ubuntu-22.04`. It runs on PRs that touch
-  `scripts/*tesseract*`, `tauri.conf.json`, or `src-tauri/src/ocr/**`, and weekly. It runs
+- New workflow, `.github/workflows/bundle.yml`, with one job on `windows-latest` and
+  `ubuntu-22.04`. Its own `on.pull_request.paths` limits it to PRs that touch
+  `scripts/*tesseract*`, `src-tauri/tauri.conf.json`, or `src-tauri/src/ocr/**`, and it also runs
+  weekly. On Linux it installs the same Tauri system packages the `rust` job does. It runs
   `pnpm tauri build`, finds the sidecar and tessdata inside the bundle output, and runs the
   sidecar on the smoke image with only that tessdata. On Linux it checks the AppImage's and the
   `.deb`'s extracted trees. On Windows it checks the NSIS or MSI install tree as Tauri lays it
@@ -165,7 +176,9 @@ Each chunk is one commit. The implementer writes it. Claude and the reviewer bot
   `fetch_tesseract.sh` and the `id()` constants, and reruns `ocr_spike.py` if the engine version
   changed.
 - `check_bundled_c_cves.py` and `ci/bundled-c.toml` from decision 11, with tests for the new
-  source kind in the script's existing test file.
+  source kind in the script's existing test file. `security.yml`'s `bundled-c-cves` job only
+  runs on a PR when a file in its path regex changed. Add `scripts/build_tesseract.sh` to that
+  regex, so a library bump triggers the check.
 - `docs/development.md`, `docs/ocr.md`, both changelogs, and the parent plan's Phase 3 boxes.
 
 ## Verification
