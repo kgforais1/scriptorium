@@ -32,6 +32,13 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
   writing two components. Generate a two-component JP2 in-test (or check in a tiny fixture)
   so it runs on every OS. From CodeRabbit on PR #65.
 
+- **Better in-app menu** — replace the current menu with a clearer, fuller in-app menu.
+- **Book home screen** — when a book is open, its home screen should look better, for example a
+  closed book with an on-screen menu.
+- **Less intrusive reader controls** — make UI elements such as the bottom slider bar less
+  intrusive. Consider hiding them when the mouse is still or away from them, possibly as a user
+  setting.
+
 ## Icebox
 
 Pointers only — promote via [`prompts/backlog-to-plans.md`](prompts/backlog-to-plans.md) or move to
