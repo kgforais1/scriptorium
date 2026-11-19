@@ -2,7 +2,8 @@ version: 2
 updates:
   # Python dependencies
   - package-ecosystem: "pip"
-    directory: "/"
+    # "/ci" holds the Semgrep pin for the SAST job.
+    directories: ["/", "/ci"]
     schedule:
       interval: "monthly"
     cooldown:

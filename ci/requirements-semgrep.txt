@@ -1,0 +1,3 @@
+# Semgrep for the SAST job in .github/workflows/security.yml. Dependabot keeps this pin current
+# (monthly for minor and patch, at once for security fixes).
+semgrep==1.185.0
