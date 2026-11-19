@@ -202,8 +202,9 @@ jobs:
         # empty cache, which then broke every later run. build-essential, curl, wget and file
         # ship with ubuntu-latest.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev \
+          # Retry, since a mirror mid-sync can fail a fetch.
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev \
             libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install Rust toolchain
@@ -293,8 +294,9 @@ jobs:
 
       - name: Install Tauri Linux system deps
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev \
+          # Retry, since a mirror mid-sync can fail a fetch.
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev \
             libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install Rust toolchain

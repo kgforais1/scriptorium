@@ -141,19 +141,12 @@ jobs:
           path: src-tauri/binaries/tesseract-*
           if-no-files-found: error
 
-  # Publishing is manual: dispatching a run with a release_tag creates a public release, so the
-  # user approves each publish. See decision 2 in plans/2026-11-19-m2a-phase3-tesseract.md.
-  publish:
-    name: Publish the binaries
-    if: github.event_name == 'workflow_dispatch'
+  # Gathers the three binaries into the release layout on every run, so a PR exercises these
+  # checks before any publish depends on them.
+  assets:
+    name: Gather the release assets
     needs: [build]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    # One publish at a time: two runs must not race on the same tag.
-    concurrency:
-      group: tesseract-publish
-      cancel-in-progress: false
     steps:
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
@@ -181,13 +174,44 @@ jobs:
           sha256sum tesseract-aarch64-apple-darwin tesseract-x86_64-unknown-linux-gnu \
             tesseract-x86_64-pc-windows-msvc.exe | tee SHA256SUMS
 
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: release/
+          if-no-files-found: error
+
+  # Publishing is manual: dispatching a run with a release_tag creates a public release, so the
+  # user approves each publish. See decision 2 in plans/2026-11-19-m2a-phase3-tesseract.md.
+  publish:
+    name: Publish the binaries
+    if: github.event_name == 'workflow_dispatch'
+    needs: [assets]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # One publish at a time: two runs must not race on the same tag.
+    concurrency:
+      group: tesseract-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: release
+          path: release
+
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
           # Passed through the environment so the tag is never spliced into this script.
           RELEASE_TAG: ${{ inputs.release_tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
+          # The tag must point at a merged commit, never at a branch's.
+          if [ "${GITHUB_REF_NAME}" != "${DEFAULT_BRANCH}" ]; then
+            echo "publish from ${DEFAULT_BRANCH}, not ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
           # A mistyped tag would publish assets under a name no fetch pin points at.
           if ! [[ "${RELEASE_TAG}" =~ ^tesseract-[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$ ]]; then
             echo "release_tag must look like tesseract-5.5.3-r1, got: ${RELEASE_TAG}" >&2
@@ -199,9 +223,11 @@ jobs:
             echo "release ${RELEASE_TAG} already exists; publish a new tag instead" >&2
             exit 1
           fi
+          # Create a draft first, so a failed upload leaves no public release with missing assets.
           # The tag points at the dispatched commit. --target works with --repo and needs no checkout.
           gh release create "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
+            --draft \
             --target "${GITHUB_SHA}" \
             --title "${RELEASE_TAG}" \
             --notes "Self-contained Tesseract binaries for the Scriptorium sidecar, one per supported target. SHA256SUMS lists the hashes pinned in scripts/fetch_tesseract.sh." \
@@ -209,3 +235,11 @@ jobs:
             release/tesseract-x86_64-unknown-linux-gnu \
             release/tesseract-x86_64-pc-windows-msvc.exe \
             release/SHA256SUMS
+          # Publish only once every asset is there.
+          uploaded="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --json assets --jq '[.assets[].name] | sort | join(" ")')"
+          if [ "${uploaded}" != "SHA256SUMS tesseract-aarch64-apple-darwin tesseract-x86_64-pc-windows-msvc.exe tesseract-x86_64-unknown-linux-gnu" ]; then
+            echo "draft ${RELEASE_TAG} has assets: ${uploaded}; left as a draft" >&2
+            exit 1
+          fi
+          gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false

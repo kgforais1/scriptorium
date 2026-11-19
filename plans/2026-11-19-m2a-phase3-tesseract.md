@@ -82,8 +82,8 @@ Each chunk is one commit. The implementer writes it. Claude and the reviewer bot
   each holds exactly the expected `tesseract-<triple>[.exe]`, and writes `SHA256SUMS`. It sets
   `concurrency` so two publishes cannot race, and refuses a tag that `gh release view` finds.
 - Add `workflow_dispatch` input `release_tag`, with no default.
-- Check: the workflow runs green on the PR. The user approves, and the publish run is dispatched
-  on the branch. The three asset hashes are recorded from `SHA256SUMS` and from a local download.
+- Check: the workflow runs green on the PR. Once the PR merges, the user approves, and the publish run is
+  dispatched on `main`, so the tag points at a merged commit. The three asset hashes are recorded from `SHA256SUMS` and from a local download.
 
 ### Chunk 2: fetch script and CI wiring
 
