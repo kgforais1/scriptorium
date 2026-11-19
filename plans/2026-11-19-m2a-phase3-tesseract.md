@@ -1,0 +1,187 @@
+# Plan: M2a Phase 3, the Tesseract engine and bundling
+
+This is the implementation plan for Phase 3 of
+[`2026-11-07-m2a-ocr-pipeline.md`](2026-11-07-m2a-ocr-pipeline.md). The parent plan's
+"Engine interface" and "Bundling Tesseract" sections hold the design. This plan fixes the
+order of work, the details those sections leave open, and the checks for each chunk. Where the
+two disagree, this plan wins for Phase 3, and the parent plan is corrected in the same PR.
+
+## Goal
+
+The app can run the bundled Tesseract on one image and return a `PageOcr`. A fresh clone gets the
+binary and language data with one fetch script. CI proves the fetched binary works on macOS,
+Windows, and Linux, and that a built bundle runs its own sidecar. No job, command, or UI is added.
+Those are Phase 4.
+
+## Decisions this plan adds
+
+1. **Release asset naming.** The release tag is `tesseract-5.5.3-r1`. The `r` number goes up when
+   the binaries are rebuilt with the same Tesseract version, for example after a library bump.
+   Each asset is the bare binary, named `tesseract-<target-triple>[.exe]`, so it lands in
+   `src-tauri/binaries/` unchanged. The assets are:
+   `tesseract-aarch64-apple-darwin`, `tesseract-x86_64-unknown-linux-gnu`, and
+   `tesseract-x86_64-pc-windows-msvc.exe`. There is no x86_64 macOS asset. The app's macOS target is
+   arm64 only today, and `fetch_tesseract.sh` exits with a clear message on an Intel Mac.
+2. **Publishing is manual.** `tesseract.yml` gains a `publish` job. It runs only on
+   `workflow_dispatch` with a `release_tag` input, needs the three build jobs, and is the only job
+   with `contents: write`. It downloads the three artifacts, writes `SHA256SUMS`, and creates the
+   release with `gh release create`. Builds are not bit-for-bit reproducible, so the hashes pinned
+   in `fetch_tesseract.sh` are the hashes of the published assets, copied from `SHA256SUMS`, and
+   checked by downloading each asset once by hand. Dispatching the publish run creates a public
+   release, so it needs the user's approval each time.
+3. **Language data comes from upstream, not the release.** `fetch_tesseract.sh` downloads
+   `eng.traineddata` from `tesseract-ocr/tessdata_fast` at the pinned tag `4.1.0`, with the hash
+   the Phase 1 smoke step already checks. It installs it at `src-tauri/tessdata/eng.traineddata`.
+4. **Every Rust build needs the sidecar file.** `tauri_build::build()` fails when a file named in
+   `bundle.externalBin` is missing for the target triple. That covers `cargo build`, `cargo test`,
+   and `cargo clippy`. So the fetch lands in every Rust CI job (`rust`, `rust-coverage`,
+   `rust-cross`, and any other job that compiles `src-tauri`) in the same chunk that adds
+   `externalBin`, and `beforeDevCommand` and `beforeBuildCommand` gain `pnpm tesseract:fetch`.
+   `docs/development.md` says a fresh clone runs `pnpm tesseract:fetch` once before `cargo test`.
+5. **The override variable is debug only.** `SCRIPTORIUM_TESSERACT` and
+   `SCRIPTORIUM_TESSDATA` are read only under `cfg(debug_assertions)`. A release build never takes
+   a binary path from the environment.
+6. **The compile-time target triple.** `build.rs` exports `TARGET` as
+   `SCRIPTORIUM_TARGET_TRIPLE` with `cargo:rustc-env`. The debug fallback looks for
+   `src-tauri/binaries/tesseract-<that triple>[.exe]`.
+7. **Paths reach Tesseract as relative names.** The child runs with its working directory set to
+   the image's directory. The image and the output base are passed as bare file names. This keeps
+   a non-ASCII user name in the temp path away from Tesseract's argument handling on Windows. The
+   `--tessdata-dir` path is still absolute, so the Windows integration test runs from a directory
+   with a non-ASCII name and checks that the data loads (see Chunk 4). If it fails, the fix is to
+   copy the language data into the run directory and pass it relatively too.
+8. **No console window on Windows.** The child is spawned with `CREATE_NO_WINDOW`
+   (`0x0800_0000`) through `std::os::windows::process::CommandExt::creation_flags`. Without it
+   every page would flash a console window in a release build.
+9. **The cleared environment.** The child starts from `env_clear()`. It then gets
+   `TESSDATA_PREFIX`, `OMP_THREAD_LIMIT=1`, and, on Windows only, `SystemRoot`, which some Windows
+   APIs need to start. Nothing else is passed.
+10. **Paragraph numbers.** TSV `par_num` restarts in each block, so `(block_num, par_num)` is the
+    paragraph key. The parser numbers paragraphs from 1 in order of first appearance and stores
+    that number in `Line.paragraph`.
+11. **CVE tracking.** `check_bundled_c_cves.py` reads versions from crate sources only. It gains a
+    second source kind, `source = "script"`, which reads the version with a regex from a named
+    file, here `scripts/build_tesseract.sh`. Tesseract, Leptonica, zlib, libpng, libjpeg-turbo,
+    libtiff, and libwebp then go in `ci/bundled-c.toml`, each with a verified CPE and canary. Any
+    library with no usable canary is listed in the bump policy for a manual check instead.
+
+## Chunks
+
+Each chunk is one commit. The implementer writes it. Claude and the reviewer both review it, and
+`bash scripts/sonar_scan.sh` must report "No new issues (was 22)." before it is committed.
+
+### Chunk 1: publish the binaries
+
+- `tesseract.yml`: the Windows build sets `TESSERACT_TARGET_TRIPLE=x86_64-pc-windows-msvc`. Each
+  build job checks its output's name matches the expected asset name.
+- On Windows, the build job also checks the `.exe` imports no MinGW runtime DLL
+  (`libgcc_s_seh-1.dll`, `libstdc++-6.dll`, `libwinpthread-1.dll`), with `objdump -p`.
+- Add the `publish` job from decision 2, with `concurrency` set so two publishes cannot race.
+  It refuses a tag that already exists.
+- Add `workflow_dispatch` input `release_tag`, with no default.
+- Check: the workflow runs green on the PR. The user approves, and the publish run is dispatched
+  on the branch. The three asset hashes are recorded from `SHA256SUMS` and from a local download.
+
+### Chunk 2: fetch script and CI wiring
+
+- `scripts/fetch_tesseract.sh`, modelled on `fetch_pdfium.sh`: the same curl flags, `sha256_of`,
+  and platform detection. It installs the host's binary into `src-tauri/binaries/`, makes it
+  executable, and installs `eng.traineddata` into `src-tauri/tessdata/`. It writes
+  `.version` files holding the release tag and platform, and the tessdata tag, and exits early
+  when both match. `TESSERACT_ASSET_CACHE` keeps downloads between runs, as
+  `PDFIUM_ARCHIVE_CACHE` does.
+- `package.json`: `"tesseract:fetch": "bash scripts/fetch_tesseract.sh"`.
+- `.gitignore`: `src-tauri/tessdata/` and `.tesseract-assets/`.
+- `ci.yml`: every job that compiles `src-tauri` caches `.tesseract-assets` keyed on the script's
+  hash, and runs the fetch next to the pdfium fetch.
+- Check: run the script twice locally. The second run exits early. A corrupted cached file fails
+  the hash check and is not installed.
+
+### Chunk 3: `ocr/tesseract.rs`
+
+- `pub struct TesseractEngine { binary: PathBuf, tessdata: PathBuf }` with `fn locate(resource_dir:
+  Option<&Path>) -> Result<Self, OcrUnavailable>`. The order is: the debug override variables,
+  then the directory of `std::env::current_exe()` (`tesseract[.exe]`, the name Tauri gives the
+  sidecar), then, in debug builds only, `src-tauri/binaries/tesseract-<triple>[.exe]`. The
+  language data is `<resource_dir>/tessdata`, then, in debug builds, `src-tauri/tessdata`.
+  `locate` checks both files exist. It does not run the binary.
+- `id()` returns `tesseract 5.5.3 eng-fast` from constants that `fetch_tesseract.sh`'s pin
+  matches. A unit test reads the script and checks the two agree.
+- `recognize`: refuse empty `langs` before anything else. Spawn as decisions 7 to 9 and the
+  parent plan describe. Stdout goes to null. Stderr goes to a file in the image's directory. Poll
+  `try_wait` every 100 ms. On `stop` return `Cancelled`, and past `deadline` return `Timeout`,
+  after `kill()` and `wait()` in both cases. On a non-zero exit return `Engine` with the last 2 KB
+  of stderr. Then parse `<base>.tsv`. Remove the TSV and stderr files before returning, on every
+  path.
+- `parse_tsv(&str) -> Result<PageOcr, OcrError>`, a pure function. The header row must match the
+  12 expected column names. The level 1 row gives width and height. Level 4 rows start lines.
+  Level 5 rows are words. A word with empty trimmed text or a confidence below 0 is dropped.
+  Confidence is divided by 100 and clamped. A row with the wrong column count, or a number that
+  will not parse, is an `Engine` error naming the row. A TSV with no level 1 row is an error. A
+  page with no words is a valid empty `PageOcr`.
+- Unit tests on recorded TSV in `src-tauri/src/ocr/testdata/`: a normal page, a page with empty
+  rows and `-1` confidences, a multi-block page whose `par_num` restarts, an empty page (header
+  and page row only), a truncated row, and a CRLF file. The recorded files come from the fetched
+  binary on the fixture pages, so they are real output.
+- Spawn tests that need no real Tesseract use a tiny stand-in program, built by Cargo as a test
+  binary under `src-tauri/tests/bin/` or `examples/`. It can sleep, exit non-zero, or write a fixed
+  TSV, depending on its arguments. They cover cancel within a second, timeout, a non-zero exit with
+  stderr in the error, and cleanup of the temp files on each path.
+
+### Chunk 4: the integration test
+
+- `src-tauri/tests/tesseract_engine.rs` runs `TesseractEngine::locate` and `recognize` on
+  `tests/fixtures/ocr/smoke.png` and checks it finds "PRINCESS" with a box inside the page.
+- First, it asserts no `tesseract` is on `PATH`.
+- When the binary is missing, the test fails if `SCRIPTORIUM_REQUIRE_TESSERACT=1`, and is skipped
+  with a printed note otherwise. CI sets the variable, so CI can never pass by skipping.
+- It copies the image into a temp directory named `scriptorium-ocr-tést` and runs from there,
+  which covers decision 7 on all three platforms.
+- `ci.yml`: the `rust` job on Linux and the `rust-cross` matrix on macOS and Windows set
+  `SCRIPTORIUM_REQUIRE_TESSERACT=1`.
+
+### Chunk 5: sidecar config and bundle checks
+
+- `tauri.conf.json`: `bundle.externalBin: ["binaries/tesseract"]` and the resource
+  `"tessdata/eng.traineddata": "tessdata/eng.traineddata"`. The fetch is added to both before-commands.
+- Run `pnpm tauri build` on macOS. Open the built app's `Contents/MacOS/tesseract` with
+  `codesign -dv` and check it carries the app's signature and the hardened runtime flag. Run it on
+  the smoke image from the bundle's own layout with the bundle's tessdata. Record the result in
+  the PR.
+- New `ci.yml` job, `bundle`, on `windows-latest` and `ubuntu-22.04`. It runs on PRs that touch
+  `scripts/*tesseract*`, `tauri.conf.json`, or `src-tauri/src/ocr/**`, and weekly. It runs
+  `pnpm tauri build`, finds the sidecar and tessdata inside the bundle output, and runs the
+  sidecar on the smoke image with only that tessdata. On Linux it checks the AppImage's and the
+  `.deb`'s extracted trees. On Windows it checks the NSIS or MSI install tree as Tauri lays it
+  out before packaging, and records which path it used.
+
+### Chunk 6: notices, policy, CVEs, docs
+
+- `THIRD_PARTY_NOTICES.md`: Tesseract and the traineddata (Apache-2.0), Leptonica (BSD-2-Clause),
+  zlib, libpng, libjpeg-turbo (IJG, BSD-3-Clause, zlib), libtiff, and libwebp (BSD-3-Clause), with
+  versions.
+- `docs/ci-and-hooks.md`: the Tesseract bump policy. A bump changes `build_tesseract.sh`, runs the
+  build on the PR, publishes a new release tag after approval, updates the pins in
+  `fetch_tesseract.sh` and the `id()` constants, and reruns `ocr_spike.py` if the engine version
+  changed.
+- `check_bundled_c_cves.py` and `ci/bundled-c.toml` from decision 11, with tests for the new
+  source kind in the script's existing test file.
+- `docs/development.md`, `docs/ocr.md`, both changelogs, and the parent plan's Phase 3 boxes.
+
+## Verification
+
+- `cargo test` and `cargo clippy --all-targets -- -D warnings` pass locally with the fetched
+  binary, and the integration test runs rather than skips.
+- CI: the `rust`, `rust-cross`, `rust-coverage`, `tesseract`, and new `bundle` jobs pass.
+- The macOS bundle check from Chunk 5 is recorded in the PR.
+- Coverage stays at or above the 80% line floor.
+
+## Risks
+
+- **A broken asset blocks every build.** Chunk 5 makes the sidecar required at compile time. If a
+  release asset is pulled or GitHub is down, Rust CI fails. The asset cache limits this, and the
+  fetch retries three times.
+- **Windows path handling.** If Tesseract or Leptonica cannot open a non-ASCII `--tessdata-dir`,
+  Chunk 4 fails on Windows. The fallback in decision 7 is ready.
+- **Bundle layout differs by format.** Chunk 5's job may need a different path per bundle format.
+  The job records the path it checked, so a layout change shows up as a clear failure.
