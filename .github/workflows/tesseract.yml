@@ -1,11 +1,20 @@
-# tesseract.yml — packaging proof for the self-contained Tesseract sidecar (M2a Phase 1).
+# tesseract.yml — packaging proof for the self-contained Tesseract sidecar (M2a Phase 1), plus
+# the manual release that publishes the binaries (M2a Phase 3, Chunk 1).
 # Runs on PRs that touch the build script, this workflow, or the smoke image, and on demand.
+# A workflow_dispatch run with a release_tag also publishes the three binaries as release assets.
 # Action refs are pinned to full commit SHAs.
 
 name: Tesseract build
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: >-
+          Tag to publish the binaries under (for example tesseract-5.5.3-r1). Required: a dispatch
+          creates that public release. Leave the workflow on a PR run to only build and test.
+        required: true
+        type: string
   pull_request:
     paths:
       - scripts/build_tesseract.sh
@@ -63,7 +72,47 @@ jobs:
       - name: Build Tesseract (MSYS2)
         if: runner.os == 'Windows'
         shell: msys2 {0}
+        env:
+          # The app's Windows target is MSVC, but rustc inside MSYS2 reports x86_64-pc-windows-gnu.
+          # Name the output for the triple the app bundles it under.
+          TESSERACT_TARGET_TRIPLE: x86_64-pc-windows-msvc
         run: bash scripts/build_tesseract.sh
+
+      # The published asset is the bare binary, and its name is the one the app bundles, so a
+      # change in the triple or the .exe suffix must fail here and not in a consumer's fetch.
+      - name: Check the asset name
+        run: |
+          set -euo pipefail
+          case "${RUNNER_OS}" in
+            macOS) expected="tesseract-aarch64-apple-darwin" ;;
+            Linux) expected="tesseract-x86_64-unknown-linux-gnu" ;;
+            Windows) expected="tesseract-x86_64-pc-windows-msvc.exe" ;;
+          esac
+          ls -l src-tauri/binaries/
+          bin="$(ls src-tauri/binaries/tesseract-*)"
+          if [ "${bin}" != "src-tauri/binaries/${expected}" ]; then
+            echo "expected only src-tauri/binaries/${expected}, found: ${bin}" >&2
+            exit 1
+          fi
+
+      # The .exe must not load the MinGW runtime next to it, or the sidecar fails on a machine
+      # without MSYS2. Git Bash has no objdump, so this runs in the MSYS2 shell.
+      - name: Check the Windows binary for MinGW runtime DLLs
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          exe="src-tauri/binaries/tesseract-x86_64-pc-windows-msvc.exe"
+          imports="$(objdump -p "${exe}" | grep -i 'DLL Name')"
+          echo "${imports}"
+          status=0
+          for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
+            if echo "${imports}" | grep -qiF "${dll}"; then
+              echo "${exe} imports ${dll}; link it statically" >&2
+              status=1
+            fi
+          done
+          exit "${status}"
 
       - name: Run the binary with no system Tesseract
         run: |
@@ -91,3 +140,72 @@ jobs:
           name: tesseract-${{ matrix.os }}
           path: src-tauri/binaries/tesseract-*
           if-no-files-found: error
+
+  # Publishing is manual: dispatching a run with a release_tag creates a public release, so the
+  # user approves each publish. See decision 2 in plans/2026-11-19-m2a-phase3-tesseract.md.
+  publish:
+    name: Publish the binaries
+    if: github.event_name == 'workflow_dispatch'
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # One publish at a time: two runs must not race on the same tag.
+    concurrency:
+      group: tesseract-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          path: assets
+
+      # Each artifact must hold exactly one file with the expected asset name, so the release and
+      # the hashes pinned in scripts/fetch_tesseract.sh cannot drift apart.
+      - name: Check the artifacts and write SHA256SUMS
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          while read -r artifact asset; do
+            found="$(ls -A "assets/${artifact}")"
+            if [ "${found}" != "${asset}" ]; then
+              echo "assets/${artifact}: expected only ${asset}, found: ${found:-nothing}" >&2
+              exit 1
+            fi
+            cp "assets/${artifact}/${asset}" "release/${asset}"
+          done <<'EOF'
+          tesseract-macos-latest tesseract-aarch64-apple-darwin
+          tesseract-ubuntu-22.04 tesseract-x86_64-unknown-linux-gnu
+          tesseract-windows-latest tesseract-x86_64-pc-windows-msvc.exe
+          EOF
+          cd release
+          sha256sum tesseract-aarch64-apple-darwin tesseract-x86_64-unknown-linux-gnu \
+            tesseract-x86_64-pc-windows-msvc.exe | tee SHA256SUMS
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Passed through the environment so the tag is never spliced into this script.
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          # A mistyped tag would publish assets under a name no fetch pin points at.
+          if ! [[ "${RELEASE_TAG}" =~ ^tesseract-[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$ ]]; then
+            echo "release_tag must look like tesseract-5.5.3-r1, got: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          # An existing tag is refused: its assets are what fetch_tesseract.sh's pinned hashes
+          # point at, and replacing them would break every clone. Bump the r number instead.
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" > /dev/null; then
+            echo "release ${RELEASE_TAG} already exists; publish a new tag instead" >&2
+            exit 1
+          fi
+          # The tag points at the dispatched commit. --target works with --repo and needs no checkout.
+          gh release create "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "${RELEASE_TAG}" \
+            --notes "Self-contained Tesseract binaries for the Scriptorium sidecar, one per supported target. SHA256SUMS lists the hashes pinned in scripts/fetch_tesseract.sh." \
+            release/tesseract-aarch64-apple-darwin \
+            release/tesseract-x86_64-unknown-linux-gnu \
+            release/tesseract-x86_64-pc-windows-msvc.exe \
+            release/SHA256SUMS
