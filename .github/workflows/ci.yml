@@ -352,6 +352,15 @@ jobs:
         if: steps.cargo-llvm-cov-bin.outputs.cache-hit != 'true'
         run: cargo install cargo-llvm-cov --locked --version 0.9.1
 
+      # cargo llvm-cov builds tests only, not examples, and cleans the workspace's own build
+      # output first. The OCR spawn tests run the ocr_test_child example, so build it outside
+      # the target dir and name it in SCRIPTORIUM_TEST_CHILD. It uses only std, so rustc
+      # builds it in a second.
+      - name: Build the OCR test stand-in
+        run: |
+          rustc --edition 2021 examples/ocr_test_child.rs -o "${RUNNER_TEMP}/ocr_test_child"
+          echo "SCRIPTORIUM_TEST_CHILD=${RUNNER_TEMP}/ocr_test_child" >> "$GITHUB_ENV"
+
       - name: cargo llvm-cov (summary)
         # Explicit bash adds -o pipefail, so a failing test or the coverage floor fails through tee.
         shell: bash

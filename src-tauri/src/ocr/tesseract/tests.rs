@@ -188,8 +188,13 @@ impl Drop for TempDir {
     }
 }
 
-/// The stand-in engine `examples/ocr_test_child.rs`, which cargo builds with the tests.
+/// The stand-in engine `examples/ocr_test_child.rs`, which `cargo test` builds with the tests.
+/// `cargo llvm-cov` builds no examples, so the coverage job builds it itself and names it in
+/// `SCRIPTORIUM_TEST_CHILD`.
 fn stand_in() -> PathBuf {
+    if let Some(path) = std::env::var_os("SCRIPTORIUM_TEST_CHILD") {
+        return PathBuf::from(path);
+    }
     let exe = std::env::current_exe().unwrap();
     let debug = exe.parent().unwrap().parent().unwrap();
     let path = debug
