@@ -179,66 +179,27 @@ EOF
     command -v windres > /dev/null 2>&1 \
         || { echo "build_tesseract: windres is missing; install mingw-w64-x86_64-binutils" >&2; exit 1; }
     # windres opens the manifest relative to the working directory, so run it in its own.
-    ( cd "${dir}" && windres -i tesseract.rc -o tesseract-manifest.o )
-    echo "${dir}/tesseract-manifest.o"
+    # Named like the toolchain's own file, so gcc picks it up through -B (see below).
+    ( cd "${dir}" && windres -i tesseract.rc -o default-manifest.o )
+    echo "${dir}/default-manifest.o"
 }
 
-# GCC's MinGW specs link the toolchain's default-manifest.o into every exe, and fail when it is
-# missing. A second manifest beside ours is refused by some ld versions ("multiple non-default
-# manifests"), and the ones that merge it leave which one Windows reads undefined. So for the
-# Tesseract build only, put our manifest object in that file's place, and restore the original
-# afterwards and on exit. The exe then carries exactly one manifest, ours.
-DEFAULT_MANIFEST=""
-DEFAULT_MANIFEST_BACKUP=""
-
-use_utf8_manifest() {
-    local found
-    [[ "${MINGW}" == 1 ]] || return 0
-    found="$(gcc -print-file-name=default-manifest.o 2> /dev/null || true)"
-    # gcc echoes the bare name when the toolchain has no default manifest (Homebrew, Linux).
-    [[ -n "${found}" && "${found}" != "default-manifest.o" && -f "${found}" ]] || return 0
-    # The toolchain is shared by every checkout. If it already holds our manifest, another build
-    # is mid-swap or an earlier one died without restoring it, and saving it as the "original"
-    # would make the swap permanent. Refuse rather than guess.
-    if cmp -s "${found}" "${MANIFEST_OBJ}"; then
-        echo "build_tesseract: ${found} already holds the UTF-8 manifest; another build is" \
-            "running, or reinstall mingw-w64-x86_64-windows-default-manifest" >&2
-        exit 1
-    fi
-    DEFAULT_MANIFEST="${found}"
-    DEFAULT_MANIFEST_BACKUP="${BUILD_DIR}/default-manifest.o.saved"
-    cp "${DEFAULT_MANIFEST}" "${DEFAULT_MANIFEST_BACKUP}" \
-        || { echo "build_tesseract: cannot save ${DEFAULT_MANIFEST}" >&2; exit 1; }
-    trap restore_default_manifest EXIT
-    cp "${MANIFEST_OBJ}" "${DEFAULT_MANIFEST}" \
-        || { echo "build_tesseract: cannot replace ${DEFAULT_MANIFEST}" >&2; exit 1; }
-}
-
-restore_default_manifest() {
-    if [[ -n "${DEFAULT_MANIFEST_BACKUP}" && -f "${DEFAULT_MANIFEST_BACKUP}" ]]; then
-        mv "${DEFAULT_MANIFEST_BACKUP}" "${DEFAULT_MANIFEST}"
-    fi
-    DEFAULT_MANIFEST=""
-    DEFAULT_MANIFEST_BACKUP=""
-}
-
-START="$(date +%s)"
-detect_platform
-if command -v nproc > /dev/null 2>&1; then
-    JOBS="${TESSERACT_JOBS:-$(nproc)}"
-else
-    JOBS="${TESSERACT_JOBS:-$(sysctl -n hw.ncpu)}"
-fi
-
-rm -rf "${BUILD_DIR}/src" "${BUILD_DIR}/build" "${PREFIX}"
-mkdir -p "${PREFIX}"
-
-# The Windows exe needs the UTF-8 manifest. It reaches the link through the toolchain's
-# default-manifest.o (see use_utf8_manifest), because Tesseract's CMake files pin their own
-# source lists and GCC links that file into every exe anyway.
+# The Windows exe needs the UTF-8 manifest. GCC's MinGW specs link a file named
+# default-manifest.o into every exe, found on the startfile search path. A second manifest
+# beside ours is refused by some ld versions ("multiple non-default manifests"), and the ones
+# that merge it leave which one Windows reads undefined. So the Tesseract link gets -B with a
+# directory holding our own default-manifest.o, which gcc searches first. The exe then carries
+# exactly one manifest, ours, and the shared toolchain is never changed. The path is converted
+# because the native compiler cannot open MSYS paths (/d/a/...), and quoted for CMake, which
+# pastes these flags into the link command as written.
 MANIFEST_OBJ=""
 if [[ "${MINGW}" == 1 ]]; then
     MANIFEST_OBJ="$(build_utf8_manifest)"
+    MANIFEST_DIR="$(dirname "${MANIFEST_OBJ}")"
+    if command -v cygpath > /dev/null 2>&1; then
+        MANIFEST_DIR="$(cygpath -m "${MANIFEST_DIR}")"
+    fi
+    EXE_LINKER_FLAGS="${EXE_LINKER_FLAGS} \"-B${MANIFEST_DIR}/\""
 fi
 
 fetch_source zlib "https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz" "${SHA256_ZLIB}"
@@ -290,14 +251,12 @@ if command -v cygpath > /dev/null 2>&1; then
     ZLIB_A="$(cygpath -m "${ZLIB_A}")"
 fi
 TAIL_LIBS="\"${JPEG_A}\" \"${ZLIB_A}\""
-use_utf8_manifest
 cmake_build tesseract -DSW_BUILD=OFF -DDISABLE_CURL=ON -DDISABLE_ARCHIVE=ON -DOPENMP_BUILD=OFF \
     -DUSE_SYSTEM_ICU=OFF -DBUILD_TRAINING_TOOLS=OFF -DBUILD_TESTS=OFF -DGRAPHICS_DISABLED=ON \
     -DOPENCL=OFF -DDISABLE_TIFF=OFF \
     -DLeptonica_DIR="${PREFIX}/lib/cmake/leptonica" \
     -DCMAKE_CXX_STANDARD_LIBRARIES="${TAIL_LIBS}" \
     -DCMAKE_EXE_LINKER_FLAGS="${EXE_LINKER_FLAGS}"
-restore_default_manifest
 
 mkdir -p "${OUT_DIR}"
 OUT="${OUT_DIR}/tesseract-${TRIPLE}${EXE_SUFFIX}"
