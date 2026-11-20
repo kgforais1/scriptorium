@@ -71,7 +71,6 @@ detect_platform() {
         MINGW*-x86_64 | MSYS*-x86_64)
             # Run from an MSYS2 MINGW64 shell with mingw-w64-x86_64-{gcc,cmake,ninja,nasm,
             # binutils}. Static libgcc/libstdc++ keep the .exe free of MinGW runtime DLLs.
-            # The UTF-8 manifest object is appended to these flags once it is built below.
             EXE_SUFFIX=".exe"
             EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++"
             MINGW=1
@@ -184,14 +183,15 @@ EOF
     echo "${dir}/tesseract-manifest.o"
 }
 
-# GCC's MinGW specs add the toolchain's default-manifest.o to every link. A second RT_MANIFEST
-# alongside ours is refused by some ld versions ("multiple non-default manifests"), and the ones
-# that merge it instead leave which manifest Windows reads undefined. Move that file aside for
-# the Tesseract link, so the exe carries exactly one manifest, and put it back on exit.
+# GCC's MinGW specs link the toolchain's default-manifest.o into every exe, and fail when it is
+# missing. A second manifest beside ours is refused by some ld versions ("multiple non-default
+# manifests"), and the ones that merge it leave which one Windows reads undefined. So for the
+# Tesseract build only, put our manifest object in that file's place, and restore the original
+# afterwards and on exit. The exe then carries exactly one manifest, ours.
 DEFAULT_MANIFEST=""
 DEFAULT_MANIFEST_BACKUP=""
 
-hide_default_manifest() {
+use_utf8_manifest() {
     local found
     [[ "${MINGW}" == 1 ]] || return 0
     found="$(gcc -print-file-name=default-manifest.o 2> /dev/null || true)"
@@ -199,9 +199,11 @@ hide_default_manifest() {
     [[ -n "${found}" && "${found}" != "default-manifest.o" && -f "${found}" ]] || return 0
     DEFAULT_MANIFEST="${found}"
     DEFAULT_MANIFEST_BACKUP="${BUILD_DIR}/default-manifest.o.saved"
-    mv "${DEFAULT_MANIFEST}" "${DEFAULT_MANIFEST_BACKUP}" \
-        || { echo "build_tesseract: cannot move ${DEFAULT_MANIFEST} aside" >&2; exit 1; }
+    cp "${DEFAULT_MANIFEST}" "${DEFAULT_MANIFEST_BACKUP}" \
+        || { echo "build_tesseract: cannot save ${DEFAULT_MANIFEST}" >&2; exit 1; }
     trap restore_default_manifest EXIT
+    cp "${MANIFEST_OBJ}" "${DEFAULT_MANIFEST}" \
+        || { echo "build_tesseract: cannot replace ${DEFAULT_MANIFEST}" >&2; exit 1; }
 }
 
 restore_default_manifest() {
@@ -223,20 +225,12 @@ fi
 rm -rf "${BUILD_DIR}/src" "${BUILD_DIR}/build" "${PREFIX}"
 mkdir -p "${PREFIX}"
 
-# The Windows exe needs the UTF-8 manifest linked in. It goes on the link line as an object
-# file rather than a resource inside CMake's sources, because Tesseract's CMake files pin their
-# own source lists. The flag is handed to the Tesseract build alone: the libraries below also
-# produce small test executables, and those would be linked with two manifests, because the
-# toolchain's default manifest is only moved aside for the Tesseract link.
-# The path is quoted for CMake, which pastes these flags into the link command as written, and
-# converted because the native linker cannot open MSYS paths (/d/a/...).
+# The Windows exe needs the UTF-8 manifest. It reaches the link through the toolchain's
+# default-manifest.o (see use_utf8_manifest), because Tesseract's CMake files pin their own
+# source lists and GCC links that file into every exe anyway.
 MANIFEST_OBJ=""
 if [[ "${MINGW}" == 1 ]]; then
     MANIFEST_OBJ="$(build_utf8_manifest)"
-    if command -v cygpath > /dev/null 2>&1; then
-        MANIFEST_OBJ="$(cygpath -m "${MANIFEST_OBJ}")"
-    fi
-    EXE_LINKER_FLAGS="${EXE_LINKER_FLAGS} \"${MANIFEST_OBJ}\""
 fi
 
 fetch_source zlib "https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz" "${SHA256_ZLIB}"
@@ -288,7 +282,7 @@ if command -v cygpath > /dev/null 2>&1; then
     ZLIB_A="$(cygpath -m "${ZLIB_A}")"
 fi
 TAIL_LIBS="\"${JPEG_A}\" \"${ZLIB_A}\""
-hide_default_manifest
+use_utf8_manifest
 cmake_build tesseract -DSW_BUILD=OFF -DDISABLE_CURL=ON -DDISABLE_ARCHIVE=ON -DOPENMP_BUILD=OFF \
     -DUSE_SYSTEM_ICU=OFF -DBUILD_TRAINING_TOOLS=OFF -DBUILD_TESTS=OFF -DGRAPHICS_DISABLED=ON \
     -DOPENCL=OFF -DDISABLE_TIFF=OFF \
