@@ -212,6 +212,10 @@ temp/
 src-tauri/pdfium/
 .pdfium-archives/
 
+# ── Bundled tesseract binary and language data (scripts/fetch_tesseract.sh) ──
+src-tauri/tessdata/
+.tesseract-assets/
+
 # ── Pre-commit ───────────────────────────────────────────────────────────────
 # (pre-commit itself is tracked; ignore its local cache)
 .pre-commit-cache/
