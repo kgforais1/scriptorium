@@ -1,0 +1,4 @@
+# Semgrep for the SAST job in .github/workflows/security.yml. Edit this file, then regenerate
+# requirements-semgrep.txt with the command at its top, on Linux with Python 3.12 to match the
+# runner. Dependabot does both.
+semgrep==1.185.0
