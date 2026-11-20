@@ -197,6 +197,14 @@ use_utf8_manifest() {
     found="$(gcc -print-file-name=default-manifest.o 2> /dev/null || true)"
     # gcc echoes the bare name when the toolchain has no default manifest (Homebrew, Linux).
     [[ -n "${found}" && "${found}" != "default-manifest.o" && -f "${found}" ]] || return 0
+    # The toolchain is shared by every checkout. If it already holds our manifest, another build
+    # is mid-swap or an earlier one died without restoring it, and saving it as the "original"
+    # would make the swap permanent. Refuse rather than guess.
+    if cmp -s "${found}" "${MANIFEST_OBJ}"; then
+        echo "build_tesseract: ${found} already holds the UTF-8 manifest; another build is" \
+            "running, or reinstall mingw-w64-x86_64-windows-default-manifest" >&2
+        exit 1
+    fi
     DEFAULT_MANIFEST="${found}"
     DEFAULT_MANIFEST_BACKUP="${BUILD_DIR}/default-manifest.o.saved"
     cp "${DEFAULT_MANIFEST}" "${DEFAULT_MANIFEST_BACKUP}" \
