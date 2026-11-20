@@ -1,6 +1,6 @@
 # Scriptorium backlog
 
-Last reviewed: 2026-11-05
+Last reviewed: 2026-11-20
 
 Agents: start at **Next Up** (3–5 pointer lines). Detail lives in linked plans, not here.
 Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
@@ -10,7 +10,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 - [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default
 - [Drop the openjpeg-sys patch](#unplanned--small) — when an `openjpeg-sys` release bundles OpenJPEG 2.5.4
 - [M1.5 PDF import](plans/2026-11-07-m15-pdf-import.md) — merged in #82; manual checks in M1 follow-ups
-- [M2a OCR engine and pipeline](plans/2026-11-07-m2a-ocr-pipeline.md) — Phase 1 engine spike on `feat/m2a-ocr-spike`
+- [M2a OCR engine and pipeline](plans/2026-11-07-m2a-ocr-pipeline.md) — Phases 1–2 merged; Phase 3 in [its plan](plans/2026-11-19-m2a-phase3-tesseract.md), part one in #86
 
 ## Active plans
 

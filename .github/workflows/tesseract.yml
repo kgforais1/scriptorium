@@ -28,6 +28,8 @@ jobs:
   build:
     name: Build and run (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # A full build takes about 7 minutes. The cap stops a hung build early.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -140,6 +142,8 @@ jobs:
           name: tesseract-${{ matrix.os }}
           path: src-tauri/binaries/tesseract-*
           if-no-files-found: error
+          # A re-run job uploads under the same name.
+          overwrite: true
 
   # Gathers the three binaries into the release layout on every run, so a PR exercises these
   # checks before any publish depends on them.
@@ -147,6 +151,7 @@ jobs:
     name: Gather the release assets
     needs: [build]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
@@ -179,6 +184,7 @@ jobs:
           name: release
           path: release/
           if-no-files-found: error
+          overwrite: true
 
   # Publishing is manual: dispatching a run with a release_tag creates a public release, so the
   # user approves each publish. See decision 2 in plans/2026-11-19-m2a-phase3-tesseract.md.
@@ -187,6 +193,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: [assets]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     # One publish at a time: two runs must not race on the same tag.
@@ -227,15 +234,21 @@ jobs:
             exit 1
           fi
           # --latest=false keeps README's /releases/latest link on the app's release.
-          # Create a draft first, so a failed upload leaves no public release with missing assets.
-          # The tag points at the dispatched commit. --target works with --repo and needs no checkout.
+          # Create an empty draft first, so a failed upload leaves no public release with missing
+          # assets. The tag points at the dispatched commit. --target works with --repo and needs
+          # no checkout.
           gh release create "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
             --draft \
             --latest=false \
             --target "${GITHUB_SHA}" \
             --title "${RELEASE_TAG}" \
-            --notes "Self-contained Tesseract binaries for the Scriptorium sidecar, one per supported target. SHA256SUMS lists the hashes pinned in scripts/fetch_tesseract.sh." \
+            --notes "Self-contained Tesseract binaries for the Scriptorium sidecar, one per supported target. SHA256SUMS lists the hashes pinned in scripts/fetch_tesseract.sh."
+          # From here this run owns the draft. If anything fails, delete it and its tag, so a retry
+          # can reuse the same tag instead of forcing a new r number and new pins. The trap is set
+          # only now, so a failed create never deletes a release someone else made.
+          trap 'echo "removing draft ${RELEASE_TAG}" >&2; gh release delete "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes || true' ERR
+          gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
             release/tesseract-aarch64-apple-darwin \
             release/tesseract-x86_64-unknown-linux-gnu \
             release/tesseract-x86_64-pc-windows-msvc.exe \
@@ -244,7 +257,8 @@ jobs:
           uploaded="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
             --json assets --jq '[.assets[].name] | sort | join(" ")')"
           if [ "${uploaded}" != "SHA256SUMS tesseract-aarch64-apple-darwin tesseract-x86_64-pc-windows-msvc.exe tesseract-x86_64-unknown-linux-gnu" ]; then
-            echo "draft ${RELEASE_TAG} has assets: ${uploaded}; left as a draft" >&2
-            exit 1
+            echo "draft ${RELEASE_TAG} has assets: ${uploaded}" >&2
+            false
           fi
           gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false --latest=false
+          trap - ERR

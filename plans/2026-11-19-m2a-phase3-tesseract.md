@@ -23,9 +23,9 @@ Those are Phase 4.
    `tesseract-x86_64-pc-windows-msvc.exe`. There is no x86_64 macOS asset. The app's macOS target is
    arm64 only today, and `fetch_tesseract.sh` exits with a clear message on an Intel Mac.
 2. **Publishing is manual.** `tesseract.yml` gains a `publish` job. It runs only on
-   `workflow_dispatch` with a `release_tag` input, needs the three build jobs, and is the only job
-   with `contents: write`. It downloads the three artifacts, writes `SHA256SUMS`, and creates the
-   release with `gh release create`. Builds are not bit-for-bit reproducible, so the hashes pinned
+   `workflow_dispatch` with a `release_tag` input, and is the only job with `contents: write`. An
+   `assets` job, which runs on every run, gathers the three binaries and writes `SHA256SUMS`. The
+   publish job takes that release layout and creates the release with `gh release create`. Builds are not bit-for-bit reproducible, so the hashes pinned
    in `fetch_tesseract.sh` are the hashes of the published assets, copied from `SHA256SUMS`, and
    checked by downloading each asset once by hand. Dispatching the publish run creates a public
    release, so it needs the user's approval each time.
@@ -77,10 +77,13 @@ Each chunk is one commit. The implementer writes it. Claude and the reviewer bot
 - On Windows, a separate step with `shell: msys2 {0}` checks the `.exe` imports no MinGW
   runtime DLL (`libgcc_s_seh-1.dll`, `libstdc++-6.dll`, `libwinpthread-1.dll`), with the MSYS2
   `objdump -p`. The job's default shell is Git Bash, whose `objdump` may be missing.
-- Add the `publish` job from decision 2, with `needs: [build]`. The matrix `build` job uploads
-  one artifact per runner, named `tesseract-<os>`. The publish job downloads all three, checks
-  each holds exactly the expected `tesseract-<triple>[.exe]`, and writes `SHA256SUMS`. It sets
-  `concurrency` so two publishes cannot race, and refuses a tag that `gh release view` finds.
+- Add an `assets` job with `needs: [build]`, which runs on every run. The matrix `build` job
+  uploads one artifact per runner, named `tesseract-<os>`. The `assets` job downloads all three,
+  checks each holds exactly the expected `tesseract-<triple>[.exe]`, writes `SHA256SUMS`, and
+  uploads the result as the `release` artifact.
+- Add the `publish` job from decision 2, with `needs: [assets]`. It runs only from the default
+  branch, refuses an existing release or tag, sets `concurrency` so two publishes cannot race,
+  and creates a draft outside "latest" that it publishes once every asset is uploaded.
 - Add `workflow_dispatch` input `release_tag`, with no default.
 - Check: the workflow runs green on the PR. Once the PR merges, the user approves, and the publish run is
   dispatched on `main`, so the tag points at a merged commit. The three asset hashes are recorded from `SHA256SUMS` and from a local download.
