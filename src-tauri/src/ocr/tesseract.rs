@@ -60,10 +60,15 @@ impl TesseractEngine {
     /// The debug-only `SCRIPTORIUM_TESSERACT` and `SCRIPTORIUM_TESSDATA` overrides come
     /// first, then the `scriptorium-tesseract` sidecar beside `current_exe()`, then, in debug
     /// builds, `src-tauri/binaries/scriptorium-tesseract-<triple>` and `src-tauri/tessdata/`.
-    /// Both paths must exist; the binary is not run.
+    /// Both paths must exist; the binary is not run. The chosen paths are absolute, because
+    /// the child runs in the image's directory and would otherwise resolve a relative
+    /// override from there.
     pub fn locate(resource_dir: Option<&Path>) -> Result<Self, OcrUnavailable> {
-        let binary = first_file(binary_candidates(), "Tesseract binary")?;
-        let tessdata = first_dir(tessdata_candidates(resource_dir), "Tesseract language data")?;
+        let binary = absolutise(first_file(binary_candidates(), "Tesseract binary")?);
+        let tessdata = absolutise(first_dir(
+            tessdata_candidates(resource_dir),
+            "Tesseract language data",
+        )?);
         Ok(Self { binary, tessdata })
     }
 
@@ -214,6 +219,18 @@ fn tessdata_candidates(resource_dir: Option<&Path>) -> Vec<PathBuf> {
     #[cfg(debug_assertions)]
     out.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tessdata"));
     out
+}
+
+/// Make `path` absolute, measured from the current directory when it is relative, so the
+/// child cannot later resolve it from the image's directory. Absolute paths are returned
+/// unchanged.
+fn absolutise(path: PathBuf) -> PathBuf {
+    if path.is_absolute() {
+        return path;
+    }
+    std::path::absolute(&path)
+        .or_else(|_| std::env::current_dir().map(|dir| dir.join(&path)))
+        .unwrap_or(path)
 }
 
 /// The first candidate that is a file, or an error naming every path tried.

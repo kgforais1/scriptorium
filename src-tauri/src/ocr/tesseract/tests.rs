@@ -47,6 +47,19 @@ fn id_matches_the_fetch_script_and_the_trait() {
 }
 
 #[test]
+fn a_relative_path_becomes_absolute_and_an_absolute_one_is_kept() {
+    let relative = absolutise(PathBuf::from("bin/tesseract"));
+    assert!(relative.is_absolute(), "{}", relative.display());
+    assert!(
+        relative.ends_with(Path::new("bin").join("tesseract")),
+        "{}",
+        relative.display()
+    );
+    let absolute = std::env::temp_dir().join("tessdata");
+    assert_eq!(absolutise(absolute.clone()), absolute);
+}
+
+#[test]
 fn a_real_smoke_page_parses() {
     let page = parse_tsv(SMOKE).unwrap();
     assert_eq!((page.width, page.height), (900, 160));

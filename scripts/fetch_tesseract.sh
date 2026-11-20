@@ -118,7 +118,12 @@ if [[ -f "${BIN_DEST}/${INSTALLED}" && -f "${TESSDATA_DEST}/eng.traineddata" \
 fi
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "${WORK}"' EXIT
+
+# Each file is staged beside its destination and renamed into place, so a reader never sees
+# a partly written file. The staged names are cleaned up if this run fails partway.
+BIN_STAGED="${BIN_DEST}/.${INSTALLED}.partial.$$"
+TESSDATA_STAGED="${TESSDATA_DEST}/.eng.traineddata.partial.$$"
+trap 'rm -rf "${WORK}"; rm -f "${BIN_STAGED}" "${TESSDATA_STAGED}"' EXIT
 
 BIN_TMP="${WORK}/${ASSET}"
 TESSDATA_TMP="${WORK}/eng.traineddata"
@@ -135,9 +140,18 @@ fetch_verified "${RELEASE_BASE}/${ASSET}" "${BIN_CACHED}" "${BIN_TMP}" "${EXPECT
 fetch_verified "${TESSDATA_URL}" "${TESSDATA_CACHED}" "${TESSDATA_TMP}" "${SHA256_TESSDATA_ENG}" "eng.traineddata"
 
 mkdir -p "${BIN_DEST}" "${TESSDATA_DEST}"
-cp "${BIN_TMP}" "${BIN_DEST}/${INSTALLED}"
-chmod +x "${BIN_DEST}/${INSTALLED}"
-cp "${TESSDATA_TMP}" "${TESSDATA_DEST}/eng.traineddata"
+
+# Drop the markers first: while they are gone the next run re-downloads, so it cannot skip
+# an install this one did not finish.
+rm -f "${BIN_DEST}/.version" "${TESSDATA_DEST}/.version"
+
+cp "${BIN_TMP}" "${BIN_STAGED}"
+chmod +x "${BIN_STAGED}"
+cp "${TESSDATA_TMP}" "${TESSDATA_STAGED}"
+mv -f "${BIN_STAGED}" "${BIN_DEST}/${INSTALLED}"
+mv -f "${TESSDATA_STAGED}" "${TESSDATA_DEST}/eng.traineddata"
+
+# Markers last, once both files are in place.
 echo "${TESSERACT_RELEASE} ${PLATFORM}" > "${BIN_DEST}/.version"
 echo "${TESSDATA_RELEASE}" > "${TESSDATA_DEST}/.version"
 echo "fetch_tesseract: installed ${BIN_DEST}/${INSTALLED} and ${TESSDATA_DEST}/eng.traineddata"
