@@ -260,5 +260,11 @@ jobs:
             echo "draft ${RELEASE_TAG} has assets: ${uploaded}" >&2
             false
           fi
-          gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false --latest=false
+          # Disarm before publishing. If the edit reports an error after GitHub has already made the
+          # release public, deleting it would break every clone, so a failure here only reports.
           trap - ERR
+          gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false --latest=false || {
+            echo "publishing ${RELEASE_TAG} reported an error; check its state by hand:" >&2
+            gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,assets >&2 || true
+            exit 1
+          }
