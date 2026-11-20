@@ -57,7 +57,7 @@ jobs:
           cache: false
           install: >-
             mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-nasm mingw-w64-x86_64-rust curl tar
+            mingw-w64-x86_64-nasm mingw-w64-x86_64-binutils mingw-w64-x86_64-rust curl tar
 
       - name: Install Linux build tools
         if: runner.os == 'Linux'
@@ -116,10 +116,35 @@ jobs:
           done
           exit "${status}"
 
-      - name: Run the binary with no system Tesseract
+      # Windows 10 1903 and later read narrow paths in the process code page named here. Without
+      # it, std::filesystem and Tesseract's own file opens use the ANSI code page, so a non-ASCII
+      # --tessdata-dir fails. The manifest is plain XML inside the exe, so strings finds it
+      # whatever form windres or objdump would print it in.
+      - name: Check the Windows binary embeds the UTF-8 manifest
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          exe="src-tauri/binaries/tesseract-x86_64-pc-windows-msvc.exe"
+          text="$(strings -n 8 "${exe}")"
+          # Two manifests (ours and a toolchain default) are not allowed: some ld versions
+          # reject the link, and the ones that merge it leave Windows free to pick.
+          count="$(grep -c '<assembly' <<< "${text}" || true)"
+          grep '<assembly\|activeCodePage' <<< "${text}" || true
+          if [ "${count}" -ne 1 ]; then
+            echo "${exe} must embed exactly one manifest, found ${count}" >&2
+            exit 1
+          fi
+          if ! grep -q 'activeCodePage[^>]*>UTF-8<' <<< "${text}"; then
+            echo "${exe} does not ask for UTF-8 as the process code page" >&2
+            exit 1
+          fi
+
+      - name: Run the binary from a non-ASCII directory with no system Tesseract
         run: |
           set -euo pipefail
           bin="$(ls src-tauri/binaries/tesseract-*)"
+          bin="${PWD}/${bin}"
           # Fail if a system Tesseract is visible on PATH.
           if command -v tesseract > /dev/null 2>&1; then
             echo "system tesseract on PATH"; exit 1
@@ -130,12 +155,26 @@ jobs:
             https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/eng.traineddata
           echo "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2  tmp/tessdata/eng.traineddata" > tmp/eng.sha256
           if command -v sha256sum > /dev/null 2>&1; then sha256sum -c tmp/eng.sha256; else shasum -a 256 -c tmp/eng.sha256; fi
-          # TSV mode, as the app runs it: options set directly, no configs/tsv file.
-          "$bin" tests/fixtures/ocr/smoke.png tmp/smoke --tessdata-dir tmp/tessdata \
+          # A non-ASCII working directory and --tessdata-dir is the Windows bug this covers:
+          # narrow paths are read in the ANSI code page unless the exe's manifest asks for UTF-8.
+          dir="tmp/scriptorium-ocr-tést"
+          rm -rf "${dir}"
+          mkdir -p "${dir}"
+          cp tests/fixtures/ocr/smoke.png "${dir}/smoke.png"
+          cp tmp/tessdata/eng.traineddata "${dir}/eng.traineddata"
+          # A native program needs the host's own path form; MSYS prints it with -W.
+          case "${RUNNER_OS}" in
+            Windows) tessdata="$(cd "${dir}" && { pwd -W 2> /dev/null || cygpath -w "$(pwd)"; })" ;;
+            *) tessdata="${PWD}/${dir}" ;;
+          esac
+          cd "${dir}"
+          # TSV mode, as the app runs it: options set directly, no configs/tsv file. The image is
+          # a bare name beside the working directory, as the app passes it.
+          "${bin}" smoke.png smoke --tessdata-dir "${tessdata}" \
             --psm 3 --oem 1 -c tessedit_create_tsv=1 -c tessedit_create_txt=0
-          cat tmp/smoke.tsv
-          head -1 tmp/smoke.tsv | grep -q "^level"
-          grep -qi "PRINCESS" tmp/smoke.tsv
+          cat smoke.tsv
+          head -1 smoke.tsv | grep -q "^level"
+          grep -qi "PRINCESS" smoke.tsv
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
