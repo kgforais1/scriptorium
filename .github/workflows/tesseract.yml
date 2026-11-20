@@ -207,9 +207,10 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          # The tag must point at a merged commit, never at a branch's.
-          if [ "${GITHUB_REF_NAME}" != "${DEFAULT_BRANCH}" ]; then
-            echo "publish from ${DEFAULT_BRANCH}, not ${GITHUB_REF_NAME}" >&2
+          # The tag must point at a merged commit, never at a branch's. Compare the full ref, so a
+          # tag named like the default branch is refused too.
+          if [ "${GITHUB_REF}" != "refs/heads/${DEFAULT_BRANCH}" ]; then
+            echo "publish from refs/heads/${DEFAULT_BRANCH}, not ${GITHUB_REF}" >&2
             exit 1
           fi
           # A mistyped tag would publish assets under a name no fetch pin points at.
@@ -217,17 +218,21 @@ jobs:
             echo "release_tag must look like tesseract-5.5.3-r1, got: ${RELEASE_TAG}" >&2
             exit 1
           fi
-          # An existing tag is refused: its assets are what fetch_tesseract.sh's pinned hashes
-          # point at, and replacing them would break every clone. Bump the r number instead.
-          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" > /dev/null; then
-            echo "release ${RELEASE_TAG} already exists; publish a new tag instead" >&2
+          # An existing release or tag is refused: a release's assets are what fetch_tesseract.sh's
+          # pinned hashes point at, and gh would reuse a bare tag that may point at other source.
+          # Bump the r number instead.
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1 ||
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" > /dev/null 2>&1; then
+            echo "release or tag ${RELEASE_TAG} already exists; publish a new tag instead" >&2
             exit 1
           fi
+          # --latest=false keeps README's /releases/latest link on the app's release.
           # Create a draft first, so a failed upload leaves no public release with missing assets.
           # The tag points at the dispatched commit. --target works with --repo and needs no checkout.
           gh release create "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
             --draft \
+            --latest=false \
             --target "${GITHUB_SHA}" \
             --title "${RELEASE_TAG}" \
             --notes "Self-contained Tesseract binaries for the Scriptorium sidecar, one per supported target. SHA256SUMS lists the hashes pinned in scripts/fetch_tesseract.sh." \
@@ -242,4 +247,4 @@ jobs:
             echo "draft ${RELEASE_TAG} has assets: ${uploaded}; left as a draft" >&2
             exit 1
           fi
-          gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false
+          gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false --latest=false
