@@ -129,7 +129,8 @@ jobs:
           text="$(strings -n 8 "${exe}")"
           # Two manifests (ours and a toolchain default) are not allowed: some ld versions
           # reject the link, and the ones that merge it leave Windows free to pick.
-          count="$(grep -c '<assembly' <<< "${text}" || true)"
+          # "<assembly " with the space, so <assemblyIdentity is not counted too.
+          count="$(grep -c '<assembly ' <<< "${text}" || true)"
           grep '<assembly\|activeCodePage' <<< "${text}" || true
           if [ "${count}" -ne 1 ]; then
             echo "${exe} must embed exactly one manifest, found ${count}" >&2
