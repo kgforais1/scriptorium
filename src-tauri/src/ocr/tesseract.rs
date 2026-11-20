@@ -481,4 +481,6 @@ fn add_word(out: &mut [Line], row: &Row<'_>, number: usize) -> Result<(), OcrErr
 }
 
 #[cfg(test)]
+mod integration;
+#[cfg(test)]
 mod tests;

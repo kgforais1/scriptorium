@@ -346,28 +346,3 @@ fn no_language_is_refused_before_spawning() {
     assert_eq!(result, Err(OcrError::NoLanguage));
     assert_clean(dir.path());
 }
-
-#[test]
-fn the_fetched_binary_reads_the_smoke_fixture() {
-    let Ok(engine) = TesseractEngine::locate(None) else {
-        eprintln!("skipping: no local Tesseract binary; run scripts/fetch_tesseract.sh");
-        return;
-    };
-    let image = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/ocr/smoke.png");
-    let page = engine
-        .recognize(
-            &image,
-            &eng(),
-            &AtomicBool::new(false),
-            Instant::now() + Duration::from_secs(120),
-        )
-        .unwrap();
-    assert_eq!((page.width, page.height), (900, 160));
-    let words = text_of(&page);
-    assert!(
-        words
-            .iter()
-            .any(|word| word.eq_ignore_ascii_case("PRINCESS")),
-        "{words:?}"
-    );
-}

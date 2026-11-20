@@ -242,6 +242,9 @@ jobs:
         run: cargo clippy --locked -- -D warnings
 
       - name: cargo test
+        env:
+          # A missing binary fails the test instead of skipping it.
+          SCRIPTORIUM_REQUIRE_TESSERACT: "1"
         run: cargo test --locked
 
       - name: cargo check
@@ -364,6 +367,9 @@ jobs:
       - name: cargo llvm-cov (summary)
         # Explicit bash adds -o pipefail, so a failing test or the coverage floor fails through tee.
         shell: bash
+        env:
+          # A missing binary fails the test instead of skipping it.
+          SCRIPTORIUM_REQUIRE_TESSERACT: "1"
         run: |
           {
             echo '### Rust coverage (lines must be at least 80%)'
@@ -452,6 +458,9 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: cargo test
+        env:
+          # A missing binary fails the test instead of skipping it.
+          SCRIPTORIUM_REQUIRE_TESSERACT: "1"
         run: cargo test --locked
 
   typecheck-ts:
