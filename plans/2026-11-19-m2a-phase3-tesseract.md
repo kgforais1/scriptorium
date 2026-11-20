@@ -17,8 +17,10 @@ Those are Phase 4.
 
 1. **Release asset naming.** The release tag is `tesseract-5.5.3-r1`. The `r` number goes up when
    the binaries are rebuilt with the same Tesseract version, for example after a library bump.
-   Each asset is the bare binary, named `tesseract-<target-triple>[.exe]`, so it lands in
-   `src-tauri/binaries/` unchanged. The assets are:
+   Each asset is the bare binary, named `tesseract-<target-triple>[.exe]`. It is installed as
+   `src-tauri/binaries/scriptorium-tesseract-<target-triple>[.exe]`, because a sidecar named
+   `tesseract` would clash with a distro `tesseract-ocr` package's `/usr/bin/tesseract` in
+   Tauri's `.deb`; the release assets keep their own names. The assets are:
    `tesseract-aarch64-apple-darwin`, `tesseract-x86_64-unknown-linux-gnu`, and
    `tesseract-x86_64-pc-windows-msvc.exe`. There is no x86_64 macOS asset. The app's macOS target is
    arm64 only today, and `fetch_tesseract.sh` exits with a clear message on an Intel Mac.
@@ -151,9 +153,9 @@ Each chunk is one commit. The implementer writes it. Claude and the reviewer bot
 
 ### Chunk 5: sidecar config and bundle checks
 
-- `tauri.conf.json`: `bundle.externalBin: ["binaries/tesseract"]` and the resource
+- `tauri.conf.json`: `bundle.externalBin: ["binaries/scriptorium-tesseract"]` and the resource
   `"tessdata/eng.traineddata": "tessdata/eng.traineddata"`. The fetch is added to both before-commands.
-- Run `pnpm tauri build` on macOS. Open the built app's `Contents/MacOS/tesseract` with
+- Run `pnpm tauri build` on macOS. Open the built app's `Contents/MacOS/scriptorium-tesseract` with
   `codesign -dv` and check it carries the app's signature. The app is signed ad hoc
   (`signingIdentity: "-"`), which may not set the hardened runtime flag. Record what Tauri
   emits. If the flag is absent, the check asserts the signature only, and `docs/ocr.md` notes

@@ -1,0 +1,10 @@
+level	page_num	block_num	par_num	line_num	word_num	left	top	width	height	conf	text
+1	1	0	0	0	0	0	0	100	200	-1	
+4	1	1	1	1	0	0	10	40	10	-1	
+5	1	1	1	1	1	0	10	40	10	90	one
+4	1	1	2	1	0	0	30	40	10	-1	
+5	1	1	2	1	1	0	30	40	10	90	two
+4	1	2	1	1	0	0	50	40	10	-1	
+5	1	2	1	1	1	0	50	40	10	90	three
+4	1	2	2	1	0	0	70	40	10	-1	
+5	1	2	2	1	1	0	70	40	10	90	four

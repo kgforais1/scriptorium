@@ -4,3 +4,5 @@ src/styles/skin-*.css text eol=lf
 THIRD_PARTY_LICENSES.generated.md text eol=lf linguist-generated
 # Byte-exact fixtures: a line-ending change breaks a PDF's xref offsets on Windows.
 *.pdf binary
+# Recorded Tesseract TSV: trailing tabs are data, and crlf.tsv must keep its CRLF endings.
+src-tauri/src/ocr/testdata/*.tsv -text

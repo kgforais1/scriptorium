@@ -2,7 +2,9 @@
 # Download the pinned Tesseract binary and English language data for the host platform.
 #
 # The binary comes from this repo's `tesseract-<version>-r<n>` release, as a bare
-# `tesseract-<target-triple>[.exe]`, so it lands in src-tauri/binaries/ unchanged. The
+# `tesseract-<target-triple>[.exe]` asset. It is installed as
+# `src-tauri/binaries/scriptorium-tesseract-<target-triple>[.exe]`, so a distro
+# `tesseract-ocr` package's `/usr/bin/tesseract` cannot clash with the bundle. The
 # language data comes from tesseract-ocr/tessdata_fast at the pinned tag, and lands in
 # src-tauri/tessdata/. Both SHA-256 values are checked against the values pinned below
 # before anything is installed. The script exits at once when both files are already
@@ -106,11 +108,12 @@ fetch_verified() {
 }
 
 detect_platform
+INSTALLED="scriptorium-${ASSET}"
 
-if [[ -f "${BIN_DEST}/${ASSET}" && -f "${TESSDATA_DEST}/eng.traineddata" \
+if [[ -f "${BIN_DEST}/${INSTALLED}" && -f "${TESSDATA_DEST}/eng.traineddata" \
     && "$(cat "${BIN_DEST}/.version" 2> /dev/null || true)" == "${TESSERACT_RELEASE} ${PLATFORM}" \
     && "$(cat "${TESSDATA_DEST}/.version" 2> /dev/null || true)" == "${TESSDATA_RELEASE}" ]]; then
-    echo "fetch_tesseract: ${ASSET} and eng.traineddata already present for ${TESSERACT_RELEASE}"
+    echo "fetch_tesseract: ${INSTALLED} and eng.traineddata already present for ${TESSERACT_RELEASE}"
     exit 0
 fi
 
@@ -132,9 +135,9 @@ fetch_verified "${RELEASE_BASE}/${ASSET}" "${BIN_CACHED}" "${BIN_TMP}" "${EXPECT
 fetch_verified "${TESSDATA_URL}" "${TESSDATA_CACHED}" "${TESSDATA_TMP}" "${SHA256_TESSDATA_ENG}" "eng.traineddata"
 
 mkdir -p "${BIN_DEST}" "${TESSDATA_DEST}"
-cp "${BIN_TMP}" "${BIN_DEST}/${ASSET}"
-chmod +x "${BIN_DEST}/${ASSET}"
+cp "${BIN_TMP}" "${BIN_DEST}/${INSTALLED}"
+chmod +x "${BIN_DEST}/${INSTALLED}"
 cp "${TESSDATA_TMP}" "${TESSDATA_DEST}/eng.traineddata"
 echo "${TESSERACT_RELEASE} ${PLATFORM}" > "${BIN_DEST}/.version"
 echo "${TESSDATA_RELEASE}" > "${TESSDATA_DEST}/.version"
-echo "fetch_tesseract: installed ${BIN_DEST}/${ASSET} and ${TESSDATA_DEST}/eng.traineddata"
+echo "fetch_tesseract: installed ${BIN_DEST}/${INSTALLED} and ${TESSDATA_DEST}/eng.traineddata"
