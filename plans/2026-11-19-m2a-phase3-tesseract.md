@@ -45,7 +45,7 @@ Those are Phase 4.
    a binary path from the environment.
 6. **The compile-time target triple.** `build.rs` exports `TARGET` as
    `SCRIPTORIUM_TARGET_TRIPLE` with `cargo:rustc-env`. The debug fallback looks for
-   `src-tauri/binaries/tesseract-<that triple>[.exe]`.
+   `src-tauri/binaries/scriptorium-tesseract-<that triple>[.exe]`.
 7. **Paths reach Tesseract as relative names.** The child runs with its working directory set to
    the image's directory. The image and the output base are passed as bare file names. This keeps
    a non-ASCII user name in the temp path away from Tesseract's argument handling on Windows. The
@@ -153,23 +153,52 @@ Each chunk is one commit. The implementer writes it. Claude and the reviewer bot
 
 ### Chunk 5: sidecar config and bundle checks
 
-- `tauri.conf.json`: `bundle.externalBin: ["binaries/scriptorium-tesseract"]` and the resource
-  `"tessdata/eng.traineddata": "tessdata/eng.traineddata"`. The fetch is added to both before-commands.
-- Run `pnpm tauri build` on macOS. Open the built app's `Contents/MacOS/scriptorium-tesseract` with
-  `codesign -dv` and check it carries the app's signature. The app is signed ad hoc
-  (`signingIdentity: "-"`), which may not set the hardened runtime flag. Record what Tauri
-  emits. If the flag is absent, the check asserts the signature only, and `docs/ocr.md` notes
-  that the hardened runtime check waits for a real signing identity. Run it on
-  the smoke image from the bundle's own layout with the bundle's tessdata. Record the result in
-  the PR.
-- New workflow, `.github/workflows/bundle.yml`, with one job on `windows-latest` and
-  `ubuntu-22.04`. Its own `on.pull_request.paths` limits it to PRs that touch
-  `scripts/*tesseract*`, `src-tauri/tauri.conf.json`, or `src-tauri/src/ocr/**`, and it also runs
-  weekly. On Linux it installs the same Tauri system packages the `rust` job does. It runs
-  `pnpm tauri build`, finds the sidecar and tessdata inside the bundle output, and runs the
-  sidecar on the smoke image with only that tessdata. On Linux it checks the AppImage's and the
-  `.deb`'s extracted trees. On Windows it checks the NSIS or MSI install tree as Tauri lays it
-  out before packaging, and records which path it used.
+- `tauri.conf.json` gains `bundle.externalBin: ["binaries/scriptorium-tesseract"]` and the
+  resource `"tessdata/eng.traineddata": "tessdata/eng.traineddata"` in the base config. Tauri
+  merges the per-OS configs as a JSON Merge Patch, so the `resources` objects merge key by key,
+  and the notices, pdfium and tessdata all survive. The bundle checks below assert all three.
+- The before-commands become exactly:
+  - `beforeDevCommand`: `pnpm pdfium:fetch && pnpm tesseract:fetch && pnpm dev`
+  - `beforeBuildCommand`: `pnpm pdfium:fetch && pnpm tesseract:fetch && pnpm licenses:check && pnpm build`
+
+  On Windows, Tauri runs them through `cmd`, so `bash` must be on `PATH`. Git Bash provides it
+  on the runners. `docs/development.md` says so for local Windows builds, as it already does
+  for `pdfium:fetch`.
+- `tauri-build` fails to compile when a listed `externalBin` file is missing. Every CI job that
+  compiles `src-tauri` already runs the fetch first. The licences job does not compile.
+- The sidecar smoke run is the same everywhere. Copy `tests/fixtures/ocr/smoke.png` into an
+  empty temp directory. From there, run the bundled sidecar with `env -i` (or a cleared
+  environment on Windows), `--tessdata-dir <the bundle's tessdata>`, `--psm 3 --oem 1`,
+  `-c tessedit_create_tsv=1 -c tessedit_create_txt=0`. Assert that `out.tsv` contains `PRINCESS`,
+  as `tesseract.yml` does.
+- macOS, run by hand: `pnpm tauri build`. In the `.app`, assert that
+  `Contents/MacOS/scriptorium-tesseract` exists and is executable, and that
+  `Contents/Resources/tessdata/eng.traineddata` exists. `codesign -dv` must exit 0 on the
+  sidecar and report the same signature kind as the main binary (ad hoc under
+  `signingIdentity: "-"`). Record the flags it prints, but do not assert on the hardened
+  runtime flag. On macOS 27 it is present even under the ad-hoc identity. `docs/ocr.md` records
+  that, and notes that the full check waits for a real identity. Then do the smoke run. Record the output in the PR.
+- New workflow, `.github/workflows/bundle.yml`, copying the `ci.yml` header pattern:
+  `permissions: contents: read`, a `concurrency` group that cancels superseded runs, actions
+  pinned by SHA, and `timeout-minutes: 45`. It runs on `workflow_dispatch`, weekly by
+  `schedule`, and on PRs whose paths touch `scripts/fetch_tesseract.sh`,
+  `scripts/fetch_pdfium*`, `src-tauri/tauri*.conf.json`, `src-tauri/build.rs`,
+  `src-tauri/Cargo.toml`, `src-tauri/src/ocr/**`, `package.json`, or the workflow itself.
+  It caches the pnpm store, the Rust build (`Swatinem/rust-cache`), and the fetched assets
+  through `TESSERACT_ASSET_CACHE`, as `ci.yml` does.
+  - Linux (`ubuntu-22.04`) installs the same packages as the `rust` job, plus `libfuse2` only if
+    the AppImage build needs it. It runs `pnpm tauri build --bundles deb,appimage`. It unpacks the
+    `.deb` with `dpkg-deb -x` and asserts `usr/bin/scriptorium-tesseract` and
+    `usr/lib/Scriptorium/tessdata/eng.traineddata`. It unpacks the AppImage with
+    `--appimage-extract` and asserts the same paths under `squashfs-root/`. It runs the smoke run
+    from each tree.
+  - Windows (`windows-latest`) runs `pnpm tauri build --bundles nsis`. NSIS is the authoritative
+    Windows target for this check. It asserts `target/release/scriptorium-tesseract.exe` and
+    `target/release/tessdata/eng.traineddata`, which is the tree NSIS packages. It then
+    installs the NSIS installer silently (`/S /D=<temp dir>`), asserts the same two files in the
+    install directory, and does the smoke run from there.
+- Phase 4 must call `TesseractEngine::locate(app.path().resource_dir().ok().as_deref())`. This
+  chunk leaves that unwired.
 
 ### Chunk 6: notices, policy, CVEs, docs
 

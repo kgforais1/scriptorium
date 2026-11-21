@@ -1,11 +1,11 @@
 # OCR engine
 
-Last reviewed: 2026-11-09
+Last reviewed: 2026-11-21
 
 Scriptorium will bundle **Tesseract 5.5.3** with the `tessdata_fast` English model as its OCR
-engine. The app does not bundle or run Tesseract yet. M2a Phase 3 adds it as a sidecar binary,
-so a crash on a bad page cannot take down the app. This page records why Tesseract was chosen,
-how the binary is built, and how to bump it. The plan is
+engine. M2a Phase 3 adds it as a sidecar binary, so a crash on a bad page cannot take down the
+app. The bundle carries the binary and language data now. No command or UI uses them yet. This
+page records why Tesseract was chosen, how the binary is built, and how to bump it. The plan is
 [M2a OCR engine and pipeline](../plans/2026-11-07-m2a-ocr-pipeline.md).
 
 ## Decision (2026-11-09)
@@ -69,6 +69,21 @@ Build notes, kept in the script's comments:
 - The Windows build's triple is `x86_64-pc-windows-gnu`. The app builds for
   `x86_64-pc-windows-msvc`, so Phase 3 sets `TESSERACT_TARGET_TRIPLE=x86_64-pc-windows-msvc`
   to name the binary the way Tauri's sidecar convention expects.
+
+## In the bundle
+
+`tauri.conf.json` lists `binaries/scriptorium-tesseract` as an `externalBin` and
+`tessdata/eng.traineddata` as a resource. Both before-commands run `pnpm tesseract:fetch`.
+On macOS, `pnpm tauri build` puts the sidecar at `Contents/MacOS/scriptorium-tesseract` and the
+language data at `Contents/Resources/tessdata/eng.traineddata`. The bundles are checked by
+[`bundle.yml`](../.github/workflows/bundle.yml) on Linux (the `.deb` and the AppImage) and
+Windows (the release tree and the NSIS install). The macOS check is run by hand.
+
+The app is signed ad hoc with `signingIdentity: "-"`. `codesign -dv` reports `Signature=adhoc`
+for both the main binary and the sidecar. The plan expected the hardened runtime flag to be
+absent under an ad-hoc identity. On macOS 27 with the current toolchain it is present
+(`flags=0x10002(adhoc,runtime)`). A real signing identity is still needed for the full Gatekeeper
+and notarization check.
 
 ## Bumping
 

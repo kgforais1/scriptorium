@@ -1,6 +1,6 @@
 # Developing Scriptorium
 
-Last reviewed: 2026-11-02
+Last reviewed: 2026-11-21
 
 How to build Scriptorium from source, run its tools, and find your way around the repository.
 Agents start at [`AGENTS.md`](../AGENTS.md).
@@ -24,6 +24,13 @@ Agents start at [`AGENTS.md`](../AGENTS.md).
   `curl`; on Windows use Git Bash). Run that once yourself before a bare `cargo build`, `cargo
   test`, or `cargo clippy`: the platform Tauri config lists the library as a resource, so a Rust
   build fails without it. The script returns at once when the library is already there.
+- **Tesseract**: OCR runs a pinned Tesseract sidecar. `pnpm tauri dev` and `pnpm tauri build`
+  fetch it with `pnpm tesseract:fetch` from `scripts/fetch_tesseract.sh`. The script needs
+  `bash` and `curl`. On Windows, use Git Bash. Run the script once before a bare `cargo build`,
+  `cargo test`, or `cargo clippy`. The Rust build fails without it because `tauri.conf.json`
+  lists the binary as an `externalBin`. On Windows, Tauri runs the before-commands through
+  `cmd`, so `bash` must be on `PATH`. Git Bash provides it. The script returns at once when the
+  binary and language data are already there.
 - **direnv (optional)** — `cp .envrc.example .envrc && direnv allow` to auto-load
   project env vars. `.envrc.example` documents the available variables.
 
