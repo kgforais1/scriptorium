@@ -104,6 +104,18 @@ fn empty_text_and_negative_confidence_words_are_dropped() {
 }
 
 #[test]
+fn a_nan_confidence_is_stored_as_zero() {
+    let tsv = format!(
+        "{}\n1\t1\t0\t0\t0\t0\t0\t0\t10\t20\t-1\t\n\
+         4\t1\t1\t1\t1\t0\t0\t0\t10\t10\t95\t\n\
+         5\t1\t1\t1\t1\t1\t0\t0\t10\t10\tNaN\tWORD\n",
+        TSV_COLUMNS.join("\t")
+    );
+    let page = parse_tsv(&tsv).unwrap();
+    assert_eq!(page.lines[0].words[0].conf, 0.0);
+}
+
+#[test]
 fn paragraph_numbers_restart_with_each_block() {
     let page = parse_tsv(PAR_RESTART).unwrap();
     let paragraphs = page

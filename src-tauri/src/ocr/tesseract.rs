@@ -498,10 +498,17 @@ fn add_word(out: &mut [Line], row: &Row<'_>, number: usize) -> Result<(), OcrErr
     let Some(line) = out.last_mut() else {
         return Err(row_error(number, "is a word with no line row before it"));
     };
+    // `NaN` evades the negative test above and survives `clamp`, so map it to 0, as
+    // `normalise_conf` does.
+    let conf = if row.conf.is_nan() {
+        0.0
+    } else {
+        (row.conf / 100.0).clamp(0.0, 1.0)
+    };
     line.words.push(Word {
         text: row.text.to_string(),
         bbox: row.bbox(),
-        conf: (row.conf / 100.0).clamp(0.0, 1.0),
+        conf,
     });
     Ok(())
 }

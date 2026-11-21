@@ -120,10 +120,13 @@ fi
 WORK="$(mktemp -d)"
 
 # Each file is staged beside its destination and renamed into place, so a reader never sees
-# a partly written file. The staged names are cleaned up if this run fails partway.
-BIN_STAGED="${BIN_DEST}/.${INSTALLED}.partial.$$"
-TESSDATA_STAGED="${TESSDATA_DEST}/.eng.traineddata.partial.$$"
-trap 'rm -rf "${WORK}"; rm -f "${BIN_STAGED}" "${TESSDATA_STAGED}"' EXIT
+# a partly written file. The staged names are made with mktemp after their directories exist,
+# and are cleaned up if this run fails partway.
+BIN_STAGED=""
+TESSDATA_STAGED=""
+trap 'rm -rf "${WORK}"
+    [[ -z "${BIN_STAGED}" ]] || rm -f "${BIN_STAGED}"
+    [[ -z "${TESSDATA_STAGED}" ]] || rm -f "${TESSDATA_STAGED}"' EXIT
 
 BIN_TMP="${WORK}/${ASSET}"
 TESSDATA_TMP="${WORK}/eng.traineddata"
@@ -141,13 +144,19 @@ fetch_verified "${TESSDATA_URL}" "${TESSDATA_CACHED}" "${TESSDATA_TMP}" "${SHA25
 
 mkdir -p "${BIN_DEST}" "${TESSDATA_DEST}"
 
+# Stage in the destination directories so the renames stay on one filesystem. mktemp makes
+# each file 0600, so the modes are set explicitly before the renames.
+BIN_STAGED="$(mktemp "${BIN_DEST}/.${INSTALLED}.XXXXXX")"
+TESSDATA_STAGED="$(mktemp "${TESSDATA_DEST}/.eng.traineddata.XXXXXX")"
+
 # Drop the markers first: while they are gone the next run re-downloads, so it cannot skip
 # an install this one did not finish.
 rm -f "${BIN_DEST}/.version" "${TESSDATA_DEST}/.version"
 
 cp "${BIN_TMP}" "${BIN_STAGED}"
-chmod +x "${BIN_STAGED}"
+chmod 0755 "${BIN_STAGED}"
 cp "${TESSDATA_TMP}" "${TESSDATA_STAGED}"
+chmod 0644 "${TESSDATA_STAGED}"
 mv -f "${BIN_STAGED}" "${BIN_DEST}/${INSTALLED}"
 mv -f "${TESSDATA_STAGED}" "${TESSDATA_DEST}/eng.traineddata"
 
