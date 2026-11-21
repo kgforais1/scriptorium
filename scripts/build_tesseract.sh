@@ -7,6 +7,11 @@
 # The result is src-tauri/binaries/tesseract-<target-triple>[.exe], which depends only on
 # system libraries.
 #
+# On Windows the exe embeds an application manifest that makes UTF-8 the process code page.
+# Without it, narrow paths (C++ std::filesystem, and every char* Tesseract and Leptonica pass
+# to the C library) are read in the ANSI code page, so a non-ASCII working directory or
+# --tessdata-dir fails with "Cannot convert character sequence: Illegal byte sequence".
+#
 # Status: macOS arm64, Linux x64, and Windows x64 (MSYS2 MinGW64 shell) all build and run in
 # .github/workflows/tesseract.yml. Set TESSERACT_TARGET_TRIPLE to name the output for a target
 # other than the host, e.g. x86_64-pc-windows-msvc for the app's Windows target.
@@ -44,13 +49,15 @@ BUILD_DIR="${TESSERACT_BUILD_DIR:-${REPO_ROOT}/tmp/tesseract-build}"
 PREFIX="${BUILD_DIR}/prefix"
 OUT_DIR="${REPO_ROOT}/src-tauri/binaries"
 
-# Sets TRIPLE, EXE_SUFFIX and the extra CMake arguments for the host.
+# Sets TRIPLE, EXE_SUFFIX, EXE_LINKER_FLAGS and the extra CMake arguments for the host.
 detect_platform() {
     local os arch
     os="$(uname -s)"
     arch="$(uname -m)"
     TRIPLE="${TESSERACT_TARGET_TRIPLE:-$(rustc -vV | sed -n 's/^host: //p')}"
     EXE_SUFFIX=""
+    EXE_LINKER_FLAGS=""
+    MINGW=0
     PLATFORM_ARGS=()
     case "${os}-${arch}" in
         Darwin-arm64)
@@ -62,10 +69,12 @@ detect_platform() {
             PLATFORM_ARGS+=("-DCMAKE_POSITION_INDEPENDENT_CODE=ON")
             ;;
         MINGW*-x86_64 | MSYS*-x86_64)
-            # Run from an MSYS2 MINGW64 shell with mingw-w64-x86_64-{gcc,cmake,ninja,
-            # nasm}. Static libgcc/libstdc++ keep the .exe free of MinGW runtime DLLs.
+            # Run from an MSYS2 MINGW64 shell with mingw-w64-x86_64-{gcc,cmake,ninja,nasm,
+            # binutils}. Static libgcc/libstdc++ keep the .exe free of MinGW runtime DLLs.
             EXE_SUFFIX=".exe"
-            PLATFORM_ARGS+=("-G" "Ninja" "-DCMAKE_EXE_LINKER_FLAGS=-static -static-libgcc -static-libstdc++")
+            EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++"
+            MINGW=1
+            PLATFORM_ARGS+=("-G" "Ninja")
             ;;
         *)
             echo "build_tesseract: unsupported host ${os} ${arch}" >&2
@@ -133,6 +142,49 @@ show_dependencies() {
     esac
 }
 
+# build_utf8_manifest : writes the application manifest that makes UTF-8 the process code page,
+# compiles it into a resource object with windres, and prints the object's path.
+#
+# Windows 10 1903 and later honour activeCodePage. longPathAware keeps what the manifest MinGW
+# adds by default already gives, so replacing it does not change how long paths behave.
+build_utf8_manifest() {
+    local dir="${BUILD_DIR}/manifest"
+    mkdir -p "${dir}"
+    cat > "${dir}/tesseract.manifest" <<EOF
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity type="win32" name="scriptorium.tesseract" version="${TESSERACT_VERSION}.0" processorArchitecture="amd64"/>
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+    </windowsSettings>
+  </application>
+</assembly>
+EOF
+    # RT_MANIFEST is type 24, and an executable's manifest must use resource id 1.
+    printf '1 24 "tesseract.manifest"\n' > "${dir}/tesseract.rc"
+    command -v windres > /dev/null 2>&1 \
+        || { echo "build_tesseract: windres is missing; install mingw-w64-x86_64-binutils" >&2; exit 1; }
+    # windres opens the manifest relative to the working directory, so run it in its own.
+    # Named like the toolchain's own file, so gcc picks it up through -B (see below).
+    # This runs inside $(...), where set -e does not apply, so a failure must return by hand.
+    ( cd "${dir}" && windres -i tesseract.rc -o default-manifest.o ) || return 1
+    echo "${dir}/default-manifest.o"
+}
+
 START="$(date +%s)"
 detect_platform
 if command -v nproc > /dev/null 2>&1; then
@@ -143,6 +195,24 @@ fi
 
 rm -rf "${BUILD_DIR}/src" "${BUILD_DIR}/build" "${PREFIX}"
 mkdir -p "${PREFIX}"
+
+# The Windows exe needs the UTF-8 manifest. GCC's MinGW specs link a file named
+# default-manifest.o into every exe, found on the startfile search path. A second manifest
+# beside ours is refused by some ld versions ("multiple non-default manifests"), and the ones
+# that merge it leave which one Windows reads undefined. So the Tesseract link gets -B with a
+# directory holding our own default-manifest.o, which gcc searches first. The exe then carries
+# exactly one manifest, ours, and the shared toolchain is never changed. The path is converted
+# because the native compiler cannot open MSYS paths (/d/a/...), and quoted for CMake, which
+# pastes these flags into the link command as written.
+MANIFEST_OBJ=""
+if [[ "${MINGW}" == 1 ]]; then
+    MANIFEST_OBJ="$(build_utf8_manifest)"
+    MANIFEST_DIR="$(dirname "${MANIFEST_OBJ}")"
+    if command -v cygpath > /dev/null 2>&1; then
+        MANIFEST_DIR="$(cygpath -m "${MANIFEST_DIR}")"
+    fi
+    EXE_LINKER_FLAGS="${EXE_LINKER_FLAGS} \"-B${MANIFEST_DIR}/\""
+fi
 
 fetch_source zlib "https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz" "${SHA256_ZLIB}"
 fetch_source libpng "https://github.com/pnggroup/libpng/archive/refs/tags/v${LIBPNG_VERSION}.tar.gz" "${SHA256_LIBPNG}"
@@ -197,7 +267,8 @@ cmake_build tesseract -DSW_BUILD=OFF -DDISABLE_CURL=ON -DDISABLE_ARCHIVE=ON -DOP
     -DUSE_SYSTEM_ICU=OFF -DBUILD_TRAINING_TOOLS=OFF -DBUILD_TESTS=OFF -DGRAPHICS_DISABLED=ON \
     -DOPENCL=OFF -DDISABLE_TIFF=OFF \
     -DLeptonica_DIR="${PREFIX}/lib/cmake/leptonica" \
-    -DCMAKE_CXX_STANDARD_LIBRARIES="${TAIL_LIBS}"
+    -DCMAKE_CXX_STANDARD_LIBRARIES="${TAIL_LIBS}" \
+    -DCMAKE_EXE_LINKER_FLAGS="${EXE_LINKER_FLAGS}"
 
 mkdir -p "${OUT_DIR}"
 OUT="${OUT_DIR}/tesseract-${TRIPLE}${EXE_SUFFIX}"
@@ -216,5 +287,13 @@ show_dependencies "${OUT}"
 if show_dependencies "${OUT}" | grep -v ':$' | grep -iE 'lept|tesseract|libpng|jpeg|tiff|webp|libz[.-]|zlib'; then
     echo "build_tesseract: ${OUT} depends on a shared copy of a bundled library" >&2
     exit 1
+fi
+# The UTF-8 manifest must have reached the shipped exe, after the strip. It is plain XML in the
+# resource section, so strings finds it.
+if [[ -n "${MANIFEST_OBJ}" ]]; then
+    # Not grep -q: it would exit at the first match, and strings' SIGPIPE would then fail the
+    # pipeline under pipefail.
+    strings -n 8 "${OUT}" | grep 'activeCodePage' > /dev/null \
+        || { echo "build_tesseract: ${OUT} has no activeCodePage manifest" >&2; exit 1; }
 fi
 echo "build_tesseract: wrote ${OUT} in $(($(date +%s) - START))s"
