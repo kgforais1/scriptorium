@@ -184,6 +184,17 @@ EOF
     echo "${dir}/default-manifest.o"
 }
 
+START="$(date +%s)"
+detect_platform
+if command -v nproc > /dev/null 2>&1; then
+    JOBS="${TESSERACT_JOBS:-$(nproc)}"
+else
+    JOBS="${TESSERACT_JOBS:-$(sysctl -n hw.ncpu)}"
+fi
+
+rm -rf "${BUILD_DIR}/src" "${BUILD_DIR}/build" "${PREFIX}"
+mkdir -p "${PREFIX}"
+
 # The Windows exe needs the UTF-8 manifest. GCC's MinGW specs link a file named
 # default-manifest.o into every exe, found on the startfile search path. A second manifest
 # beside ours is refused by some ld versions ("multiple non-default manifests"), and the ones
