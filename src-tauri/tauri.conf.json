@@ -4,9 +4,9 @@
   "version": "0.2.0",
   "identifier": "dev.scriptorium.app",
   "build": {
-    "beforeDevCommand": "pnpm pdfium:fetch && pnpm dev",
+    "beforeDevCommand": "pnpm pdfium:fetch && pnpm tesseract:fetch && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm pdfium:fetch && pnpm licenses:check && pnpm build",
+    "beforeBuildCommand": "pnpm pdfium:fetch && pnpm tesseract:fetch && pnpm licenses:check && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -98,6 +98,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": [
+      "binaries/scriptorium-tesseract"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -108,7 +111,8 @@
     "resources": {
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
       "../THIRD_PARTY_LICENSES.generated.md": "THIRD_PARTY_LICENSES.generated.md",
-      "../LICENSE": "LICENSE"
+      "../LICENSE": "LICENSE",
+      "tessdata/eng.traineddata": "tessdata/eng.traineddata"
     },
     "macOS": {
       "minimumSystemVersion": "13.3",

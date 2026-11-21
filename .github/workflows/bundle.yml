@@ -1,0 +1,438 @@
+# bundle.yml — proves the built packages carry the Tesseract sidecar and its language data.
+# Runs on demand, weekly, and on PRs that change how a bundle is assembled. The macOS check is
+# run by hand (see plans/2026-11-19-m2a-phase3-tesseract.md, Chunk 5).
+# Action refs are pinned to full commit SHAs; trailing comments keep Dependabot updates working.
+
+name: Bundle
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, so a bundler or runner-image change shows up without a code change.
+    - cron: "23 4 * * 1"
+  pull_request:
+    paths:
+      - scripts/fetch_tesseract.sh
+      - scripts/fetch_pdfium*
+      - src-tauri/tauri*.conf.json
+      - src-tauri/build.rs
+      - src-tauri/Cargo.toml
+      - src-tauri/src/ocr/**
+      - package.json
+      - .github/workflows/bundle.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bundle-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Bundle (Linux)
+    runs-on: ubuntu-22.04
+    # A cold run builds the frontend and the release binary, then two bundles.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Cache pdfium archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pdfium-archives
+          # The script pins the release and the hashes, so its hash is the version key.
+          key: pdfium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch_pdfium.sh') }}
+
+      - name: Fetch pdfium
+        env:
+          PDFIUM_ARCHIVE_CACHE: .pdfium-archives
+        run: |
+          bash scripts/fetch_pdfium.sh
+          echo "PDFIUM_DYNAMIC_LIB_PATH=${GITHUB_WORKSPACE}/src-tauri/pdfium" >> "$GITHUB_ENV"
+
+      - name: Cache tesseract assets
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tesseract-assets
+          # The script pins the release and the hashes, so its hash is the version key.
+          key: tesseract-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch_tesseract.sh') }}
+
+      - name: Fetch tesseract
+        env:
+          TESSERACT_ASSET_CACHE: .tesseract-assets
+        run: bash scripts/fetch_tesseract.sh
+
+      - name: Install Tauri Linux system deps
+        # The same set as the `rust` job. The AppImage bundler runs linuxdeploy with
+        # APPIMAGE_EXTRACT_AND_RUN=1, and checking with --appimage-extract avoids mounting, so
+        # FUSE 2 is not needed.
+        run: |
+          # Retry, since a mirror mid-sync can fail a fetch.
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev \
+            libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install Rust toolchain
+        run: |
+          # Respects rust-toolchain.toml (pinned channel).
+          rustup show
+
+      # rust-cache keeps compiled dependencies but drops this crate's own build
+      # output and stale files. Only main saves; PRs restore from it.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # beforeBuildCommand runs `pnpm licenses:check`, which needs cargo-about.
+      - name: cargo-about version (package.json config.cargoAboutVersion)
+        id: cargo-about-version
+        run: |
+          version=$(node -p 'require("./package.json").config?.cargoAboutVersion ?? ""')
+          if [ -z "$version" ]; then
+            echo "::error::package.json is missing config.cargoAboutVersion"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cargo-about-bin
+        with:
+          path: ~/.cargo/bin/cargo-about
+          key: cargo-about-${{ runner.os }}-${{ steps.cargo-about-version.outputs.version }}
+
+      - name: Install cargo-about
+        if: steps.cargo-about-bin.outputs.cache-hit != 'true'
+        env:
+          CARGO_ABOUT_VERSION: ${{ steps.cargo-about-version.outputs.version }}
+        run: cargo install cargo-about --locked --version "$CARGO_ABOUT_VERSION" --features cli
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the bundles
+        env:
+          # The scripts' own fetch runs inside beforeBuildCommand; they reuse these downloads.
+          TESSERACT_ASSET_CACHE: .tesseract-assets
+          PDFIUM_ARCHIVE_CACHE: .pdfium-archives
+        run: pnpm tauri build --bundles deb,appimage
+
+      # Layout comes from find, not a fixed path, so a layout change shows up in the log with the
+      # path that was actually found.
+      - name: Unpack, check, and smoke-test the .deb and the AppImage
+        run: |
+          set -euo pipefail
+
+          dump_tree() {
+            find "$1" -maxdepth 5 -print 2> /dev/null || true
+          }
+
+          require_file() {
+            if [ -z "$1" ] || [ ! -f "$1" ]; then
+              echo "expected file missing: ${1:-<none found>}" >&2
+              echo "bundle tree under $2:" >&2
+              dump_tree "$2" >&2
+              exit 1
+            fi
+          }
+
+          require_exec() {
+            require_file "$1" "$2"
+            if [ ! -x "$1" ]; then
+              ls -l "$1" >&2 || true
+              echo "expected an executable at $1" >&2
+              exit 1
+            fi
+          }
+
+          FOUND=""
+
+          # find_one sets FOUND to the first match for pattern under root, then checks it.
+          find_one() {
+            local root="$1" pattern="$2" kind="$3" what="$4"
+            FOUND="$(find "${root}" -path "${pattern}" -print -quit)"
+            if [ -z "${FOUND}" ]; then
+              echo "expected ${what}, no match for ${pattern} under ${root}" >&2
+              dump_tree "${root}" >&2
+              exit 1
+            fi
+            if [ "${kind}" = exec ]; then
+              require_exec "${FOUND}" "${root}"
+            else
+              require_file "${FOUND}" "${root}"
+            fi
+            echo "found ${what}: ${FOUND}"
+          }
+
+          # The sidecar belongs on PATH as usr/bin/<name>, and the data under usr/lib/<name>.
+          require_linux_layout() {
+            local bin="$1" tessdata="$2" label="$3"
+            case "${bin}" in
+              */usr/bin/scriptorium-tesseract) ;;
+              *) echo "${label}: sidecar is not under usr/bin: ${bin}" >&2; exit 1 ;;
+            esac
+            case "${tessdata}" in
+              */usr/lib/*/tessdata/eng.traineddata) ;;
+              *) echo "${label}: tessdata is not under usr/lib/*/tessdata: ${tessdata}" >&2; exit 1 ;;
+            esac
+          }
+
+          smoke() {
+            local label="$1" bin="$2" tessdata="$3" work bin_abs tessdata_dir
+            # The child runs in the temp directory, so both paths must be absolute first.
+            bin_abs="$(cd "$(dirname "${bin}")" && pwd)/$(basename "${bin}")"
+            tessdata_dir="$(cd "$(dirname "${tessdata}")" && pwd)"
+            echo "smoke ${label}: sidecar=${bin_abs} tessdata_dir=${tessdata_dir}"
+            work="$(mktemp -d)"
+            cp tests/fixtures/ocr/smoke.png "${work}/smoke.png"
+            (cd "${work}" && env -i "${bin_abs}" smoke.png out --tessdata-dir "${tessdata_dir}" \
+              --psm 3 --oem 1 -c tessedit_create_tsv=1 -c tessedit_create_txt=0)
+            if ! grep -qi "PRINCESS" "${work}/out.tsv"; then
+              echo "${label}: out.tsv has no PRINCESS" >&2
+              cat "${work}/out.tsv" >&2 || true
+              rm -rf "${work}"
+              exit 1
+            fi
+            echo "${label}: PRINCESS found in out.tsv"
+            rm -rf "${work}"
+          }
+
+          if command -v tesseract > /dev/null 2>&1; then
+            echo "system tesseract on PATH"; exit 1
+          fi
+
+          rm -rf tmp/bundle-deb tmp/bundle-appimage
+          mkdir -p tmp/bundle-deb tmp/bundle-appimage
+
+          deb="$(find src-tauri/target/release/bundle/deb -maxdepth 1 -name '*.deb' -print -quit)"
+          require_file "${deb}" src-tauri/target/release/bundle/deb
+          dpkg-deb -x "${deb}" tmp/bundle-deb
+          deb_root=tmp/bundle-deb
+          find_one "${deb_root}" '*/usr/bin/scriptorium-tesseract' exec "deb sidecar"
+          deb_bin="${FOUND}"
+          find_one "${deb_root}" '*/usr/lib/*/tessdata/eng.traineddata' file "deb tessdata"
+          deb_tessdata="${FOUND}"
+          find_one "${deb_root}" '*/libpdfium.so' file "deb pdfium"
+          find_one "${deb_root}" '*/THIRD_PARTY_NOTICES.md' file "deb notices"
+          require_linux_layout "${deb_bin}" "${deb_tessdata}" deb
+
+          appimage="$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)"
+          require_file "${appimage}" src-tauri/target/release/bundle/appimage
+          chmod +x "${appimage}"
+          # --appimage-extract runs the runtime without mounting, so no FUSE is needed here.
+          (cd tmp/bundle-appimage && "${GITHUB_WORKSPACE}/${appimage}" --appimage-extract > /dev/null)
+          appimage_root=tmp/bundle-appimage/squashfs-root
+          find_one "${appimage_root}" '*/usr/bin/scriptorium-tesseract' exec "appimage sidecar"
+          appimage_bin="${FOUND}"
+          find_one "${appimage_root}" '*/usr/lib/*/tessdata/eng.traineddata' file "appimage tessdata"
+          appimage_tessdata="${FOUND}"
+          find_one "${appimage_root}" '*/libpdfium.so' file "appimage pdfium"
+          find_one "${appimage_root}" '*/THIRD_PARTY_NOTICES.md' file "appimage notices"
+          require_linux_layout "${appimage_bin}" "${appimage_tessdata}" appimage
+
+          smoke deb "${deb_bin}" "${deb_tessdata}"
+          smoke appimage "${appimage_bin}" "${appimage_tessdata}"
+
+  windows:
+    name: Bundle (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Put Git Bash on PATH for the before-commands
+        # Tauri runs beforeBuildCommand through cmd, so `bash` (used by the fetch scripts)
+        # must resolve there. GITHUB_PATH needs a Windows path.
+        run: printf '%s\n' 'C:\Program Files\Git\bin' >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # pnpm's store sits under LOCALAPPDATA on Windows, not ~/.local/share.
+          path: ~/AppData/Local/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Cache pdfium archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pdfium-archives
+          # The script pins the release and the hashes, so its hash is the version key.
+          key: pdfium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch_pdfium.sh') }}
+
+      - name: Fetch pdfium
+        env:
+          # Relative, because Git Bash on Windows mishandles a backslash workspace path.
+          PDFIUM_ARCHIVE_CACHE: .pdfium-archives
+        run: |
+          bash scripts/fetch_pdfium.sh
+          echo "PDFIUM_DYNAMIC_LIB_PATH=${{ github.workspace }}/src-tauri/pdfium" >> "$GITHUB_ENV"
+
+      - name: Cache tesseract assets
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tesseract-assets
+          key: tesseract-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch_tesseract.sh') }}
+
+      - name: Fetch tesseract
+        env:
+          TESSERACT_ASSET_CACHE: .tesseract-assets
+        run: bash scripts/fetch_tesseract.sh
+
+      - name: Install Rust toolchain
+        run: |
+          # Respects rust-toolchain.toml (pinned channel).
+          rustup show
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # beforeBuildCommand runs `pnpm licenses:check`, which needs cargo-about.
+      - name: cargo-about version (package.json config.cargoAboutVersion)
+        id: cargo-about-version
+        run: |
+          version=$(node -p 'require("./package.json").config?.cargoAboutVersion ?? ""')
+          if [ -z "$version" ]; then
+            echo "::error::package.json is missing config.cargoAboutVersion"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cargo-about-bin
+        with:
+          path: ~/.cargo/bin/cargo-about
+          key: cargo-about-${{ runner.os }}-${{ steps.cargo-about-version.outputs.version }}
+
+      - name: Install cargo-about
+        if: steps.cargo-about-bin.outputs.cache-hit != 'true'
+        env:
+          CARGO_ABOUT_VERSION: ${{ steps.cargo-about-version.outputs.version }}
+        run: cargo install cargo-about --locked --version "$CARGO_ABOUT_VERSION" --features cli
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the bundle
+        env:
+          # The scripts' own fetch runs inside beforeBuildCommand; they reuse these downloads.
+          TESSERACT_ASSET_CACHE: .tesseract-assets
+          PDFIUM_ARCHIVE_CACHE: .pdfium-archives
+        run: pnpm tauri build --bundles nsis
+
+      # The release tree is the one NSIS packages, so check it before the installer. Layout comes
+      # from find, and every found path is logged.
+      - name: Check the release tree, install the NSIS package, and smoke-test it
+        run: |
+          set -euo pipefail
+
+          dump_tree() {
+            find "$1" -maxdepth 5 -print 2> /dev/null || true
+          }
+
+          require_file() {
+            if [ -z "$1" ] || [ ! -f "$1" ]; then
+              echo "expected file missing: ${1:-<none found>}" >&2
+              echo "bundle tree under $2:" >&2
+              dump_tree "$2" >&2
+              exit 1
+            fi
+          }
+
+          require_exec() {
+            require_file "$1" "$2"
+            if [ ! -x "$1" ]; then
+              ls -l "$1" >&2 || true
+              echo "expected an executable at $1" >&2
+              exit 1
+            fi
+          }
+
+          FOUND=""
+
+          # find_one sets FOUND to the first match for pattern under root, then checks it.
+          find_one() {
+            local root="$1" pattern="$2" kind="$3" what="$4"
+            FOUND="$(find "${root}" -path "${pattern}" -print -quit)"
+            if [ -z "${FOUND}" ]; then
+              echo "expected ${what}, no match for ${pattern} under ${root}" >&2
+              dump_tree "${root}" >&2
+              exit 1
+            fi
+            if [ "${kind}" = exec ]; then
+              require_exec "${FOUND}" "${root}"
+            else
+              require_file "${FOUND}" "${root}"
+            fi
+            echo "found ${what}: ${FOUND}"
+          }
+
+          release=src-tauri/target/release
+          find_one "${release}" '*/scriptorium-tesseract.exe' exec "release sidecar"
+          find_one "${release}" '*/tessdata/eng.traineddata' file "release tessdata"
+          find_one "${release}" '*/pdfium.dll' file "release pdfium"
+          find_one "${release}" '*/THIRD_PARTY_NOTICES.md' file "release notices"
+
+          setup="$(find src-tauri/target/release/bundle/nsis -maxdepth 1 -name '*-setup.exe' -print -quit)"
+          require_file "${setup}" src-tauri/target/release/bundle/nsis
+          install="${RUNNER_TEMP}/scriptorium-install"
+          rm -rf "${install}"
+          mkdir -p "${install}"
+          install_win="$(cygpath -w "${install}")"
+          # /D=<path> must be the last argument and unquoted as a whole switch, and the temp path
+          # has no spaces. MSYS_NO_PATHCONV keeps Git Bash from rewriting the switches as paths.
+          # shellcheck disable=SC2086
+          MSYS_NO_PATHCONV=1 "./${setup}" /S /D=${install_win}
+
+          find_one "${install}" '*/scriptorium-tesseract.exe' exec "installed sidecar"
+          install_bin="${FOUND}"
+          find_one "${install}" '*/tessdata/eng.traineddata' file "installed tessdata"
+          install_tessdata="${FOUND}"
+          find_one "${install}" '*/pdfium.dll' file "installed pdfium"
+          find_one "${install}" '*/THIRD_PARTY_NOTICES.md' file "installed notices"
+
+          if command -v tesseract > /dev/null 2>&1; then
+            echo "system tesseract on PATH"; exit 1
+          fi
+          bin="$(cygpath -w "${install_bin}")"
+          tessdata="$(cygpath -w "$(dirname "${install_tessdata}")")"
+          work="$(mktemp -d)"
+          cp tests/fixtures/ocr/smoke.png "${work}/smoke.png"
+          echo "smoke windows: sidecar=${bin} tessdata_dir=${tessdata}"
+          # A native program still needs SystemRoot to start; nothing else is passed.
+          (cd "${work}" && env -i "SystemRoot=${SYSTEMROOT:-C:\\Windows}" "${bin}" smoke.png out \
+            --tessdata-dir "${tessdata}" --psm 3 --oem 1 \
+            -c tessedit_create_tsv=1 -c tessedit_create_txt=0)
+          if ! grep -qi "PRINCESS" "${work}/out.tsv"; then
+            echo "out.tsv has no PRINCESS" >&2
+            cat "${work}/out.tsv" >&2 || true
+            rm -rf "${work}"
+            exit 1
+          fi
+          echo "PRINCESS found in out.tsv"
+          rm -rf "${work}"
