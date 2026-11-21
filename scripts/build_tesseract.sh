@@ -180,7 +180,8 @@ EOF
         || { echo "build_tesseract: windres is missing; install mingw-w64-x86_64-binutils" >&2; exit 1; }
     # windres opens the manifest relative to the working directory, so run it in its own.
     # Named like the toolchain's own file, so gcc picks it up through -B (see below).
-    ( cd "${dir}" && windres -i tesseract.rc -o default-manifest.o )
+    # This runs inside $(...), where set -e does not apply, so a failure must return by hand.
+    ( cd "${dir}" && windres -i tesseract.rc -o default-manifest.o ) || return 1
     echo "${dir}/default-manifest.o"
 }
 
@@ -290,7 +291,9 @@ fi
 # The UTF-8 manifest must have reached the shipped exe, after the strip. It is plain XML in the
 # resource section, so strings finds it.
 if [[ -n "${MANIFEST_OBJ}" ]]; then
-    strings -n 8 "${OUT}" | grep -q 'activeCodePage' \
+    # Not grep -q: it would exit at the first match, and strings' SIGPIPE would then fail the
+    # pipeline under pipefail.
+    strings -n 8 "${OUT}" | grep 'activeCodePage' > /dev/null \
         || { echo "build_tesseract: ${OUT} has no activeCodePage manifest" >&2; exit 1; }
 fi
 echo "build_tesseract: wrote ${OUT} in $(($(date +%s) - START))s"
