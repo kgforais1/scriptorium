@@ -7866,7 +7866,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @tauri-apps/plugin-dialog 2.8.3
+### @tauri-apps/plugin-dialog 2.8.4
 
 Licence: MIT OR Apache-2.0 (https://github.com/tauri-apps/plugins-workspace#readme)
 
