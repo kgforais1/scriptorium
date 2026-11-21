@@ -303,12 +303,21 @@ fn stop_child(child: &mut Child, error: OcrError) -> OcrError {
     error
 }
 
-/// The last `max` bytes of `path`, lossily decoded and trimmed. A missing or unreadable file
-/// reads as empty.
+/// The last `max` bytes of `path`, lossily decoded and trimmed. It seeks from the end, so a
+/// noisy stderr is never read whole. A missing or unreadable file reads as empty.
 fn tail(path: &Path, max: usize) -> String {
-    let bytes = std::fs::read(path).unwrap_or_default();
-    let start = bytes.len().saturating_sub(max);
-    String::from_utf8_lossy(&bytes[start..]).trim().to_string()
+    use std::io::{Read, Seek, SeekFrom};
+    let read = || -> std::io::Result<Vec<u8>> {
+        let mut file = File::open(path)?;
+        let len = file.metadata()?.len();
+        file.seek(SeekFrom::Start(len.saturating_sub(max as u64)))?;
+        let mut bytes = Vec::with_capacity(max);
+        file.take(max as u64).read_to_end(&mut bytes)?;
+        Ok(bytes)
+    };
+    String::from_utf8_lossy(&read().unwrap_or_default())
+        .trim()
+        .to_string()
 }
 
 /// The names one call writes. Both are removed when this is dropped, on every path.

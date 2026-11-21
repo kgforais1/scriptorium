@@ -359,3 +359,13 @@ fn no_language_is_refused_before_spawning() {
     assert_eq!(result, Err(OcrError::NoLanguage));
     assert_clean(dir.path());
 }
+
+#[test]
+fn tail_keeps_only_the_last_bytes() {
+    let dir = TempDir::new("tail");
+    let path = dir.path().join("err.txt");
+    std::fs::write(&path, format!("{}end", "x".repeat(5000))).unwrap();
+    let kept = tail(&path, 10);
+    assert_eq!(kept, "xxxxxxxend");
+    assert_eq!(tail(&dir.path().join("missing"), 10), "");
+}
