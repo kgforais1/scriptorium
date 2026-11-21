@@ -88,7 +88,7 @@ fi
 
 if ! curl -fsS --max-time 5 "$SONAR_HOST_URL/api/system/status" >/dev/null 2>&1; then
   echo "sonar_scan: no SonarQube server answering at $SONAR_HOST_URL." >&2
-  echo "Start one: docker compose -f compose.sonarqube.yaml up -d" >&2
+  echo "Start one: bash scripts/sonar_up.sh" >&2
   exit 1
 fi
 
