@@ -98,6 +98,9 @@ jobs:
           workspaces: src-tauri -> target
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
       # beforeBuildCommand runs `pnpm licenses:check`, which needs cargo-about.
       - name: cargo-about version (package.json config.cargoAboutVersion)
         id: cargo-about-version
@@ -121,8 +124,20 @@ jobs:
           CARGO_ABOUT_VERSION: ${{ steps.cargo-about-version.outputs.version }}
         run: cargo install cargo-about --locked --version "$CARGO_ABOUT_VERSION" --features cli
 
-      - name: pnpm install
-        run: pnpm install --frozen-lockfile
+      # Fail here, with the bin directory listed, instead of inside the long build.
+      # `head` can close the pipe early, so the listing is allowed to be truncated.
+      - name: Check cargo-about
+        run: |
+          command -v cargo-about || echo "cargo-about is not on PATH" >&2
+          # A human-readable listing is the point here, so SC2012's find advice does not apply.
+          # shellcheck disable=SC2012
+          ls -l ~/.cargo/bin | head -50 || true
+          cargo about --version
+
+      # The build's beforeBuildCommand runs this too. As its own step, a stale notices file is
+      # attributed here instead of inside the Tauri build.
+      - name: Check the third-party notices
+        run: pnpm licenses:check
 
       - name: Build the bundles
         env:
@@ -312,6 +327,9 @@ jobs:
           workspaces: src-tauri -> target
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
       # beforeBuildCommand runs `pnpm licenses:check`, which needs cargo-about.
       - name: cargo-about version (package.json config.cargoAboutVersion)
         id: cargo-about-version
@@ -326,7 +344,8 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cargo-about-bin
         with:
-          path: ~/.cargo/bin/cargo-about
+          # cargo install writes the .exe on Windows.
+          path: ~/.cargo/bin/cargo-about.exe
           key: cargo-about-${{ runner.os }}-${{ steps.cargo-about-version.outputs.version }}
 
       - name: Install cargo-about
@@ -335,8 +354,20 @@ jobs:
           CARGO_ABOUT_VERSION: ${{ steps.cargo-about-version.outputs.version }}
         run: cargo install cargo-about --locked --version "$CARGO_ABOUT_VERSION" --features cli
 
-      - name: pnpm install
-        run: pnpm install --frozen-lockfile
+      # Fail here, with the bin directory listed, instead of inside the long build.
+      # `head` can close the pipe early, so the listing is allowed to be truncated.
+      - name: Check cargo-about
+        run: |
+          command -v cargo-about || echo "cargo-about is not on PATH" >&2
+          # A human-readable listing is the point here, so SC2012's find advice does not apply.
+          # shellcheck disable=SC2012
+          ls -l ~/.cargo/bin | head -50 || true
+          cargo about --version
+
+      # The build's beforeBuildCommand runs this too. As its own step, a stale notices file is
+      # attributed here instead of inside the Tauri build.
+      - name: Check the third-party notices
+        run: pnpm licenses:check
 
       - name: Build the bundle
         env:
