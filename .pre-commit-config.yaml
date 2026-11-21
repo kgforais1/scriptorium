@@ -140,11 +140,16 @@ repos:
       - id: check-json
         # tsconfig*.json are JSONC (comments allowed by tsc); plain JSON parse fails
         exclude: '(^|/)tsconfig[^/]*\.json$'
+      # Recorded Tesseract TSV is byte-exact: an empty text column is a trailing tab, and
+      # crlf.tsv tests CRLF parsing.
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
+        exclude: '^src-tauri/src/ocr/testdata/.*\.tsv$'
       - id: end-of-file-fixer
+        exclude: '^src-tauri/src/ocr/testdata/.*\.tsv$'
       - id: mixed-line-ending
         args: [--fix=lf]
+        exclude: '^src-tauri/src/ocr/testdata/.*\.tsv$'
 
   # ── Python ─────────────────────────────────────────────────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit

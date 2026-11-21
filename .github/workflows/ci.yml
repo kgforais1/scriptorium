@@ -196,6 +196,20 @@ jobs:
           ../scripts/fetch_pdfium.sh
           echo "PDFIUM_DYNAMIC_LIB_PATH=${{ github.workspace }}/src-tauri/pdfium" >> "$GITHUB_ENV"
 
+      - name: Cache tesseract assets
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tesseract-assets
+          # The script pins the release and the hashes, so its hash is the version key.
+          key: tesseract-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch_tesseract.sh') }}
+
+      - name: Fetch tesseract
+        shell: bash
+        env:
+          # Relative, because Git Bash on Windows mishandles a backslash workspace path.
+          TESSERACT_ASSET_CACHE: ../.tesseract-assets
+        run: ../scripts/fetch_tesseract.sh
+
       - name: Install Tauri Linux system deps
         # https://v2.tauri.app/start/prerequisites/#linux
         # Plain apt, not a .deb cache: the cache action swallowed a mirror 404 and saved an
@@ -228,6 +242,9 @@ jobs:
         run: cargo clippy --locked -- -D warnings
 
       - name: cargo test
+        env:
+          # A missing binary fails the test instead of skipping it.
+          SCRIPTORIUM_REQUIRE_TESSERACT: "1"
         run: cargo test --locked
 
       - name: cargo check
@@ -292,6 +309,20 @@ jobs:
           ../scripts/fetch_pdfium.sh
           echo "PDFIUM_DYNAMIC_LIB_PATH=${{ github.workspace }}/src-tauri/pdfium" >> "$GITHUB_ENV"
 
+      - name: Cache tesseract assets
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tesseract-assets
+          # The script pins the release and the hashes, so its hash is the version key.
+          key: tesseract-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch_tesseract.sh') }}
+
+      - name: Fetch tesseract
+        shell: bash
+        env:
+          # Relative, because Git Bash on Windows mishandles a backslash workspace path.
+          TESSERACT_ASSET_CACHE: ../.tesseract-assets
+        run: ../scripts/fetch_tesseract.sh
+
       - name: Install Tauri Linux system deps
         run: |
           # Retry, since a mirror mid-sync can fail a fetch.
@@ -324,9 +355,21 @@ jobs:
         if: steps.cargo-llvm-cov-bin.outputs.cache-hit != 'true'
         run: cargo install cargo-llvm-cov --locked --version 0.9.1
 
+      # cargo llvm-cov builds tests only, not examples, and cleans the workspace's own build
+      # output first. The OCR spawn tests run the ocr_test_child example, so build it outside
+      # the target dir and name it in SCRIPTORIUM_TEST_CHILD. It uses only std, so rustc
+      # builds it in a second.
+      - name: Build the OCR test stand-in
+        run: |
+          rustc --edition 2021 examples/ocr_test_child.rs -o "${RUNNER_TEMP}/ocr_test_child"
+          echo "SCRIPTORIUM_TEST_CHILD=${RUNNER_TEMP}/ocr_test_child" >> "$GITHUB_ENV"
+
       - name: cargo llvm-cov (summary)
         # Explicit bash adds -o pipefail, so a failing test or the coverage floor fails through tee.
         shell: bash
+        env:
+          # A missing binary fails the test instead of skipping it.
+          SCRIPTORIUM_REQUIRE_TESSERACT: "1"
         run: |
           {
             echo '### Rust coverage (lines must be at least 80%)'
@@ -384,6 +427,20 @@ jobs:
           ../scripts/fetch_pdfium.sh
           echo "PDFIUM_DYNAMIC_LIB_PATH=${{ github.workspace }}/src-tauri/pdfium" >> "$GITHUB_ENV"
 
+      - name: Cache tesseract assets
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tesseract-assets
+          # The script pins the release and the hashes, so its hash is the version key.
+          key: tesseract-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch_tesseract.sh') }}
+
+      - name: Fetch tesseract
+        shell: bash
+        env:
+          # Relative, because Git Bash on Windows mishandles a backslash workspace path.
+          TESSERACT_ASSET_CACHE: ../.tesseract-assets
+        run: ../scripts/fetch_tesseract.sh
+
       - name: Install Rust toolchain
         run: |
           rustup show
@@ -401,6 +458,9 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: cargo test
+        env:
+          # A missing binary fails the test instead of skipping it.
+          SCRIPTORIUM_REQUIRE_TESSERACT: "1"
         run: cargo test --locked
 
   typecheck-ts:
