@@ -15,7 +15,7 @@ Those are Phase 4.
 
 ## Decisions this plan adds
 
-1. **Release asset naming.** The release tag is `tesseract-5.5.3-r1`. The `r` number goes up when
+1. **Release asset naming.** The first release tag was `tesseract-5.5.3-r1`. `tesseract-5.5.3-r2` rebuilt the Windows binary with a UTF-8 code page manifest (#92), and is the one pinned. The `r` number goes up when
    the binaries are rebuilt with the same Tesseract version, for example after a library bump.
    Each asset is the bare binary, named `tesseract-<target-triple>[.exe]`. It is installed as
    `src-tauri/binaries/scriptorium-tesseract-<target-triple>[.exe]`, because a sidecar named
