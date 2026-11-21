@@ -1064,6 +1064,7 @@ Used by:
 - core-foundation 0.10.1
 - core-graphics-types 0.2.0
 - core-graphics 0.25.0
+- string_cache 0.11.0
 - string_cache 0.9.0
 
 ~~~~text
@@ -1239,7 +1240,7 @@ THE SOFTWARE.
 ### MIT License
 
 Used by:
-- errno 0.3.14
+- errno 0.3.15
 
 ~~~~text
 Copyright (c) 2014 Chris Wong
@@ -1273,7 +1274,7 @@ DEALINGS IN THE SOFTWARE.
 ### MIT License
 
 Used by:
-- mime 0.3.17
+- mime 0.3.18
 
 ~~~~text
 Copyright (c) 2014 Sean McArthur
@@ -1306,7 +1307,7 @@ Used by:
 - bitflags 2.13.1
 - fraction 0.16.0
 - glob 0.3.4
-- log 0.4.34
+- log 0.4.35
 - num-bigint 0.4.8
 - num-complex 0.4.6
 - num-integer 0.1.47
@@ -1350,7 +1351,7 @@ DEALINGS IN THE SOFTWARE.
 ### MIT License
 
 Used by:
-- uuid 1.29.0
+- uuid 1.29.3
 
 ~~~~text
 Copyright (c) 2014 The Rust Project Developers
@@ -1386,8 +1387,11 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 - html5ever 0.39.0
+- html5ever 0.40.1
 - markup5ever 0.39.0
+- markup5ever 0.40.0
 - web_atoms 0.2.6
+- web_atoms 0.3.0
 
 ~~~~text
 Copyright (c) 2014 The html5ever Project Developers
@@ -1449,7 +1453,7 @@ SOFTWARE.
 ### MIT License
 
 Used by:
-- flate2 1.1.10
+- flate2 1.1.11
 
 ~~~~text
 Copyright (c) 2014-2026 Alex Crichton
@@ -2642,7 +2646,7 @@ DEALINGS IN THE SOFTWARE.
 ### MIT License
 
 Used by:
-- smallvec 1.16.4
+- smallvec 1.16.6
 
 ~~~~text
 Copyright (c) 2018 The Servo Project Developers
@@ -3213,7 +3217,7 @@ DEALINGS IN THE SOFTWARE.
 ### MIT License
 
 Used by:
-- const-oid 0.10.2
+- const-oid 0.10.3
 - cpufeatures 0.3.1
 
 ~~~~text
@@ -3378,7 +3382,9 @@ SOFTWARE.
 ### MIT License
 
 Used by:
+- bit-set 0.11.1
 - bit-set 0.8.0
+- bit-vec 0.10.2
 - bit-vec 0.8.0
 
 ~~~~text
@@ -3533,7 +3539,7 @@ Used by:
 - toml_edit 0.20.2
 - toml_edit 0.25.13+spec-1.1.0
 - toml_parser 1.1.5+spec-1.1.0
-- toml_writer 1.1.3+spec-1.1.0
+- toml_writer 1.2.0+spec-1.1.0
 
 ~~~~text
 Copyright (c) Individual contributors
@@ -3813,7 +3819,8 @@ DEALINGS IN THE SOFTWARE.
 ### MIT License
 
 Used by:
-- utf8_iter 1.0.4
+- utf8_iter 1.1.0
+- utf_types 1.0.0
 
 ~~~~text
 Copyright Mozilla Foundation
@@ -4140,7 +4147,7 @@ SOFTWARE.
 ### MIT License
 
 Used by:
-- crc32fast 1.5.3
+- crc32fast 1.5.5
 
 ~~~~text
 MIT License
@@ -4498,7 +4505,7 @@ SOFTWARE.
 ### MIT License
 
 Used by:
-- wry 0.57.1
+- wry 0.57.3
 
 ~~~~text
 MIT License
@@ -4861,6 +4868,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Used by:
 - dom_query 0.28.0
+- dom_query 0.29.0
 
 ~~~~text
 MIT License
@@ -4955,7 +4963,7 @@ SOFTWARE.
 
 Used by:
 - block2 0.6.2
-- brotli-decompressor 6.2.0
+- brotli-decompressor 6.3.2
 - cesu8 1.1.0
 - chrono 0.4.45
 - dispatch2 0.3.1
@@ -5311,9 +5319,9 @@ Used by:
 - displaydoc 0.2.7
 - dtoa 1.0.11
 - dyn-clone 1.0.20
-- erased-serde 0.4.10
+- erased-serde 0.4.11
 - fastrand 2.5.0
-- itoa 1.0.18
+- itoa 1.0.19
 - linux-raw-sys 0.12.1
 - num_enum 0.7.6
 - num_enum_derive 0.7.6
@@ -5337,6 +5345,7 @@ Used by:
 - serde_json 1.0.154
 - serde_repr 0.1.21
 - servo_arc 0.4.3
+- servo_arc 0.5.0
 - syn 1.0.109
 - syn 2.0.119
 - syn 3.0.4
@@ -5745,9 +5754,13 @@ SOFTWARE.
 
 Used by:
 - phf 0.13.1
+- phf 0.14.0
 - phf_generator 0.13.1
+- phf_generator 0.14.0
 - phf_macros 0.13.1
+- phf_macros 0.14.0
 - phf_shared 0.13.1
+- phf_shared 0.14.0
 
 ~~~~text
 The MIT License (MIT)
@@ -6747,6 +6760,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 Used by:
 - cssparser-macros 0.7.1
 - cssparser 0.37.0
+- cssparser 0.38.0
 
 ~~~~text
 Mozilla Public License Version 2.0
@@ -7130,6 +7144,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 Used by:
 - option-ext 0.2.0
 - selectors 0.38.0
+- selectors 0.41.0
 
 ~~~~text
 Mozilla Public License Version 2.0
