@@ -116,7 +116,8 @@ jobs:
         id: cargo-about-bin
         with:
           path: ~/.cargo/bin/cargo-about
-          key: cargo-about-${{ runner.os }}-${{ steps.cargo-about-version.outputs.version }}
+          # 24.04-built binaries need glibc 2.39, so this key differs from ci.yml's licences job.
+          key: cargo-about-${{ runner.os }}-ubuntu-22.04-${{ steps.cargo-about-version.outputs.version }}
 
       - name: Install cargo-about
         if: steps.cargo-about-bin.outputs.cache-hit != 'true'
