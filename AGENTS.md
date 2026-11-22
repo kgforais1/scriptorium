@@ -68,7 +68,8 @@ Do not load everything. Start here, then open only what the task needs.
     as it goes. A session that ends mid-task leaves a `Next action`, not a gap.
 12. **New Sonar issues get fixed.** When a local scan prints `ACTION REQUIRED`, fix the new
     issues before pushing and scan again. Ask the user to accept one only if it is truly
-    trivial. See [`docs/sonarqube.md`](docs/sonarqube.md#read-the-issues).
+    trivial. If the scan reports no server, run `bash scripts/sonar_up.sh` before asking the
+    user. See [`docs/sonarqube.md`](docs/sonarqube.md#read-the-issues).
 
 ## Agent tooling policy
 

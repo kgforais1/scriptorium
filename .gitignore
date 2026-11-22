@@ -18,6 +18,9 @@ develop-eggs/
 .eggs/
 lib/
 lib64/
+# scripts/lib holds shared shell libraries, which are source, not Python build output.
+!scripts/lib/
+!scripts/lib/**
 parts/
 var/
 .installed.cfg

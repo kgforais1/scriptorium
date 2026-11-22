@@ -21,11 +21,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PYTHON="${PYTHON:-$ROOT_DIR/.venv/bin/python}"
-if [[ ! -x "$PYTHON" ]]; then
-  PYTHON="$(command -v python3)"
-fi
-
 RUN_COVERAGE=0
 for arg in "$@"; do
   case "$arg" in
@@ -35,38 +30,13 @@ for arg in "$@"; do
   esac
 done
 
-# Read one KEY from .env without sourcing it (no command execution).
-dotenv_get() {
-  local key="$1"
-  [[ -f "$ROOT_DIR/.env" ]] || return 0
-  "$PYTHON" - "$ROOT_DIR/.env" "$key" <<'PYEOF'
-import sys
-from pathlib import Path
-
-path, wanted = sys.argv[1], sys.argv[2]
-for raw in Path(path).read_text(encoding="utf-8").splitlines():
-    line = raw.strip()
-    if line.startswith("export "):
-        line = line[7:].strip()
-    if not line or line.startswith("#") or "=" not in line:
-        continue
-    key, value = line.split("=", 1)
-    if key.strip() == wanted:
-        value = value.strip().split(" #", 1)[0].strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
-            value = value[1:-1]
-        print(value)
-        break
-PYEOF
-}
+# shellcheck source=scripts/lib/sonar_env.sh
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/lib/sonar_env.sh"
 
 if [[ -z "${SONAR_TOKEN:-}" ]]; then
   SONAR_TOKEN="$(dotenv_get SONAR_TOKEN)"
 fi
-if [[ -z "${SONAR_HOST_URL:-}" ]]; then
-  SONAR_HOST_URL="$(dotenv_get SONAR_HOST_URL)"
-fi
-SONAR_HOST_URL="${SONAR_HOST_URL:-http://localhost:9000}"
 
 if [[ -z "${SONAR_TOKEN:-}" ]]; then
   echo "sonar_scan: SONAR_TOKEN is not set; export it or add it to repo-root .env." >&2
@@ -88,7 +58,7 @@ fi
 
 if ! curl -fsS --max-time 5 "$SONAR_HOST_URL/api/system/status" >/dev/null 2>&1; then
   echo "sonar_scan: no SonarQube server answering at $SONAR_HOST_URL." >&2
-  echo "Start one: docker compose -f compose.sonarqube.yaml up -d" >&2
+  echo "Start one: bash scripts/sonar_up.sh" >&2
   exit 1
 fi
 
