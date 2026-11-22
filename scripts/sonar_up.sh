@@ -14,7 +14,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-SONAR_HOST_URL="${SONAR_HOST_URL:-http://localhost:9000}"
+# shellcheck source=scripts/lib/sonar_env.sh
+source "$ROOT_DIR/scripts/lib/sonar_env.sh"
+
 COMPOSE_FILE="compose.sonarqube.yaml"
 TIMEOUT_SECONDS=300
 POLL_SECONDS=5
@@ -83,6 +85,20 @@ fi
 # stack's own services. A shared project may hold unrelated containers the user stopped.
 server_hint="docker ps -a --filter label=com.docker.compose.service=sonarqube"
 if [[ -n "$project" ]]; then
+  # The labels exist while the container is stopped, so find the server first and read the
+  # services it depends on.
+  server_id="$(docker ps -a -q --filter "label=com.docker.compose.project=$project" \
+    --filter 'label=com.docker.compose.service=sonarqube' \
+    --filter 'label=com.docker.compose.oneoff=False' | sed -n '1p')"
+  depends=""
+  if [[ -n "$server_id" ]]; then
+    depends="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.depends_on"}}' \
+      "$server_id" 2> /dev/null || true)"
+    if [[ "$depends" == "<no value>" ]]; then
+      depends=""
+    fi
+  fi
+
   started=0
 
   # start_service SERVICE : starts that service's exited or created containers, if any.
@@ -91,9 +107,11 @@ if [[ -n "$project" ]]; then
     ids="$(
       {
         docker ps -a -q --filter "label=com.docker.compose.project=$project" \
-          --filter "label=com.docker.compose.service=$service" --filter status=exited
+          --filter "label=com.docker.compose.service=$service" \
+          --filter 'label=com.docker.compose.oneoff=False' --filter status=exited
         docker ps -a -q --filter "label=com.docker.compose.project=$project" \
-          --filter "label=com.docker.compose.service=$service" --filter status=created
+          --filter "label=com.docker.compose.service=$service" \
+          --filter 'label=com.docker.compose.oneoff=False' --filter status=created
       } | sed '/^$/d' | sort -u
     )"
     if [[ -n "$ids" ]]; then
@@ -105,15 +123,24 @@ if [[ -n "$project" ]]; then
     fi
   }
 
-  # The database first, so the server finds it up when it starts.
-  start_service db
-  start_service sonarqube
-  if [[ "$started" == 0 ]]; then
-    echo "sonar_up: db and sonarqube are already running"
+  # The depends_on label looks like `db:service_healthy:false`, with entries comma separated.
+  # Start every named service before the server, and fall back to db when the label is absent.
+  if [[ -n "$depends" ]]; then
+    IFS=',' read -r -a dependencies <<< "$depends"
+    for entry in "${dependencies[@]}"; do
+      service="${entry%%:*}"
+      if [[ -n "$service" ]]; then
+        start_service "$service"
+      fi
+    done
+  else
+    start_service db
   fi
+  start_service sonarqube
 
-  server_id="$(docker ps -a -q --filter "label=com.docker.compose.project=$project" \
-    --filter 'label=com.docker.compose.service=sonarqube' | sed -n '1p')"
+  if [[ "$started" == 0 ]]; then
+    echo "sonar_up: the containers are already running"
+  fi
   if [[ -n "$server_id" ]]; then
     server_hint="docker logs $server_id"
   fi
