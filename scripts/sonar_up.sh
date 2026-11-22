@@ -6,6 +6,9 @@
 # time needs SONAR_DB_PASSWORD in the repo-root .env, since compose.sonarqube.yaml requires it.
 # Polls /api/system/status every 5 s, for at most 5 minutes.
 #
+# Set SONAR_COMPOSE_PROJECT to pick the compose project when more than one has a SonarQube
+# service. Without it, that case is an error that lists the projects.
+#
 # Prerequisites and troubleshooting: docs/sonarqube.md.
 #
 # Usage: bash scripts/sonar_up.sh
@@ -51,41 +54,54 @@ fi
 # The compose file requires ${SONAR_DB_PASSWORD:?...}, and Compose interpolates it for every
 # subcommand, so both `ps` and `start` fail without the password. Find the project through
 # Compose when that works, otherwise through Docker's own compose labels.
-project=""
-if compose_ids="$(docker compose -f "$COMPOSE_FILE" ps -a -q 2> /dev/null)"; then
-  first_id="$(printf '%s\n' "$compose_ids" | sed -n '1p')"
-  if [[ -n "$first_id" ]]; then
-    project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' \
-      "$first_id" 2> /dev/null || true)"
-  fi
-fi
-
-if [[ -z "$project" ]]; then
-  # The project name is static in the file, so read it without asking Compose to interpolate.
-  project="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | sed -n '1p')"
-  if [[ -n "$project" ]]; then
-    project_ids="$(docker ps -a -q --filter "label=com.docker.compose.project=$project")"
-    [[ -n "$project_ids" ]] || project=""
-  fi
-fi
-
-if [[ -z "$project" ]]; then
-  # docs/sonarqube.md allows one SonarQube server per machine. Reuse the single existing stack
-  # rather than creating a second one that needs the database password.
-  projects="$(docker ps -a --format '{{.Label "com.docker.compose.project"}}' \
-    --filter 'label=com.docker.compose.service=sonarqube' | sort -u | sed '/^$/d')"
-  count="$(printf '%s\n' "$projects" | sed '/^$/d' | wc -l | tr -d ' ')"
-  if [[ "$count" -eq 1 ]]; then
-    project="$projects"
-    echo "sonar_up: reusing the existing stack in compose project $project"
-  elif [[ "$count" -gt 1 ]]; then
-    echo "sonar_up: more than one compose project has a sonarqube service:" >&2
-    while IFS= read -r found; do
-      echo "  $found" >&2
-    done <<< "$projects"
-    echo "Start the intended one, using a project name from the list above:" >&2
-    echo "  docker start \$(docker ps -aq --filter label=com.docker.compose.project=<project>)" >&2
+project="${SONAR_COMPOSE_PROJECT:-}"
+if [[ -n "$project" ]]; then
+  # The override names the project directly, so none of the discovery below runs.
+  override_id="$(docker ps -a -q --filter "label=com.docker.compose.project=$project" \
+    --filter 'label=com.docker.compose.service=sonarqube' \
+    --filter 'label=com.docker.compose.oneoff=False' | sed -n '1p')"
+  if [[ -z "$override_id" ]]; then
+    echo "sonar_up: SONAR_COMPOSE_PROJECT=$project has no SonarQube container." >&2
+    echo "  List the projects with: docker ps -a --filter label=com.docker.compose.service=sonarqube" >&2
     exit 1
+  fi
+else
+  if compose_ids="$(docker compose -f "$COMPOSE_FILE" ps -a -q 2> /dev/null)"; then
+    first_id="$(printf '%s\n' "$compose_ids" | sed -n '1p')"
+    if [[ -n "$first_id" ]]; then
+      project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' \
+        "$first_id" 2> /dev/null || true)"
+    fi
+  fi
+
+  if [[ -z "$project" ]]; then
+    # The project name is static in the file, so read it without asking Compose to interpolate.
+    project="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | sed -n '1p')"
+    if [[ -n "$project" ]]; then
+      project_ids="$(docker ps -a -q --filter "label=com.docker.compose.project=$project")"
+      [[ -n "$project_ids" ]] || project=""
+    fi
+  fi
+
+  if [[ -z "$project" ]]; then
+    # docs/sonarqube.md allows one SonarQube server per machine. Reuse the single existing stack
+    # rather than creating a second one that needs the database password.
+    projects="$(docker ps -a --format '{{.Label "com.docker.compose.project"}}' \
+      --filter 'label=com.docker.compose.service=sonarqube' \
+    --filter 'label=com.docker.compose.oneoff=False' | sort -u | sed '/^$/d')"
+    count="$(printf '%s\n' "$projects" | sed '/^$/d' | wc -l | tr -d ' ')"
+    if [[ "$count" -eq 1 ]]; then
+      project="$projects"
+      echo "sonar_up: reusing the existing stack in compose project $project"
+    elif [[ "$count" -gt 1 ]]; then
+      echo "sonar_up: more than one compose project has a sonarqube service:" >&2
+      while IFS= read -r found; do
+        echo "  $found" >&2
+      done <<< "$projects"
+      echo "Choose one of them with:" >&2
+      echo "  SONAR_COMPOSE_PROJECT=<project> bash scripts/sonar_up.sh" >&2
+      exit 1
+    fi
   fi
 fi
 

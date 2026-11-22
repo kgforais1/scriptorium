@@ -17,7 +17,9 @@ One server can serve every repo on the machine. If another repo already runs one
 port 9000, reuse it and skip this step.
 
 After a reboot, run `bash scripts/sonar_up.sh`. It starts Colima if Docker is not running.
-It restarts the containers that already exist, so the database password is not needed.
+It restarts the containers that already exist, so the database password is not needed. If more
+than one compose project has a SonarQube service, choose one with
+`SONAR_COMPOSE_PROJECT=<project> bash scripts/sonar_up.sh`.
 
 ```bash
 # .env: SONAR_DB_PASSWORD=<long random string>
