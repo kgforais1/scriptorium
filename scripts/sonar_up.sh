@@ -19,10 +19,10 @@ COMPOSE_FILE="compose.sonarqube.yaml"
 TIMEOUT_SECONDS=300
 POLL_SECONDS=5
 
-# True when the server answers and reports UP.
+# True when the server answers and reports UP, within max_time seconds (default 5).
 server_is_up() {
-  local status
-  status="$(curl -fsS --max-time 5 "$SONAR_HOST_URL/api/system/status" 2> /dev/null)" || return 1
+  local max_time="${1:-5}" status
+  status="$(curl -fsS --max-time "$max_time" "$SONAR_HOST_URL/api/system/status" 2> /dev/null)" || return 1
   [[ "$status" == *'"status":"UP"'* ]]
 }
 
@@ -79,24 +79,39 @@ if [[ -z "$project" ]]; then
   fi
 fi
 
-# `docker start` fails on a running container, so start only the stopped ones. A half-running
-# stack (db up, server exited) then still falls through to the poll loop.
+# `docker start` fails on a running container, so start only the stopped ones, and only for the
+# stack's own services. A shared project may hold unrelated containers the user stopped.
 server_hint="docker ps -a --filter label=com.docker.compose.service=sonarqube"
 if [[ -n "$project" ]]; then
-  stopped="$(
-    {
-      docker ps -a -q --filter "label=com.docker.compose.project=$project" --filter status=exited
-      docker ps -a -q --filter "label=com.docker.compose.project=$project" --filter status=created
-    } | sed '/^$/d' | sort -u
-  )"
-  if [[ -n "$stopped" ]]; then
-    echo "sonar_up: starting the stopped containers"
-    # Word splitting is wanted: docker start takes one argument per container ID.
-    # shellcheck disable=SC2086
-    docker start $stopped > /dev/null
-  else
-    echo "sonar_up: the containers are already running"
+  started=0
+
+  # start_service SERVICE : starts that service's exited or created containers, if any.
+  start_service() {
+    local service="$1" ids
+    ids="$(
+      {
+        docker ps -a -q --filter "label=com.docker.compose.project=$project" \
+          --filter "label=com.docker.compose.service=$service" --filter status=exited
+        docker ps -a -q --filter "label=com.docker.compose.project=$project" \
+          --filter "label=com.docker.compose.service=$service" --filter status=created
+      } | sed '/^$/d' | sort -u
+    )"
+    if [[ -n "$ids" ]]; then
+      echo "sonar_up: starting $service"
+      # Word splitting is wanted: docker start takes one argument per container ID.
+      # shellcheck disable=SC2086
+      docker start $ids > /dev/null
+      started=1
+    fi
+  }
+
+  # The database first, so the server finds it up when it starts.
+  start_service db
+  start_service sonarqube
+  if [[ "$started" == 0 ]]; then
+    echo "sonar_up: db and sonarqube are already running"
   fi
+
   server_id="$(docker ps -a -q --filter "label=com.docker.compose.project=$project" \
     --filter 'label=com.docker.compose.service=sonarqube' | sed -n '1p')"
   if [[ -n "$server_id" ]]; then
@@ -109,15 +124,35 @@ else
 fi
 
 echo "sonar_up: waiting for $SONAR_HOST_URL to report UP (up to 5 minutes)"
+deadline=$((SECONDS + TIMEOUT_SECONDS))
 attempt=0
-while [[ "$attempt" -lt $((TIMEOUT_SECONDS / POLL_SECONDS)) ]]; do
-  if server_is_up; then
+while true; do
+  remaining=$((deadline - SECONDS))
+  if [[ "$remaining" -le 0 ]]; then
+    break
+  fi
+  poll="$remaining"
+  if [[ "$poll" -gt "$POLL_SECONDS" ]]; then
+    poll="$POLL_SECONDS"
+  fi
+  if server_is_up "$poll"; then
     echo "sonar_up: SonarQube is UP at $SONAR_HOST_URL"
     exit 0
   fi
   attempt=$((attempt + 1))
-  echo "sonar_up: not up yet (attempt $attempt); retrying in ${POLL_SECONDS} s"
-  sleep "$POLL_SECONDS"
+  remaining=$((deadline - SECONDS))
+  if [[ "$remaining" -le 0 ]]; then
+    break
+  fi
+  poll="$remaining"
+  if [[ "$poll" -gt "$POLL_SECONDS" ]]; then
+    poll="$POLL_SECONDS"
+  fi
+  if [[ "$poll" -lt 1 ]]; then
+    poll=1
+  fi
+  echo "sonar_up: not up yet (attempt $attempt); retrying in ${poll} s"
+  sleep "$poll"
 done
 
 echo "sonar_up: timed out after 5 minutes." >&2
