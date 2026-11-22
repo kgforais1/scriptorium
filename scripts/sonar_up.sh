@@ -6,9 +6,9 @@
 # time needs SONAR_DB_PASSWORD in the repo-root .env, since compose.sonarqube.yaml requires it.
 # Polls /api/system/status every 5 s, for at most 5 minutes.
 #
-# This repo's own compose project, from compose.sonarqube.yaml, is used first when it has
-# containers. Set SONAR_COMPOSE_PROJECT to pick another one when more than one stack exists.
-# Without it, that case is an error that lists the projects.
+# This repo's own compose project, from compose.sonarqube.yaml, is used first when it has a
+# SonarQube server container. Set SONAR_COMPOSE_PROJECT to pick another one when more than
+# one stack exists. Without it, that case is an error that lists the projects.
 #
 # Prerequisites and troubleshooting: docs/sonarqube.md.
 #
@@ -55,8 +55,18 @@ fi
 # The compose file requires ${SONAR_DB_PASSWORD:?...}, and Compose interpolates it for every
 # subcommand, so both `ps` and `start` fail without the password. Find the project through
 # Compose when that works, otherwise through Docker's own compose labels.
-# This repo's own compose project, from compose.sonarqube.yaml, wins when it has containers.
+# This repo's own compose project, from compose.sonarqube.yaml, wins when it has a SonarQube
+# server container.
 # The check for more than one stack only runs when it does not.
+# True when PROJECT has a non-one-off container for the sonarqube service.
+has_sonarqube() {
+  local project="$1" ids
+  ids="$(docker ps -a -q --filter "label=com.docker.compose.project=$project" \
+    --filter 'label=com.docker.compose.service=sonarqube' \
+    --filter 'label=com.docker.compose.oneoff=False')"
+  [[ -n "$ids" ]]
+}
+
 project="${SONAR_COMPOSE_PROJECT:-}"
 if [[ -n "$project" ]]; then
   # The override names the project directly, so none of the discovery below runs.
@@ -72,17 +82,19 @@ else
   if compose_ids="$(docker compose -f "$COMPOSE_FILE" ps -a -q 2> /dev/null)"; then
     first_id="$(printf '%s\n' "$compose_ids" | sed -n '1p')"
     if [[ -n "$first_id" ]]; then
-      project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' \
+      candidate="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' \
         "$first_id" 2> /dev/null || true)"
+      if has_sonarqube "$candidate"; then
+        project="$candidate"
+      fi
     fi
   fi
 
   if [[ -z "$project" ]]; then
     # The project name is static in the file, so read it without asking Compose to interpolate.
-    project="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | sed -n '1p')"
-    if [[ -n "$project" ]]; then
-      project_ids="$(docker ps -a -q --filter "label=com.docker.compose.project=$project")"
-      [[ -n "$project_ids" ]] || project=""
+    candidate="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | sed -n '1p')"
+    if has_sonarqube "$candidate"; then
+      project="$candidate"
     fi
   fi
 
