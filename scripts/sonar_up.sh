@@ -6,8 +6,9 @@
 # time needs SONAR_DB_PASSWORD in the repo-root .env, since compose.sonarqube.yaml requires it.
 # Polls /api/system/status every 5 s, for at most 5 minutes.
 #
-# Set SONAR_COMPOSE_PROJECT to pick the compose project when more than one has a SonarQube
-# service. Without it, that case is an error that lists the projects.
+# This repo's own compose project, from compose.sonarqube.yaml, is used first when it has
+# containers. Set SONAR_COMPOSE_PROJECT to pick another one when more than one stack exists.
+# Without it, that case is an error that lists the projects.
 #
 # Prerequisites and troubleshooting: docs/sonarqube.md.
 #
@@ -54,6 +55,8 @@ fi
 # The compose file requires ${SONAR_DB_PASSWORD:?...}, and Compose interpolates it for every
 # subcommand, so both `ps` and `start` fail without the password. Find the project through
 # Compose when that works, otherwise through Docker's own compose labels.
+# This repo's own compose project, from compose.sonarqube.yaml, wins when it has containers.
+# The check for more than one stack only runs when it does not.
 project="${SONAR_COMPOSE_PROJECT:-}"
 if [[ -n "$project" ]]; then
   # The override names the project directly, so none of the discovery below runs.
