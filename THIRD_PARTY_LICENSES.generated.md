@@ -1099,7 +1099,7 @@ DEALINGS IN THE SOFTWARE.
 ### MIT License
 
 Used by:
-- form_urlencoded 1.2.2
+- form_urlencoded 1.2.3
 
 ~~~~text
 Copyright (c) 2013-2016 The rust-url developers
@@ -1135,7 +1135,7 @@ DEALINGS IN THE SOFTWARE.
 Used by:
 - idna 1.1.0
 - percent-encoding 2.3.2
-- url 2.5.8
+- url 2.5.9
 
 ~~~~text
 Copyright (c) 2013-2025 The rust-url developers
