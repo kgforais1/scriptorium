@@ -15,6 +15,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 # shellcheck source=scripts/lib/sonar_env.sh
+# shellcheck disable=SC1091
 source "$ROOT_DIR/scripts/lib/sonar_env.sh"
 
 COMPOSE_FILE="compose.sonarqube.yaml"
@@ -73,11 +74,18 @@ if [[ -z "$project" ]]; then
   # rather than creating a second one that needs the database password.
   projects="$(docker ps -a --format '{{.Label "com.docker.compose.project"}}' \
     --filter 'label=com.docker.compose.service=sonarqube' | sort -u | sed '/^$/d')"
-  first="$(printf '%s\n' "$projects" | sed -n '1p')"
-  extra="$(printf '%s\n' "$projects" | sed -n '2,$p')"
-  if [[ -n "$first" && -z "$extra" ]]; then
-    project="$first"
+  count="$(printf '%s\n' "$projects" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [[ "$count" -eq 1 ]]; then
+    project="$projects"
     echo "sonar_up: reusing the existing stack in compose project $project"
+  elif [[ "$count" -gt 1 ]]; then
+    echo "sonar_up: more than one compose project has a sonarqube service:" >&2
+    while IFS= read -r found; do
+      echo "  $found" >&2
+    done <<< "$projects"
+    echo "Start the intended one, using a project name from the list above:" >&2
+    echo "  docker start \$(docker ps -aq --filter label=com.docker.compose.project=<project>)" >&2
+    exit 1
   fi
 fi
 

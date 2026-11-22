@@ -31,6 +31,7 @@ for arg in "$@"; do
 done
 
 # shellcheck source=scripts/lib/sonar_env.sh
+# shellcheck disable=SC1091
 source "$ROOT_DIR/scripts/lib/sonar_env.sh"
 
 if [[ -z "${SONAR_TOKEN:-}" ]]; then
