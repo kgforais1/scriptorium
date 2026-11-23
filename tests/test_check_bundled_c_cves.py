@@ -278,11 +278,17 @@ class CheckBundledCvesTests(unittest.TestCase):
     def test_script_source_outside_root_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
-            manifest, _ = self._script_tree(tmp)
+            root = tmp / "root"
+            root.mkdir()
+            manifest = root / "bundled-c.toml"
+            manifest.write_text(SCRIPT_MANIFEST, encoding="utf-8")
+            outside = tmp / "outside.sh"
+            outside.write_text('TESSERACT_VERSION="9.9.9"\n', encoding="utf-8")
             lib = mod.load_manifest(manifest)[0]
-            bad = mod.Library(**{**lib.__dict__, "version_file": "../build.sh"})
-            with self.assertRaises(mod.CheckError):
-                mod.extract_script_version(bad, tmp)
+            bad = mod.Library(**{**lib.__dict__, "version_file": "../outside.sh"})
+            with self.assertRaises(mod.CheckError) as ctx:
+                mod.extract_script_version(bad, root)
+            self.assertIn("must stay under", str(ctx.exception))
 
     def test_unknown_source_rejected(self) -> None:
         bad = MANIFEST.replace(
