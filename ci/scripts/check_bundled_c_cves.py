@@ -5,8 +5,9 @@ check_bundled_c_cves.py — flag known CVEs in C libraries bundled by Rust -sys 
 cargo-audit, Dependabot and OSV match advisories to crate versions. They cannot
 see C sources vendored inside a -sys crate (for example OpenJPEG inside
 openjpeg-sys). This script reads each bundled C library's version from the
-crate source, asks the NVD for CVEs that affect that exact version, and fails
-on any CVE that is not listed in a time-bound exceptions file.
+crate source, or from a script that pins it, asks the NVD for CVEs that affect
+that exact version, and fails on any CVE that is not listed in a time-bound
+exceptions file.
 
 Data source (decision): the NVD CVE API 2.0, queried with
 `cpeName=cpe:2.3:a:<vendor>:<product>:<version>:*:...`. NVD expands cpeName
@@ -84,11 +85,12 @@ class Library:
     """One bundled C library from the manifest."""
 
     name: str
-    crate: str
+    source: str
     version_file: str
     version_regex: str
     cpe_vendor: str
     cpe_product: str
+    crate: str | None = None
     canary_version: str | None = None
     canary_cve: str | None = None
     canary_note: str | None = None  # set only when the entry declares canary = "none"
@@ -156,6 +158,14 @@ def _require_str(row: Any, key: str, where: str) -> str:
     return value.strip()
 
 
+def _source_kind(row: Any, where: str) -> str:
+    """Read the optional source kind: "crate" (default) or "script"."""
+    value = row.get("source", "crate") if isinstance(row, dict) else "crate"
+    if not isinstance(value, str) or value.strip() not in ("crate", "script"):
+        raise CheckError(f'{where}: source must be "crate" or "script", got {value!r}')
+    return value.strip()
+
+
 def load_manifest(path: Path) -> list[Library]:
     """Load [[library]] rows from the manifest."""
     rows = load_toml(path).get("library")
@@ -164,10 +174,14 @@ def load_manifest(path: Path) -> list[Library]:
     libs: list[Library] = []
     for i, row in enumerate(rows):
         where = f"{path}: library[{i}]"
+        source = _source_kind(row, where)
+        if source == "script" and isinstance(row, dict) and "crate" in row:
+            raise CheckError(f'{where}: crate must be absent when source = "script"')
         libs.append(
             Library(
                 name=_require_str(row, "name", where),
-                crate=_require_str(row, "crate", where),
+                source=source,
+                crate=_require_str(row, "crate", where) if source == "crate" else None,
                 version_file=_require_str(row, "version_file", where),
                 version_regex=_require_str(row, "version_regex", where),
                 cpe_vendor=_require_str(row, "cpe_vendor", where),
@@ -284,14 +298,12 @@ def find_crate_source(cargo_home: Path, crate: str, version: str, source: str = 
     return matches[0]
 
 
-def extract_c_version(lib: Library, crate_dir: Path) -> str:
-    """Read the C library version from the crate source with the manifest regex."""
+def _match_version(lib: Library, text: str, target: Path) -> str:
+    """Apply the manifest regex and return a dotted numeric version."""
     try:
-        target = resolve_under_root(Path(lib.version_file), crate_dir)
-        text = target.read_text(encoding="utf-8", errors="replace")
         pattern = re.compile(lib.version_regex)
-    except (OSError, ValueError, re.error) as err:
-        raise CheckError(f"{lib.name}: cannot read version from {lib.version_file}: {err}") from err
+    except re.error as err:
+        raise CheckError(f"{lib.name}: bad version_regex: {err}") from err
     match = pattern.search(text)
     if not match or not match.groups():
         raise CheckError(f"{lib.name}: version_regex found no version in {target}")
@@ -299,6 +311,27 @@ def extract_c_version(lib: Library, crate_dir: Path) -> str:
     if not re.fullmatch(r"\d+(\.\d+)+", version):
         raise CheckError(f"{lib.name}: extracted version {version!r} is not dotted numeric")
     return version
+
+
+def _read_version_file(lib: Library, base: Path) -> tuple[str, Path]:
+    """Read the version file under base, refusing a path that escapes it."""
+    try:
+        target = resolve_under_root(Path(lib.version_file), base)
+        return target.read_text(encoding="utf-8", errors="replace"), target
+    except (OSError, ValueError) as err:
+        raise CheckError(f"{lib.name}: cannot read version from {lib.version_file}: {err}") from err
+
+
+def extract_c_version(lib: Library, crate_dir: Path) -> str:
+    """Read the C library version from the crate source with the manifest regex."""
+    text, target = _read_version_file(lib, crate_dir)
+    return _match_version(lib, text, target)
+
+
+def extract_script_version(lib: Library, root: Path) -> str:
+    """Read a version pinned in a repository file with the manifest regex."""
+    text, target = _read_version_file(lib, root)
+    return _match_version(lib, text, target)
 
 
 def _retry_delay(err: urllib.error.HTTPError, attempt: int, base: float) -> float:
@@ -543,6 +576,7 @@ def run(
     exceptions_path: Path,
     lockfile: Path,
     cargo_home: Path,
+    root: Path,
     today: date,
     api_key: str | None,
     urlopen: UrlOpen = urllib.request.urlopen,
@@ -554,10 +588,16 @@ def run(
         exceptions = load_exceptions(exceptions_path, {lib.name for lib in libs})
         findings: list[Finding] = []
         for lib in libs:
-            crate_version, source = locked_package(lockfile, lib.crate)
-            crate_dir = find_crate_source(cargo_home, lib.crate, crate_version, source)
-            version = extract_c_version(lib, crate_dir)
-            print(f"[bundled-c] {lib.name} {version} (via {lib.crate} {crate_version})")
+            if lib.source == "script":
+                version = extract_script_version(lib, root)
+                print(f"[bundled-c] {lib.name} {version} (via {lib.version_file})")
+            else:
+                crate = lib.crate
+                assert crate is not None  # load_manifest requires it for crate sources
+                crate_version, source = locked_package(lockfile, crate)
+                crate_dir = find_crate_source(cargo_home, crate, crate_version, source)
+                version = extract_c_version(lib, crate_dir)
+                print(f"[bundled-c] {lib.name} {version} (via {crate} {crate_version})")
             check_canary(lib, api_key, urlopen, sleep)
             findings.extend(query_cves(lib, version, api_key, urlopen, sleep))
     except CheckError as err:
@@ -598,7 +638,7 @@ def main() -> int:
         return 2
     cargo_home = Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo")
     api_key = os.environ.get("NVD_API_KEY") or None
-    return run(manifest, exceptions, lockfile, cargo_home, today, api_key)
+    return run(manifest, exceptions, lockfile, cargo_home, root, today, api_key)
 
 
 if __name__ == "__main__":

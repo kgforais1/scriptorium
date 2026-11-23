@@ -28,20 +28,20 @@
 
 set -euo pipefail
 
-TESSERACT_VERSION="5.5.3"
+TESSERACT_VERSION="5.5.4"
 LEPTONICA_VERSION="1.87.0"
-ZLIB_VERSION="1.3.1"
-LIBPNG_VERSION="1.6.47"
+ZLIB_VERSION="1.3.2"
+LIBPNG_VERSION="1.6.59"
 LIBJPEG_TURBO_VERSION="3.1.0"
-LIBTIFF_VERSION="4.7.0"
+LIBTIFF_VERSION="4.7.2"
 LIBWEBP_VERSION="1.5.0"
 
-SHA256_TESSERACT="9218e62793116d42a9f6d14cd9348518b27f382096eea3d0f2d1a24616bb5884"
+SHA256_TESSERACT="a8dbf8b8c8ee427ff6ad1d99116502feaf59440af1adb893caf60a6576826cf4"
 SHA256_LEPTONICA="c73363397f96eb1295602bf44d708a994ad42046c791bf03ea0505d829bdb6a7"
-SHA256_ZLIB="9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
-SHA256_LIBPNG="631a4c58ea6c10c81f160c4b21fa8495b715d251698ebc2552077e8450f30454"
+SHA256_ZLIB="bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
+SHA256_LIBPNG="2540302a1844ad2b2b501977abecfa850f265f97b78f065a712ab4074a89f5b5"
 SHA256_LIBJPEG_TURBO="9564c72b1dfd1d6fe6274c5f95a8d989b59854575d4bbee44ade7bc17aa9bc93"
-SHA256_LIBTIFF="67160e3457365ab96c5b3286a0903aa6e78bdc44c4bc737d2e486bcecb6ba976"
+SHA256_LIBTIFF="672bd7d10aee4606171afb864f3570b83340f6a33e2c186dc0512f7145ffdf6a"
 SHA256_LIBWEBP="7d6fab70cf844bf6769077bd5d7a74893f8ffd4dfb42861745750c63c2a5c92c"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -92,10 +92,11 @@ sha256_of() {
     fi
 }
 
-# fetch_source NAME URL SHA256 : downloads, verifies and unpacks into src/NAME.
+# fetch_source NAME URL SHA256 VERSION : downloads, verifies and unpacks into src/NAME.
+# The cached archive carries the version, so a changed pin never reuses a stale file.
 fetch_source() {
-    local name="$1" url="$2" expected="$3"
-    local archive="${BUILD_DIR}/dl/${name}.tar.gz" actual
+    local name="$1" url="$2" expected="$3" version="$4"
+    local archive="${BUILD_DIR}/dl/${name}-${version}.tar.gz" actual
     mkdir -p "${BUILD_DIR}/dl" "${BUILD_DIR}/src/${name}"
     if [[ ! -f "${archive}" ]]; then
         echo "build_tesseract: downloading ${url}"
@@ -214,23 +215,30 @@ if [[ "${MINGW}" == 1 ]]; then
     EXE_LINKER_FLAGS="${EXE_LINKER_FLAGS} \"-B${MANIFEST_DIR}/\""
 fi
 
-fetch_source zlib "https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz" "${SHA256_ZLIB}"
-fetch_source libpng "https://github.com/pnggroup/libpng/archive/refs/tags/v${LIBPNG_VERSION}.tar.gz" "${SHA256_LIBPNG}"
-fetch_source libjpeg-turbo "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/${LIBJPEG_TURBO_VERSION}/libjpeg-turbo-${LIBJPEG_TURBO_VERSION}.tar.gz" "${SHA256_LIBJPEG_TURBO}"
-fetch_source libtiff "https://download.osgeo.org/libtiff/tiff-${LIBTIFF_VERSION}.tar.gz" "${SHA256_LIBTIFF}"
-fetch_source libwebp "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-${LIBWEBP_VERSION}.tar.gz" "${SHA256_LIBWEBP}"
-fetch_source leptonica "https://github.com/DanBloomberg/leptonica/releases/download/${LEPTONICA_VERSION}/leptonica-${LEPTONICA_VERSION}.tar.gz" "${SHA256_LEPTONICA}"
-fetch_source tesseract "https://github.com/tesseract-ocr/tesseract/archive/refs/tags/${TESSERACT_VERSION}.tar.gz" "${SHA256_TESSERACT}"
+fetch_source zlib "https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz" "${SHA256_ZLIB}" "${ZLIB_VERSION}"
+fetch_source libpng "https://github.com/pnggroup/libpng/archive/refs/tags/v${LIBPNG_VERSION}.tar.gz" "${SHA256_LIBPNG}" "${LIBPNG_VERSION}"
+fetch_source libjpeg-turbo "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/${LIBJPEG_TURBO_VERSION}/libjpeg-turbo-${LIBJPEG_TURBO_VERSION}.tar.gz" "${SHA256_LIBJPEG_TURBO}" "${LIBJPEG_TURBO_VERSION}"
+fetch_source libtiff "https://download.osgeo.org/libtiff/tiff-${LIBTIFF_VERSION}.tar.gz" "${SHA256_LIBTIFF}" "${LIBTIFF_VERSION}"
+fetch_source libwebp "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-${LIBWEBP_VERSION}.tar.gz" "${SHA256_LIBWEBP}" "${LIBWEBP_VERSION}"
+fetch_source leptonica "https://github.com/DanBloomberg/leptonica/releases/download/${LEPTONICA_VERSION}/leptonica-${LEPTONICA_VERSION}.tar.gz" "${SHA256_LEPTONICA}" "${LEPTONICA_VERSION}"
+fetch_source tesseract "https://github.com/tesseract-ocr/tesseract/archive/refs/tags/${TESSERACT_VERSION}.tar.gz" "${SHA256_TESSERACT}" "${TESSERACT_VERSION}"
 
-cmake_build zlib
+cmake_build zlib -DZLIB_BUILD_SHARED=OFF -DZLIB_BUILD_TESTING=OFF
+# zlib 1.3.2 names its static library libzs.a on MinGW, a name CMake's FindZLIB does not search.
+# Without a libz.a, libpng, libtiff and Leptonica fall back to the system's shared zlib.
+if [[ ! -f "${PREFIX}/lib/libz.a" && -f "${PREFIX}/lib/libzs.a" ]]; then
+    cp "${PREFIX}/lib/libzs.a" "${PREFIX}/lib/libz.a"
+fi
+[[ -f "${PREFIX}/lib/libz.a" ]] || { echo "build_tesseract: libz.a is not in ${PREFIX}/lib" >&2; exit 1; }
 drop_shared_libs
 cmake_build libpng -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TESTS=OFF -DPNG_TOOLS=OFF -DPNG_FRAMEWORK=OFF
 cmake_build libjpeg-turbo -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF -DWITH_JAVA=OFF
 # Every library must land in ${PREFIX}/lib, or a later find step can fall back to a system copy.
 [[ -f "${PREFIX}/lib/libjpeg.a" ]] || { echo "build_tesseract: libjpeg.a is not in ${PREFIX}/lib" >&2; exit 1; }
-# zlib's CMake names its static library libz.a on Unix and libzlibstatic.a on MinGW.
+# zlib's CMake names its static library libz.a on Unix and libzs.a on MinGW
+# (a WIN32 "s" suffix); before 1.3.2 the MinGW name was libzlibstatic.a.
 ZLIB_A=""
-for lib in libz.a libzlibstatic.a; do
+for lib in libz.a libzs.a libzlibstatic.a; do
     [[ -f "${PREFIX}/lib/${lib}" ]] && { ZLIB_A="${PREFIX}/lib/${lib}"; break; }
 done
 [[ -n "${ZLIB_A}" ]] || { echo "build_tesseract: no static zlib in ${PREFIX}/lib" >&2; exit 1; }

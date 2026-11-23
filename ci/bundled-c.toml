@@ -1,9 +1,14 @@
-# C libraries that Rust -sys crates vendor and compile into the app.
-# Read by ci/scripts/check_bundled_c_cves.py. Add one [[library]] per bundled library.
+# C libraries that Rust -sys crates vendor and compile into the app, plus the C
+# libraries linked into the Tesseract sidecar. Read by
+# ci/scripts/check_bundled_c_cves.py. Add one [[library]] per bundled library.
 #
-# crate          crate that bundles the C sources; its locked version comes from
-#                src-tauri/Cargo.lock and its source from the cargo registry
-# version_file   file inside the crate source that states the C version
+# source         "crate" (the default) reads a -sys crate; "script" reads a
+#                repository script that pins the version
+# crate          for source = "crate", the crate that bundles the C sources; its
+#                locked version comes from src-tauri/Cargo.lock. Absent for
+#                source = "script".
+# version_file   file that states the C version: inside the crate source for
+#                "crate", or relative to the repository root for "script"
 # version_regex  regex run over that file; the capture groups are joined with "."
 # cpe_vendor / cpe_product   the NVD CPE names used to look up CVEs
 # canary_version / canary_cve   an older version and a CVE that NVD lists for it
@@ -13,7 +18,8 @@
 #                canary exists, set canary = "none" and a canary_note instead
 #                (the script warns on every run).
 #
-# Verified against the registry sources of the versions in Cargo.lock.
+# Verified against the registry sources of the versions in Cargo.lock, and the
+# script pins in scripts/build_tesseract.sh, on 2026-11-22.
 
 [[library]]
 name = "OpenJPEG"
@@ -35,3 +41,73 @@ cpe_vendor = "littlecms"
 cpe_product = "little_cms"
 canary_version = "2.14"
 canary_cve = "CVE-2026-41254"
+
+[[library]]
+name = "Tesseract"
+source = "script"
+version_file = "scripts/build_tesseract.sh"
+version_regex = '(?m)^TESSERACT_VERSION="(\d+\.\d+\.\d+)"'
+cpe_vendor = "tesseract-ocr"
+cpe_product = "tesseract_ocr"
+canary_version = "4.1.1"
+canary_cve = "CVE-2026-88047"
+
+[[library]]
+name = "Leptonica"
+source = "script"
+version_file = "scripts/build_tesseract.sh"
+version_regex = '(?m)^LEPTONICA_VERSION="(\d+\.\d+\.\d+)"'
+cpe_vendor = "leptonica"
+cpe_product = "leptonica"
+canary_version = "1.74.4"
+canary_cve = "CVE-2018-3836"
+
+[[library]]
+name = "zlib"
+source = "script"
+version_file = "scripts/build_tesseract.sh"
+version_regex = '(?m)^ZLIB_VERSION="(\d+\.\d+\.\d+)"'
+cpe_vendor = "zlib"
+cpe_product = "zlib"
+canary_version = "1.2.11"
+canary_cve = "CVE-2018-25032"
+
+[[library]]
+name = "libpng"
+source = "script"
+version_file = "scripts/build_tesseract.sh"
+version_regex = '(?m)^LIBPNG_VERSION="(\d+\.\d+\.\d+)"'
+cpe_vendor = "libpng"
+cpe_product = "libpng"
+canary_version = "1.6.36"
+canary_cve = "CVE-2019-7317"
+
+[[library]]
+name = "libjpeg-turbo"
+source = "script"
+version_file = "scripts/build_tesseract.sh"
+version_regex = '(?m)^LIBJPEG_TURBO_VERSION="(\d+\.\d+\.\d+)"'
+cpe_vendor = "libjpeg-turbo"
+cpe_product = "libjpeg-turbo"
+canary_version = "2.1.90"
+canary_cve = "CVE-2023-2804"
+
+[[library]]
+name = "libtiff"
+source = "script"
+version_file = "scripts/build_tesseract.sh"
+version_regex = '(?m)^LIBTIFF_VERSION="(\d+\.\d+\.\d+)"'
+cpe_vendor = "libtiff"
+cpe_product = "libtiff"
+canary_version = "4.4.0"
+canary_cve = "CVE-2022-2056"
+
+[[library]]
+name = "libwebp"
+source = "script"
+version_file = "scripts/build_tesseract.sh"
+version_regex = '(?m)^LIBWEBP_VERSION="(\d+\.\d+\.\d+)"'
+cpe_vendor = "webmproject"
+cpe_product = "libwebp"
+canary_version = "1.3.1"
+canary_cve = "CVE-2023-4863"

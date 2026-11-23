@@ -61,6 +61,18 @@ NO_CANARY_MANIFEST = MANIFEST.replace(
     'canary_version = "2.3.0"\ncanary_cve = "CVE-2018-5727"\n',
     'canary = "none"\ncanary_note = "no known CVE under this CPE"\n',
 )
+SCRIPT_MANIFEST = """
+[[library]]
+name = "Tesseract"
+source = "script"
+version_file = "scripts/build.sh"
+version_regex = 'TESSERACT_VERSION="(\\d+\\.\\d+\\.\\d+)"'
+cpe_vendor = "uclouvain"
+cpe_product = "openjpeg"
+canary_version = "2.3.0"
+canary_cve = "CVE-2018-5727"
+"""
+EMPTY_BODY = {"totalResults": 0, "vulnerabilities": []}
 CANARY_BODY = {
     "totalResults": 1,
     "vulnerabilities": [{"cve": {"id": "CVE-2018-5727"}}],
@@ -187,6 +199,7 @@ class CheckBundledCvesTests(unittest.TestCase):
                 _write_exceptions(tmp, expires),
                 t["lock"],
                 t["home"],
+                tmp,
                 date(2026, 11, 1),
                 None,
                 urlopen=nvd,
@@ -199,6 +212,123 @@ class CheckBundledCvesTests(unittest.TestCase):
             t = _make_tree(Path(d))
             lib = mod.load_manifest(t["manifest"])[0]
             self.assertEqual(mod.extract_c_version(lib, t["src"]), "2.5.3")
+
+    def _script_tree(
+        self, tmp: Path, text: str = 'TESSERACT_VERSION="5.5.3"\n'
+    ) -> tuple[Path, Path]:
+        """Write a script-source manifest and its pinned file under tmp."""
+        manifest = tmp / "bundled-c.toml"
+        manifest.write_text(SCRIPT_MANIFEST, encoding="utf-8")
+        script = tmp / "scripts" / "build.sh"
+        script.parent.mkdir(exist_ok=True)
+        script.write_text(text, encoding="utf-8")
+        return manifest, script
+
+    def test_script_source_reads_pinned_version(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            manifest, _ = self._script_tree(tmp)
+            lib = mod.load_manifest(manifest)[0]
+            self.assertEqual(lib.source, "script")
+            self.assertIsNone(lib.crate)
+            self.assertEqual(mod.extract_script_version(lib, tmp), "5.5.3")
+
+    def test_script_source_regex_miss_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            manifest, _ = self._script_tree(tmp, text="nothing\n")
+            lib = mod.load_manifest(manifest)[0]
+            with self.assertRaises(mod.CheckError):
+                mod.extract_script_version(lib, tmp)
+
+    def test_script_source_missing_file_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            manifest = tmp / "bundled-c.toml"
+            manifest.write_text(SCRIPT_MANIFEST, encoding="utf-8")
+            lib = mod.load_manifest(manifest)[0]
+            with self.assertRaises(mod.CheckError) as ctx:
+                mod.extract_script_version(lib, tmp)
+            self.assertIn("cannot read version", str(ctx.exception))
+
+    def test_script_source_runs_without_a_lockfile_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            manifest, _ = self._script_tree(tmp, text='TESSERACT_VERSION="2.5.3"\n')
+            lock = tmp / "Cargo.lock"
+            lock.write_text("", encoding="utf-8")
+            exceptions = tmp / "exceptions.toml"
+            exceptions.write_text("exceptions = []\n", encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = mod.run(
+                    manifest,
+                    exceptions,
+                    lock,
+                    tmp / "cargo",
+                    tmp,
+                    date(2026, 11, 1),
+                    None,
+                    urlopen=FakeNvd([EMPTY_BODY]),
+                    sleep=lambda _s: None,
+                )
+            self.assertEqual(rc, 0)
+            self.assertIn("Tesseract 2.5.3 (via scripts/build.sh)", out.getvalue())
+
+    def test_script_source_outside_root_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            root = tmp / "root"
+            root.mkdir()
+            manifest = root / "bundled-c.toml"
+            manifest.write_text(SCRIPT_MANIFEST, encoding="utf-8")
+            outside = tmp / "outside.sh"
+            outside.write_text('TESSERACT_VERSION="9.9.9"\n', encoding="utf-8")
+            lib = mod.load_manifest(manifest)[0]
+            bad = mod.Library(**{**lib.__dict__, "version_file": "../outside.sh"})
+            with self.assertRaises(mod.CheckError) as ctx:
+                mod.extract_script_version(bad, root)
+            self.assertIn("must stay under", str(ctx.exception))
+
+    def test_unknown_source_rejected(self) -> None:
+        bad = MANIFEST.replace(
+            'crate = "openjpeg-sys"', 'crate = "openjpeg-sys"\nsource = "vendored"'
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "m.toml"
+            path.write_text(bad, encoding="utf-8")
+            with self.assertRaises(mod.CheckError):
+                mod.load_manifest(path)
+
+    def test_script_source_rejects_crate(self) -> None:
+        bad = SCRIPT_MANIFEST.replace(
+            'source = "script"\n', 'source = "script"\ncrate = "tesseract-sys"\n'
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "m.toml"
+            path.write_text(bad, encoding="utf-8")
+            with self.assertRaises(mod.CheckError) as ctx:
+                mod.load_manifest(path)
+            self.assertIn("crate must be absent", str(ctx.exception))
+
+    def test_crate_source_requires_crate(self) -> None:
+        bad = MANIFEST.replace('crate = "openjpeg-sys"\n', "")
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "m.toml"
+            path.write_text(bad, encoding="utf-8")
+            with self.assertRaises(mod.CheckError):
+                mod.load_manifest(path)
+
+    def test_explicit_crate_source(self) -> None:
+        text = MANIFEST.replace(
+            'crate = "openjpeg-sys"', 'source = "crate"\ncrate = "openjpeg-sys"'
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "m.toml"
+            path.write_text(text, encoding="utf-8")
+            lib = mod.load_manifest(path)[0]
+        self.assertEqual(lib.source, "crate")
+        self.assertEqual(lib.crate, "openjpeg-sys")
 
     def test_git_patched_crate_is_read_from_its_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as d:

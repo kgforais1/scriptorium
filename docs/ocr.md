@@ -1,8 +1,8 @@
 # OCR engine
 
-Last reviewed: 2026-11-21
+Last reviewed: 2026-11-22
 
-Scriptorium will bundle **Tesseract 5.5.3** with the `tessdata_fast` English model as its OCR
+Scriptorium bundles **Tesseract 5.5.3** and will move to **5.5.4** once its release is published with the `tessdata_fast` English model as its OCR
 engine. M2a Phase 3 adds it as a sidecar binary, so a crash on a bad page cannot take down the
 app. The bundle carries the binary and language data now. No command or UI uses them yet. This
 page records why Tesseract was chosen, how the binary is built, and how to bump it. The plan is
@@ -64,8 +64,9 @@ Build notes, kept in the script's comments:
 
 - GNU `ld` reads static archives once. Leptonica's link line puts `libjpeg.a` before
   `libtiff.a`, so the script repeats libjpeg and zlib at the end of Tesseract's link line.
-- On MinGW, zlib's static library is `libzlibstatic.a`, and the native linker needs Windows
-  paths, so the script converts them with `cygpath -m`.
+- On MinGW, zlib 1.3.2's static library is `libzs.a`, which CMake's FindZLIB does not search,
+  so the script copies it to `libz.a`. The native linker needs Windows paths, so the script
+  converts them with `cygpath -m`.
 - The Windows build's triple is `x86_64-pc-windows-gnu`. The app builds for
   `x86_64-pc-windows-msvc`, so Phase 3 sets `TESSERACT_TARGET_TRIPLE=x86_64-pc-windows-msvc`
   to name the binary the way Tauri's sidecar convention expects.
@@ -94,8 +95,15 @@ and notarization check.
    checked against them. Do that at the next bump. Tesseract and libpng come from GitHub tag
    archives, which have no published checksum.
 2. Run the script locally, and let the `Tesseract build` workflow pass on all three platforms.
+   Merge the PR, because the publish job runs only from `main`. Then publish a new release tag.
+   In a follow-up PR, point `scripts/fetch_tesseract.sh` and the constants in
+   `src-tauri/src/ocr/tesseract.rs` at that tag, and update the expected `id()` in its tests.
+   The full sequence is the
+   [Tesseract bump policy](ci-and-hooks.md#tesseract-bump-policy).
 3. Rerun the spike, `python3 scripts/ocr_spike.py` with the flags in its `--help`, and record any
    change in the table above. The page images must be rebuilt first; the fixtures README has the
    recipe.
 4. A new engine id redoes OCR for every book, as the plan's skip rule requires, so note the bump
    in the changelog.
+5. `ci/bundled-c.toml` reads these pins, so the `bundled-c-cves` job checks the new versions
+   against the NVD on the PR.

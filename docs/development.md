@@ -1,6 +1,6 @@
 # Developing Scriptorium
 
-Last reviewed: 2026-11-21
+Last reviewed: 2026-11-22
 
 How to build Scriptorium from source, run its tools, and find your way around the repository.
 Agents start at [`AGENTS.md`](../AGENTS.md).
@@ -30,7 +30,9 @@ Agents start at [`AGENTS.md`](../AGENTS.md).
   `cargo test`, or `cargo clippy`. The Rust build fails without it because `tauri.conf.json`
   lists the binary as an `externalBin`. On Windows, Tauri runs the before-commands through
   `cmd`, so `bash` must be on `PATH`. Git Bash provides it. The script returns at once when the
-  binary and language data are already there.
+  binary and language data are already there. The binaries are built from pinned sources by
+  `scripts/build_tesseract.sh`, and the bump policy is in
+  [`ci-and-hooks.md`](ci-and-hooks.md#tesseract-bump-policy).
 - **direnv (optional)** — `cp .envrc.example .envrc && direnv allow` to auto-load
   project env vars. `.envrc.example` documents the available variables.
 
