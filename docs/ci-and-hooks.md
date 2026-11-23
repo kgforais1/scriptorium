@@ -199,12 +199,15 @@ watches them too.
 - **How:** change the version and its SHA-256 in `scripts/build_tesseract.sh`. Check the hash
   against the project's published checksum or signature where one exists. Open a PR, and let the
   `Tesseract build` workflow pass on all three platforms.
-- **Publish:** after approval, dispatch `Tesseract build` on `main` with a new release tag,
+- **Publish:** the publish job runs only from `main`, so merge the bump PR first. Then, after
+  approval, dispatch `Tesseract build` on `main` with a new release tag,
   `tesseract-<version>-r<n>`. Raise the `r` number when only the bundled libraries changed. The
   publish job refuses an existing tag or release.
-- **Pin the app:** in `scripts/fetch_tesseract.sh`, set `TESSERACT_RELEASE` to the new tag,
-  then copy in the hashes from the release's `SHA256SUMS`. Update the version constants behind
-  `id()` in `src-tauri/src/ocr/tesseract.rs`. Run `pnpm tesseract:fetch` to test the new pins.
+- **Pin the app:** in a follow-up PR, set `TESSERACT_RELEASE` in `scripts/fetch_tesseract.sh`
+  to the new tag, then copy in the hashes from the release's `SHA256SUMS`. In
+  `src-tauri/src/ocr/tesseract.rs`, set `TESSERACT_RELEASE` to the same tag and
+  `TESSERACT_VERSION` to the new version. Update the expected `id()` in
+  `src-tauri/src/ocr/tesseract/tests.rs`. Run `pnpm tesseract:fetch` and `cargo test`.
 - **Engine version:** if Tesseract itself changed, rerun `python3 scripts/ocr_spike.py` with the
   flags in its `--help`, record the result in [`docs/ocr.md`](../docs/ocr.md), and note that a new
   engine id redoes OCR for every book.
