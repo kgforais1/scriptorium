@@ -26,6 +26,7 @@ uses [Semantic Versioning](https://semver.org/).
 - JPEG 2000 decoding now uses OpenJPEG 2.5.4, which fixes CVE-2025-54874.
 - The `url` crate is now 2.5.9, which fixes a stack overflow on nested `blob:` URLs (RUSTSEC-2026-0592).
 - The `cookie` crate is now 0.18.3, which fixes private cookie nonces that could repeat after a fork (RUSTSEC-2026-0594).
+- The bundled OCR engine is now Tesseract 5.5.4, which fixes security issues in 5.5.3. OCR has not shipped to users yet, so no book is redone. Once it ships, the new engine id redoes OCR for every book.
 
 ## [0.2.0] - 2026-11-02
 

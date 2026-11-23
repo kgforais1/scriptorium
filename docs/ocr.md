@@ -1,8 +1,8 @@
 # OCR engine
 
-Last reviewed: 2026-11-22
+Last reviewed: 2026-11-23
 
-Scriptorium bundles **Tesseract 5.5.3** and will move to **5.5.4** once its release is published with the `tessdata_fast` English model as its OCR
+Scriptorium bundles **Tesseract 5.5.4** with the `tessdata_fast` English model as its OCR
 engine. M2a Phase 3 adds it as a sidecar binary, so a crash on a bad page cannot take down the
 app. The bundle carries the binary and language data now. No command or UI uses them yet. This
 page records why Tesseract was chosen, how the binary is built, and how to bump it. The plan is
@@ -17,14 +17,15 @@ on 12 hand-checked pages from the two test books
 
 | Engine | CER | WER | Plain-prose CER | Invented chars on blank pages | s/page |
 |---|---|---|---|---|---|
-| Tesseract, `tessdata_fast` | 5.06% | 13.68% | 1.13% | 4 | 0.96 |
+| Tesseract, `tessdata_fast` | 5.06% | 13.68% | 1.13% | 4 | 0.90 |
 | Tesseract, `tessdata_best` | 5.37% | 14.26% | 1.10% | 5 | 1.34 |
 | ocrs 0.14.0 | 12.24% | 28.23% | 11.54% | 25 | 1.58 |
 
 CER and WER are computed over the whole set: total edits over total ground-truth characters or
 words, with whitespace runs collapsed. Timings are single-threaded on an Apple-silicon Mac. Most
 of Tesseract's error comes from two hard pages: a small-caps contents page and a faint caption
-under a plate, which every engine misses.
+under a plate, which every engine misses. The fast row was re-measured with Tesseract 5.5.4 on
+2026-11-23. Its accuracy and invented count are unchanged.
 
 The plan's gate picks Tesseract unless its packaging fails on any platform, or ocrs comes within
 1 point of its CER at under half its size. Tesseract packages on all three platforms (below), and

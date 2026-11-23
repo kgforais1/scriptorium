@@ -43,7 +43,7 @@ fn id_matches_the_fetch_script_and_the_trait() {
         binary: PathBuf::from("tesseract"),
         tessdata: PathBuf::from("tessdata"),
     };
-    assert_eq!(engine.id().0, "tesseract 5.5.3 eng-fast");
+    assert_eq!(engine.id().0, "tesseract 5.5.4 eng-fast");
 }
 
 #[test]
