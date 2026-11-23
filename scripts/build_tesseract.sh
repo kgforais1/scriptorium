@@ -223,7 +223,13 @@ fetch_source libwebp "https://storage.googleapis.com/downloads.webmproject.org/r
 fetch_source leptonica "https://github.com/DanBloomberg/leptonica/releases/download/${LEPTONICA_VERSION}/leptonica-${LEPTONICA_VERSION}.tar.gz" "${SHA256_LEPTONICA}" "${LEPTONICA_VERSION}"
 fetch_source tesseract "https://github.com/tesseract-ocr/tesseract/archive/refs/tags/${TESSERACT_VERSION}.tar.gz" "${SHA256_TESSERACT}" "${TESSERACT_VERSION}"
 
-cmake_build zlib
+cmake_build zlib -DZLIB_BUILD_SHARED=OFF -DZLIB_BUILD_TESTING=OFF
+# zlib 1.3.2 names its static library libzs.a on MinGW, a name CMake's FindZLIB does not search.
+# Without a libz.a, libpng, libtiff and Leptonica fall back to the system's shared zlib.
+if [[ ! -f "${PREFIX}/lib/libz.a" && -f "${PREFIX}/lib/libzs.a" ]]; then
+    cp "${PREFIX}/lib/libzs.a" "${PREFIX}/lib/libz.a"
+fi
+[[ -f "${PREFIX}/lib/libz.a" ]] || { echo "build_tesseract: libz.a is not in ${PREFIX}/lib" >&2; exit 1; }
 drop_shared_libs
 cmake_build libpng -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TESTS=OFF -DPNG_TOOLS=OFF -DPNG_FRAMEWORK=OFF
 cmake_build libjpeg-turbo -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF -DWITH_JAVA=OFF
