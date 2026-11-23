@@ -1,6 +1,6 @@
 # Scriptorium — CI & hooks
 
-Last reviewed: 2026-11-05
+Last reviewed: 2026-11-22
 
 ## Recommendation (what runs where)
 
@@ -128,29 +128,37 @@ Worked example: RUSTSEC-2026-0382/0383, lockfile-only, PR #49.
 ## Bundled C library CVEs
 
 `cargo audit`, Dependabot and OSV match advisories to crate versions, so they cannot see C
-sources vendored inside `-sys` crates. `ci/scripts/check_bundled_c_cves.py` closes that gap. For
-each library in `ci/bundled-c.toml` it takes the crate version from `src-tauri/Cargo.lock`, reads
-the C version from the crate source (`$CARGO_HOME/registry/src`, or `$CARGO_HOME/git/checkouts`
-for a crate patched to a git source, where the checkout's HEAD must be the locked commit), and asks the NVD CVE API 2.0
-(`cpeName=...`, which expands version ranges) for CVEs on that exact version. It exits non-zero
-for any CVE not in `ci/bundled-c-exceptions.toml`, for an expired exception, for a missing crate
-source, and when the NVD is unreachable or keeps rate limiting (it fails closed).
+sources vendored inside `-sys` crates. They also cannot see the C libraries built into the
+Tesseract sidecar. `ci/scripts/check_bundled_c_cves.py` closes both gaps. For a
+`source = "crate"` entry it takes the crate version from `src-tauri/Cargo.lock`, reads the C
+version from the crate source (`$CARGO_HOME/registry/src`, or `$CARGO_HOME/git/checkouts` for a
+crate patched to a git source, where the checkout's HEAD must be the locked commit). For a
+`source = "script"` entry it reads the version with a regex from a repository file. That is how
+the seven sidecar libraries pinned in `scripts/build_tesseract.sh` are tracked: Tesseract,
+Leptonica, zlib, libpng, libjpeg-turbo, libtiff, and libwebp. The script then asks the NVD CVE
+API 2.0 (`cpeName=...`, which expands version ranges) for CVEs on that exact version. It exits
+non-zero for any CVE not in `ci/bundled-c-exceptions.toml`, for an expired exception, for a
+missing crate source, and when the NVD is unreachable or keeps rate limiting (it fails closed).
 
 The `bundled-c-cves` job in `security.yml` runs weekly, on manual dispatch, and on PRs that change
-`src-tauri/Cargo.lock`, the manifest, the exceptions or the script. An optional `NVD_API_KEY`
-repository secret speeds it up; without one the script sleeps about 7 seconds between requests.
+`src-tauri/Cargo.lock`, the manifest, the exceptions, the checker, or
+`scripts/build_tesseract.sh`. An optional `NVD_API_KEY` repository secret speeds it up; without
+one the script sleeps about 7 seconds between requests.
 
 - **Run locally:** `cargo fetch --manifest-path src-tauri/Cargo.toml`, then
   `python3 ci/scripts/check_bundled_c_cves.py`.
-- **Add a library:** add a `[[library]]` to `ci/bundled-c.toml` with the bundling `crate`, a
-  `version_file` and `version_regex` (capture groups are joined with `.`), and the NVD
-  `cpe_vendor` and `cpe_product`. Every entry also needs a canary: a `canary_version` and a
-  `canary_cve` that NVD lists for that version under the same CPE. Verify it live with
+- **Add a library:** add a `[[library]]` to `ci/bundled-c.toml`. For a `-sys` crate, set `crate`,
+  the `version_file` inside the crate, and the `version_regex`: capture groups are joined with
+  `.`. For a script pin, set `source = "script"` and a `version_file` relative to the repository
+  root. Every entry also needs the NVD `cpe_vendor` and `cpe_product`. Every entry also needs a
+  canary: a `canary_version` and a `canary_cve` that NVD lists for that version under the same
+  CPE. Verify it live with
   `cves/2.0?cpeName=cpe:2.3:a:<vendor>:<product>:<canary_version>:*:*:*:*:*:*:*`. The script queries
   the canary first and exits 2 if the CVE is missing, because a wrong CPE returns zero CVEs and
   would pass forever (NVD files Little CMS under `little_cms`, not `little_cms_color_engine`). If
   no canary exists, set `canary = "none"` and a `canary_note`; the script then warns on every run.
-  Check the version by hand in `~/.cargo/registry/src` (or `~/.cargo/git/checkouts` for a git patch).
+  Check the version by hand in `~/.cargo/registry/src` (or `~/.cargo/git/checkouts` for a git patch),
+  or in the pin script.
 - **Git-patched crates:** `cargo audit` cannot match a crate patched to a git source, and
   Dependabot does not move a pinned `rev`. For `openjpeg-sys` (patched to OpenJPEG 2.5.4), this
   check is the only CVE tripwire. Drop the patch per `to_do.md` once a release bundles 2.5.4.
@@ -177,6 +185,33 @@ Dependabot does not see the script.
   `licenses/` directory of the new archive, and update the version line there.
 - **Advisories:** at each release, search for pdfium advisories against the pinned version and
   record the result in the advisory section of `THIRD_PARTY_NOTICES.md`.
+
+## Tesseract bump policy
+
+The `scriptorium-tesseract` sidecar statically links Tesseract, Leptonica, zlib, libpng,
+libjpeg-turbo, libtiff, and libwebp. [`scripts/build_tesseract.sh`](../scripts/build_tesseract.sh)
+pins every version and SHA-256. `ci/bundled-c.toml` reads those pins, so the bundled-C CVE check
+watches them too.
+
+- **Cadence:** bump when an upstream release has a security fix, or when
+  `check_bundled_c_cves.py` reports a CVE for a pinned version. A library bump alone does not
+  change the engine id.
+- **How:** change the version and its SHA-256 in `scripts/build_tesseract.sh`. Check the hash
+  against the project's published checksum or signature where one exists. Open a PR, and let the
+  `Tesseract build` workflow pass on all three platforms.
+- **Publish:** after approval, dispatch `Tesseract build` on `main` with a new release tag,
+  `tesseract-<version>-r<n>`. Raise the `r` number when only the bundled libraries changed. The
+  publish job refuses an existing tag or release.
+- **Pin the app:** copy the new hashes from the release's `SHA256SUMS` into
+  `scripts/fetch_tesseract.sh`. Update the version constants behind `id()` in
+  `src-tauri/src/ocr/tesseract.rs`. Run `pnpm tesseract:fetch` to test the new pins.
+- **Engine version:** if Tesseract itself changed, rerun `python3 scripts/ocr_spike.py` with the
+  flags in its `--help`, record the result in [`docs/ocr.md`](../docs/ocr.md), and note that a new
+  engine id redoes OCR for every book.
+- **Notices:** update the version lines and any changed licence texts in
+  `THIRD_PARTY_NOTICES.md`.
+- **Exceptions:** `check_bundled_c_cves.py` fails closed. Add an exception only with a reason and
+  a near expiry in `ci/bundled-c-exceptions.toml`, and prefer the bump.
 
 ## Thresholds
 

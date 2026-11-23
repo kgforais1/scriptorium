@@ -684,25 +684,25 @@ Per-page failures are statuses, not errors.
 
 ### Phase 3: Tesseract engine and bundling
 
-- [ ] Extend `build_tesseract.sh` and `tesseract.yml` (both from Phase 1) to publish the pinned
+- [x] Extend `build_tesseract.sh` and `tesseract.yml` (both from Phase 1) to publish the pinned
       binaries as a release asset. The Windows build's triple is `x86_64-pc-windows-gnu`, but the app targets
       `x86_64-pc-windows-msvc`, so set `TESSERACT_TARGET_TRIPLE` to name it for the app's target.
       Publish the Linux binary from Ubuntu 22.04 (glibc 2.35), as the workflow now builds it.
-- [ ] Write `fetch_tesseract.sh`, and run it in the Rust CI jobs as pdfium is fetched.
-- [ ] Write `ocr/tesseract.rs`: spawn, timeout, TSV parsing. Unit-test the parser on recorded TSV,
+- [x] Write `fetch_tesseract.sh`, and run it in the Rust CI jobs as pdfium is fetched.
+- [x] Write `ocr/tesseract.rs`: spawn, timeout, TSV parsing. Unit-test the parser on recorded TSV,
       including empty rows, `-1` confidences, and a multi-block page.
-- [ ] Add one integration test that runs the fetched binary on a small committed fixture image,
+- [x] Add one integration test that runs the fetched binary on a small committed fixture image,
       through the same path resolution and cleared environment the app uses. It runs in CI on
       macOS, Windows, and Linux. It first asserts that no `tesseract` is on the runner's `PATH`,
       so a pass cannot come from a system install.
-- [ ] Add the sidecar and resource config. Run `pnpm tauri build` on macOS and check the built
+- [x] Add the sidecar and resource config. Run `pnpm tauri build` on macOS and check the built
       app recognises a page.
-- [ ] Add a CI job on Windows and Linux that runs `pnpm tauri build`, and then runs the bundled
+- [x] Add a CI job on Windows and Linux that runs `pnpm tauri build`, and then runs the bundled
       sidecar from the bundle's own layout on one fixture page. CI does not build bundles today,
       so this is the first such job. It runs on PRs that touch the OCR scripts or config, and
       weekly. Installing and launching the built app on Windows and Linux stays on the M1
       follow-ups manual list.
-- [ ] Add the notices and the bump policy entry.
+- [x] Add the notices and the bump policy entry.
 
 ### Phase 4: job, commands, and UI
 

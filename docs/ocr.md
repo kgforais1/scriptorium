@@ -1,8 +1,8 @@
 # OCR engine
 
-Last reviewed: 2026-11-21
+Last reviewed: 2026-11-22
 
-Scriptorium will bundle **Tesseract 5.5.3** with the `tessdata_fast` English model as its OCR
+Scriptorium will bundle **Tesseract 5.5.4** with the `tessdata_fast` English model as its OCR
 engine. M2a Phase 3 adds it as a sidecar binary, so a crash on a bad page cannot take down the
 app. The bundle carries the binary and language data now. No command or UI uses them yet. This
 page records why Tesseract was chosen, how the binary is built, and how to bump it. The plan is
@@ -94,8 +94,14 @@ and notarization check.
    checked against them. Do that at the next bump. Tesseract and libpng come from GitHub tag
    archives, which have no published checksum.
 2. Run the script locally, and let the `Tesseract build` workflow pass on all three platforms.
+   Then publish a new release tag from `main` and copy its `SHA256SUMS` into
+   `scripts/fetch_tesseract.sh`. Update the version constants behind `id()` in
+   `src-tauri/src/ocr/tesseract.rs`. The full sequence is the
+   [Tesseract bump policy](ci-and-hooks.md#tesseract-bump-policy).
 3. Rerun the spike, `python3 scripts/ocr_spike.py` with the flags in its `--help`, and record any
    change in the table above. The page images must be rebuilt first; the fixtures README has the
    recipe.
 4. A new engine id redoes OCR for every book, as the plan's skip rule requires, so note the bump
    in the changelog.
+5. `ci/bundled-c.toml` reads these pins, so the `bundled-c-cves` job checks the new versions
+   against the NVD on the PR.

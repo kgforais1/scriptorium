@@ -2819,15 +2819,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 `scriptorium-tesseract` is the OCR sidecar. It statically links Tesseract, Leptonica, zlib, libpng, libjpeg-turbo, libtiff, and libwebp, and is built by [`scripts/build_tesseract.sh`](scripts/build_tesseract.sh).
 
-### Tesseract 5.5.3
+### Tesseract 5.5.4
 
 - Upstream: <https://github.com/tesseract-ocr/tesseract>
-- Bundled version: 5.5.3
+- Bundled version: 5.5.4
 - Bundled by: [`scripts/build_tesseract.sh`](scripts/build_tesseract.sh), which builds it with no network features, OpenMP, OpenCL, or training tools, and links the libraries below statically
 - Used for: OCR
 - Licence: Apache-2.0
 
-Licence text, verbatim from `LICENSE` in the 5.5.3 source archive (trailing whitespace removed):
+Licence text, verbatim from `LICENSE` in the 5.5.4 source archive (trailing whitespace removed):
 
 ~~~~text
                                  Apache License
@@ -3285,10 +3285,10 @@ Licence text, verbatim from `leptonica-license.txt` (trailing whitespace removed
  *====================================================================*/
 ~~~~
 
-### zlib 1.3.1
+### zlib 1.3.2
 
 - Upstream: <https://zlib.net/> (<https://github.com/madler/zlib>)
-- Bundled version: 1.3.1
+- Bundled version: 1.3.2
 - Bundled by: [`scripts/build_tesseract.sh`](scripts/build_tesseract.sh), statically linked into the sidecar
 - Used for: compression for libpng and libtiff
 - Licence: Zlib
@@ -3298,7 +3298,7 @@ Licence text, verbatim from `LICENSE` (trailing whitespace removed):
 ~~~~text
 Copyright notice:
 
- (C) 1995-2022 Jean-loup Gailly and Mark Adler
+ (C) 1995-2026 Jean-loup Gailly and Mark Adler
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -3320,10 +3320,10 @@ Copyright notice:
   jloup@gzip.org          madler@alumni.caltech.edu
 ~~~~
 
-### libpng 1.6.47
+### libpng 1.6.59
 
 - Upstream: <http://www.libpng.org/pub/png/libpng.html> (<https://github.com/pnggroup/libpng>)
-- Bundled version: 1.6.47
+- Bundled version: 1.6.59
 - Bundled by: [`scripts/build_tesseract.sh`](scripts/build_tesseract.sh), statically linked into the sidecar
 - Used for: PNG decoding
 - Licence: libpng-2.0
@@ -3337,8 +3337,8 @@ COPYRIGHT NOTICE, DISCLAIMER, and LICENSE
 PNG Reference Library License version 2
 ---------------------------------------
 
- * Copyright (c) 1995-2025 The PNG Reference Library Authors.
- * Copyright (c) 2018-2025 Cosmin Truta.
+ * Copyright (c) 1995-2026 The PNG Reference Library Authors.
+ * Copyright (c) 2018-2026 Cosmin Truta.
  * Copyright (c) 2000-2002, 2004, 2006-2018 Glenn Randers-Pehrson.
  * Copyright (c) 1996-1997 Andreas Dilger.
  * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
@@ -3880,10 +3880,10 @@ TO DO
 Please send bug reports, offers of help, etc. to jpeg-info@jpegclub.org.
 ~~~~
 
-### libtiff 4.7.0
+### libtiff 4.7.2
 
 - Upstream: <https://libtiff.gitlab.io/libtiff/> (<https://gitlab.com/libtiff/libtiff>)
-- Bundled version: 4.7.0
+- Bundled version: 4.7.2
 - Bundled by: [`scripts/build_tesseract.sh`](scripts/build_tesseract.sh), statically linked into the sidecar
 - Used for: TIFF decoding
 - Licence: libtiff
@@ -3914,6 +3914,32 @@ OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
 WHETHER OR NOT ADVISED OF THE POSSIBILITY OF DAMAGE, AND ON ANY THEORY OF
 LIABILITY, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
 OF THIS SOFTWARE.
+
+# Lempel-Ziv & Welch Compression (tif_lzw.c) license
+The code of tif_lzw.c is derived from the compress program whose code is
+derived from software contributed to Berkeley by James A. Woods,
+derived from original work by Spencer Thomas and Joseph Orost.
+
+The original Berkeley copyright notice appears below in its entirety:
+
+Copyright (c) 1985, 1986 The Regents of the University of California.
+All rights reserved.
+
+This code is derived from software contributed to Berkeley by
+James A. Woods, derived from original work by Spencer Thomas
+and Joseph Orost.
+
+Redistribution and use in source and binary forms are permitted
+provided that the above copyright notice and this paragraph are
+duplicated in all such forms and that any documentation,
+advertising materials, and other materials related to such
+distribution and use acknowledge that the software was developed
+by the University of California, Berkeley.  The name of the
+University may not be used to endorse or promote products derived
+from this software without specific prior written permission.
+THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
+WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 ~~~~
 
 ### libwebp 1.5.0
@@ -3994,6 +4020,6 @@ I searched the web for published advisories against each bundled version on 2026
 - Little CMS 2.19.1 has no known advisory. CVE-2026-41254 and CVE-2026-42798 are integer overflows fixed in 2.19, so 2.19.1 is not affected.
 - pdfium 159.0.8138.0 was not part of this check. The bump policy in `docs/ci-and-hooks.md` governs it, because no CPE tracks it.
 
-The Tesseract sidecar's libraries are not yet in this check, and CVE tracking for them is planned in Chunk 6 of [`plans/2026-11-19-m2a-phase3-tesseract.md`](plans/2026-11-19-m2a-phase3-tesseract.md).
+The Tesseract sidecar's libraries are in this check: `ci/bundled-c.toml` reads their pins from `scripts/build_tesseract.sh`, and `ci/scripts/check_bundled_c_cves.py` asks the NVD about them.
 
 Re-run this check when a bundled version changes and before each release.
