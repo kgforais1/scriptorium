@@ -32,9 +32,9 @@ const TSV_COLUMNS: [&str; 12] = [
 ];
 
 /// The pinned Tesseract release, which `scripts/fetch_tesseract.sh` installs.
-const TESSERACT_RELEASE: &str = "tesseract-5.5.3-r2";
+const TESSERACT_RELEASE: &str = "tesseract-5.5.4-r1";
 /// The Tesseract version, the first part of [`TesseractEngine::id`].
-const TESSERACT_VERSION: &str = "5.5.3";
+const TESSERACT_VERSION: &str = "5.5.4";
 /// The language data variant, the last part of [`TesseractEngine::id`].
 const TESSDATA_VARIANT: &str = "eng-fast";
 
