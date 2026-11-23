@@ -149,8 +149,8 @@ one the script sleeps about 7 seconds between requests.
   `python3 ci/scripts/check_bundled_c_cves.py`.
 - **Add a library:** add a `[[library]]` to `ci/bundled-c.toml`. For a `-sys` crate, set `crate`,
   the `version_file` inside the crate, and the `version_regex`: capture groups are joined with
-  `.`. For a script pin, set `source = "script"` and a `version_file` relative to the repository
-  root. Every entry also needs the NVD `cpe_vendor` and `cpe_product`. Every entry also needs a
+  `.`. For a script pin, set `source = "script"`, a `version_file` relative to the repository
+  root, and a `version_regex` that captures the version from that file. Every entry also needs the NVD `cpe_vendor` and `cpe_product`. Every entry also needs a
   canary: a `canary_version` and a `canary_cve` that NVD lists for that version under the same
   CPE. Verify it live with
   `cves/2.0?cpeName=cpe:2.3:a:<vendor>:<product>:<canary_version>:*:*:*:*:*:*:*`. The script queries
@@ -202,9 +202,9 @@ watches them too.
 - **Publish:** after approval, dispatch `Tesseract build` on `main` with a new release tag,
   `tesseract-<version>-r<n>`. Raise the `r` number when only the bundled libraries changed. The
   publish job refuses an existing tag or release.
-- **Pin the app:** copy the new hashes from the release's `SHA256SUMS` into
-  `scripts/fetch_tesseract.sh`. Update the version constants behind `id()` in
-  `src-tauri/src/ocr/tesseract.rs`. Run `pnpm tesseract:fetch` to test the new pins.
+- **Pin the app:** in `scripts/fetch_tesseract.sh`, set `TESSERACT_RELEASE` to the new tag,
+  then copy in the hashes from the release's `SHA256SUMS`. Update the version constants behind
+  `id()` in `src-tauri/src/ocr/tesseract.rs`. Run `pnpm tesseract:fetch` to test the new pins.
 - **Engine version:** if Tesseract itself changed, rerun `python3 scripts/ocr_spike.py` with the
   flags in its `--help`, record the result in [`docs/ocr.md`](../docs/ocr.md), and note that a new
   engine id redoes OCR for every book.

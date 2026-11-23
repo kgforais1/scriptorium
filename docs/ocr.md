@@ -94,8 +94,8 @@ and notarization check.
    checked against them. Do that at the next bump. Tesseract and libpng come from GitHub tag
    archives, which have no published checksum.
 2. Run the script locally, and let the `Tesseract build` workflow pass on all three platforms.
-   Then publish a new release tag from `main` and copy its `SHA256SUMS` into
-   `scripts/fetch_tesseract.sh`. Update the version constants behind `id()` in
+   Then publish a new release tag from `main`. In `scripts/fetch_tesseract.sh`, set
+   `TESSERACT_RELEASE` to that tag and copy in the hashes from its `SHA256SUMS`. Update the version constants behind `id()` in
    `src-tauri/src/ocr/tesseract.rs`. The full sequence is the
    [Tesseract bump policy](ci-and-hooks.md#tesseract-bump-policy).
 3. Rerun the spike, `python3 scripts/ocr_spike.py` with the flags in its `--help`, and record any
