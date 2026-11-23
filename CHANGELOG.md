@@ -24,6 +24,7 @@ uses [Semantic Versioning](https://semver.org/).
 - JSON Schema validation no longer links an HTTP client or AWS-LC. Book schemas are compiled from files embedded in the binary. Desktop builds do not link `reqwest`. Android and iOS still link Tauri's `reqwest` (no `rustls`, no AWS-LC).
 - JPEG 2000 decoding now uses OpenJPEG 2.5.4, which fixes CVE-2025-54874.
 - The `url` crate is now 2.5.9, which fixes a stack overflow on nested `blob:` URLs (RUSTSEC-2026-0592).
+- The `cookie` crate is now 0.18.3, which fixes private cookie nonces that could repeat after a fork (RUSTSEC-2026-0594).
 
 ## [0.2.0] - 2026-11-02
 
