@@ -58,8 +58,9 @@ Phases 2 and 3 left these pieces, which this phase consumes:
    `cargo about` and `cargo audit`. If a check fails, the fallback treats a large JPEG like a
    PNG: a whole decode under the 200 MB rule, which refuses any 8-bit RGB JPEG above about 66 MP.
 3. **Error kinds.** `BookError` gains `OcrUnavailable { reason }` and `OcrStorage { path, error }`,
-   with their `CommandError` mapping in `library/command_error.rs` (its variant-count test goes
-   from 13 to 15) and their messages in `src/lib/errors.ts`. The `OcrUnavailable` struct in
+   where `error` is the OS error's text as a `String`, because `BookError` derives `Clone` and
+   `Eq` and `std::io::Error` is neither. Both get a `CommandError` mapping in
+   `library/command_error.rs` (its variant-count test goes from 13 to 15) and their messages in `src/lib/errors.ts`. The `OcrUnavailable` struct in
    `ocr/mod.rs` is removed, and `TesseractEngine::locate` returns the new kind. A write failure in
    `store.rs` becomes `OcrStorage`. A schema violation stays `InvalidPackage`, because it is a
    bug, not a disk problem. There is no `OcrAlreadyRunning` kind: `run_ocr` returns the running
@@ -112,10 +113,11 @@ Phases 2 and 3 left these pieces, which this phase consumes:
     the binary. The pre-check requires the known words in the output, so a truncated
     `eng.traineddata` fails it.
 12. **Dead code between chunks.** Chunks 1 to 4 add code whose production caller lands in
-    Chunk 5. CI runs clippy with `-D warnings` on the library target, where test uses do not
-    count. So each new module is declared with `#[allow(dead_code)]` and a comment naming the chunk
-    that consumes it, as `ocr/mod.rs` does today. Chunk 5 removes every one of them, and the
-    library clippy run proves nothing is left unused.
+    Chunk 5. CI runs clippy with `-D warnings` twice: on the library target (`ci.yml:241-242`)
+    and with `--all-targets` (`ci.yml:457-458`). Both compile the library without `cfg(test)`, so
+    test uses do not count in either. So each new module is declared with `#[allow(dead_code)]` and a comment naming the chunk
+    that consumes it, as `ocr/mod.rs` does today. Chunk 5 removes every one of them, and both
+    clippy runs prove nothing is left unused.
 13. **`ocr_page` reaches the OCR code through a gated module.** `src-tauri/Cargo.toml` gains an
     empty `dev-tools` feature. `lib.rs` gains `#[cfg(feature = "dev-tools")] pub mod ocr_dev`,
     which exposes one function that runs an image through the input step and the Tesseract
@@ -169,6 +171,11 @@ Each chunk is one PR, reviewed and merged before the next starts.
   PNG, a WebP page, a 60 MP RGBA PNG (240 MB, refused), a 60 MP RGB8 PNG (180 MB, accepted under the
   large-page permit), 50 MP and 20 MP 16-bit RGBA PNGs, and a header claiming
   200 MP. Each output is within the caps in both dimensions, and each peak is within its budget.
+  Refused pages need only a valid header, so their fixtures are written header-first with a short
+  body and never hold a full pixel buffer. The large accepted fixtures, the 100 MP JPEGs and the
+  60 MP RGB8 PNG, are generated once per test run into a temp folder, one at a time under the
+  budget tests' mutex. The 100 MP JPEGs are greyscale, so building them needs 100 MB, not 300 MB.
+  CI runners have 7 GB, so this fits.
   Each refusal happens before any decode. The two-book permit test checks one holder at a time and
   a combined peak within 600 MB. A cancel during a 100 MP decode returns within the measured bound.
 - Run `pnpm licenses:gen` and commit `THIRD_PARTY_LICENSES.generated.md`. Then `pnpm
@@ -182,7 +189,10 @@ Each chunk is one PR, reviewed and merged before the next starts.
   its own kind. Only an unreadable or invalid `meta.json` is `InvalidPackage`.
 - The job rebuilds the index, then runs `pending` pages in order, then retries the pages that were
   `failed` when the run started, once each. A page that fails during this run is not retried until
-  the next run. It skips a `pending` page whose layer `is_current`. The retry pass ignores that
+  the next run. It skips a `pending` page whose layer `is_current`, unless a forced
+  run is active and the layer's `runId` differs from it. `is_current` checks only the engine and
+  the checksum, so without that exception a forced run would skip every fresh page it marked
+  `pending`, and do nothing. This mirrors the guard in `store.rs`'s `rebuild_entry`. The retry pass ignores that
   skip: a recorded failure wins over a current layer, so a page whose forced re-run failed is
   retried even though its older layer is still current. It writes each result with
   `write_ocr_layer` under the per-book mutex, keyed by `canonical_key`.
@@ -191,6 +201,8 @@ Each chunk is one PR, reviewed and merged before the next starts.
   the registry drops the live snapshot. So `book_status` never pairs the last `seq` with an older
   index. A failed write
   stops the job with `OcrStorage`, and the state becomes `unavailable`.
+- If the book has no `ocr/` folder, as an older image book may not, the job creates it before it
+  takes `ocr/.job.lock` or writes the index.
 - The pre-check runs once per job, before any page (decision 11). It and the stale sweep run
   before the first page.
 - Events and the in-memory snapshot (decision 9). Cancel sets the stop flag. A page in flight is

@@ -378,6 +378,8 @@ file leaves the file unchanged and marks the page `failed`.
 - `run_ocr` takes `force: bool`. A forced run re-runs every page that is not `skipped`, including
   fresh `done` pages with the same engine and checksum. It still writes only the `ocr` layer. The
   automatic run after ingest is not forced.
+- While a forced run is active, the skip rule above does not apply to a page whose layer
+  carries a different `runId`, so the forced run redoes fresh pages.
 - A forced run is made durable by `ocr/forced.json`, written atomically before its
   first page. While it exists, a page counts as unfinished until its `ocr` layer carries
   that `runId`. So a forced run that is cancelled, or ends in a crash, resumes on its unfinished
@@ -420,7 +422,7 @@ reader only ever compares it with events from the same session. The reader subsc
 - A page failure (timeout, a crash, unreadable output) marks that page `failed` with a short
   error and moves on. If that failure, or any page file or index write, cannot be written, the
   job stops at once, because it can no longer record what it did. It reports `OcrStorage` with
-  the path and the OS error, and the state becomes `unavailable`. Nothing is lost: an unwritten
+  the path and the OS error's text, and the state becomes `unavailable`. Nothing is lost: an unwritten
   page has no fresh layer, so the next rebuild finds it `pending` and the next run retries it. A
   test makes the `ocr/` folder read-only mid-run and checks this. The job fails as a whole only if the pre-check fails: the binary will not
   start, or a requested language is missing. That is reported as `OcrUnavailable`, like
