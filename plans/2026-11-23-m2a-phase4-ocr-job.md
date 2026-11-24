@@ -193,8 +193,9 @@ Each chunk is one PR, reviewed and merged before the next starts.
   stops the job with `OcrStorage`, and the state becomes `unavailable`.
 - The pre-check runs once per job, before any page (decision 11). It and the stale sweep run
   before the first page.
-- Events and the in-memory snapshot (decision 9). Cancel sets the stop flag. Pages in flight are
-  left `pending`, and their temp files are deleted (decision 8).
+- Events and the in-memory snapshot (decision 9). Cancel sets the stop flag. A page in flight is
+  left `pending`, except a retry of a page that was `failed` when the run started, which stays
+  `failed` with its recorded `afterRunId`. Either way, its temp files are deleted (decision 8).
 - Add `ocr/status.rs` with `book_status(root, jobs)`, the function `ocr_status` will call. While a
   job runs, it returns the registry's snapshot. After a job ends as `unavailable`, the registry
   keeps that state and its `reason` until the next run starts, and `book_status` returns them, so
