@@ -206,7 +206,8 @@ Each chunk is one PR, reviewed and merged before the next starts.
 - Extend `FakeEngine` into a scripted fake: a result per page index, an optional wait until the
   stop flag is set, and a log of calls. Its current one-result form stays as a constructor, so the
   store tests in `ocr/tests.rs` keep working.
-- Tests: resume after cancel, cancel within a second with a page in flight, a failing page that is not
+- Tests: resume after cancel, cancel within a second with a page in flight, a cancelled retry
+  that keeps its page `failed`, a failing page that is not
   retried in the same run, then retried once in the next, a second request joining the running job, two books sharing the
   pool, progress throttling and the last tick after a failure, `OcrUnavailable` for a missing or
   non-executable binary and for missing or truncated language data with no page attempted, the

@@ -315,7 +315,9 @@ small JSON files takes milliseconds. Tests cover a crash after a few pages, a mi
 invalid old index (no page comes back `skipped`), and a carried-over failure.
 
 **Cancel and timeout.** A page in flight when `cancel_ocr` lands goes back to `pending`, because
-it never failed. A page that hits the deadline or crashes the engine is `failed`, and that status
+it never failed. The one exception is a retry of a page that was `failed` when the run started.
+It stays `failed` with its recorded `afterRunId`, so a later rebuild cannot class its old layer as
+`done`. A page that hits the deadline or crashes the engine is `failed`, and that status
 is written to the index at once, outside the throttle, under the per-book mutex. Every index
 write takes that mutex, so two workers' writes never race.
 
