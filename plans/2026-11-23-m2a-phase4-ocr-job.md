@@ -133,10 +133,7 @@ Each chunk is one PR, reviewed and merged before the next starts.
 ### Chunk 1: errors, locks, and the temp run directory
 
 - Add `OcrUnavailable` and `OcrStorage` (decision 3).
-- Generalise the lock helper (decision 6). Change `JP2_MAX_PIXELS` in `ingest/decode.rs` from
-  `pub(super)` to `pub(crate)`, then re-export it from `ingest/mod.rs` as
-  `pub(crate) use decode::JP2_MAX_PIXELS as MAX_PAGE_PIXELS`, so the input step reuses ingest's
-  150 MP limit while `decode` stays private.
+- Generalise the lock helper (decision 6).
 - Add `ocr/run_dir.rs`: a `RunDir` guard that creates `scriptorium-ocr-run-<pid>-<nanos>` under
   `std::env::temp_dir()`, holds its `.ocr.lock`, and removes the directory on drop.
 - Add the temp sweep: top level only, the `scriptorium-ocr-run-` prefix only, no symlinks, older
@@ -149,13 +146,20 @@ Each chunk is one PR, reviewed and merged before the next starts.
 
 ### Chunk 2: the engine-input step
 
+- Change `JP2_MAX_PIXELS` in `ingest/decode.rs` from `pub(super)` to `pub(crate)`, and re-export
+  it from `ingest/mod.rs` as `pub(crate) use decode::JP2_MAX_PIXELS as MAX_PAGE_PIXELS`, so the
+  input step reuses ingest's 150 MP limit while `decode` stays private. The re-export lands here,
+  with its first consumer, because an unused `pub(crate) use` fails clippy's `unused_imports`.
 - Add `ocr/input.rs`. It reads the size and colour type with `image::ImageReader`, without
   decoding pixels. Bytes per pixel come from the colour type. It refuses a page over 150 MP, and a
   whole decode whose buffer would pass 200 MB. It decodes a page within the caps as it is, and a
   larger JPEG through `jpeg-decoder` at the smallest scale at or above the caps (decision 2). It
   resizes to the caps in one pass, never upscales, and writes a PNG into the run directory. It
   takes the stop flag and the deadline (decision 7).
-- Add the large-page permit: one slot shared by all books.
+- Add the large-page permit: one slot shared by all books. A page is small only when its decode
+  buffer, from the header's size and bytes per pixel, is at most 48 MB. Every other page needs
+  the permit. So a 12 MP RGBA16 page, which decodes to 96 MB, is a large page even though it is
+  within the size caps.
 - Add the counting allocator as a `#[cfg(test)] #[global_allocator]` in `lib.rs`, so it exists
   only in the unit-test binary, which can reach the private `ocr::input`. It counts only on a
   thread that has armed it. Each budget test arms its own thread after building its fixture, and
@@ -178,9 +182,14 @@ Each chunk is one PR, reviewed and merged before the next starts.
   its own kind. Only an unreadable or invalid `meta.json` is `InvalidPackage`.
 - The job rebuilds the index, then runs `pending` pages in order, then retries the pages that were
   `failed` when the run started, once each. A page that fails during this run is not retried until
-  the next run. It skips a page whose layer `is_current`. It writes each result with
+  the next run. It skips a `pending` page whose layer `is_current`. The retry pass ignores that
+  skip: a recorded failure wins over a current layer, so a page whose forced re-run failed is
+  retried even though its older layer is still current. It writes each result with
   `write_ocr_layer` under the per-book mutex, keyed by `canonical_key`.
-- It writes the index at most once a second, and at once after a page failure. A failed write
+- It writes the index at most once a second, and at once after a page failure. When the job ends,
+  whether it finished, was cancelled, or stopped on an error, it writes the index once more before
+  the registry drops the live snapshot. So `book_status` never pairs the last `seq` with an older
+  index. A failed write
   stops the job with `OcrStorage`, and the state becomes `unavailable`.
 - The pre-check runs once per job, before any page (decision 11). It and the stale sweep run
   before the first page.
@@ -203,7 +212,9 @@ Each chunk is one PR, reviewed and merged before the next starts.
   non-executable binary and for missing or truncated language data with no page attempted, the
   read-only `ocr/` folder mid-run, a progress event sent before the index flush with `book_status`
   returning that event's counts and `seq`, every `book_status` case above, and a reader that queries after an `unavailable` job
-  ended gets the state and its reason.
+  ended gets the state and its reason. A page that finishes inside the one-second window just
+  before the job ends, or before a cancel, is in the index on disk when the snapshot drops. A
+  failed page whose layer is still current is retried on the next run.
 - Test the Tesseract kill path with a stub binary that sleeps: both `stop` and the deadline end
   it, and no child is left.
 

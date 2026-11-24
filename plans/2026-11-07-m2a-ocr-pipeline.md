@@ -153,8 +153,9 @@ above 50 MP, and a 16-bit RGBA PNG, at 8 bytes a pixel, above 25 MP. Any page ov
 is marked `failed` with "too large" and never decoded.
 
 **Memory budget.** Every allocation counts: the decode buffer, any conversion to RGB, the resized
-buffer, and the PNG encoder's buffers. A page whose decode buffer is within 12 MP is a small page.
-At 4 bytes a pixel its decode is at most 48 MB, the resized copy at most 48 MB, and the encoder
+buffer, and the PNG encoder's buffers. A page whose decode buffer is at most 48 MB is a small page,
+so a 12 MP page qualifies only at 4 bytes a pixel or fewer. A 12 MP 16-bit RGBA page, at 96 MB,
+is a large page. A small page's decode is at most 48 MB, the resized copy at most 48 MB, and the encoder
 at most 16 MB, so 112 MB. Any other page, a scaled JPEG above the cap or a whole PNG or WebP with a
 buffer up to 200 MB, is a large page and needs the single large-page permit. Its budget is 200 MB to decode,
 48 MB resized, and 16 MB to encode, so 264 MB. There is no separate RGB copy. The resize reads
@@ -179,9 +180,9 @@ so scaling does not move them. The input is always the display image path from `
 Ingest has already turned TIFF and JPEG 2000 into JPEG or PNG, so the step sees only JPEG, PNG,
 and WebP. Tests run a 16 MP display JPEG, a 100 MP JPEG, a 16 MP PNG, a WebP display page, a
 60 MP PNG, and a header claiming 200 MP. They check each output is within the PDF caps. A counting
-allocator checks each page's peak against its budget. The 16 MP JPEG decodes at 1/1, so its full
-48 MB buffer is expected, within the 264 MB large-page budget. The 100 MP JPEG must peak below that
-budget, which proves it never decoded at full size (400 MB). The 60 MP PNG, a 50 MP 16-bit RGBA PNG,
+allocator checks each page's peak against its budget. The 16 MP JPEG decodes at 1/1. Its full
+48 MB buffer sits exactly at the small-page limit, so it runs as a small page within the 112 MB
+budget. The 100 MP JPEG must peak below the 264 MB large-page budget, which proves it never decoded at full size (400 MB). The 60 MP PNG, a 50 MP 16-bit RGBA PNG,
 and the 200 MP header are refused without decoding. A 20 MP 16-bit PNG is accepted within budget.
 A test runs large pages from two books at once, so both wait on the one large-page permit. It
 checks only one holds it at a time, and the combined peak stays within 600 MB.
@@ -269,7 +270,8 @@ file or the new one. Every `ocr/` write goes through it.
 
 **The index is a cache.** The page files are the truth for `done`. The job writes the index at
 most once per second, so after a crash it can lag. A page failure is the exception: it writes
-the index at once, outside the throttle. Failures are rare, so this costs little, and a crash can
+the index at once, outside the throttle. The job also writes it once more when it ends, on
+success, cancel, or error, so the index on disk is never behind the last event. Failures are rare, so this costs little, and a crash can
 lose only `done` entries, which step 2 recovers from the page files. Before it starts, the job rebuilds the index
 in two steps:
 
@@ -306,8 +308,9 @@ logs it. It shows no message, because no re-run is known to have happened. Tests
 index during a forced run, which still resumes the forced pages, a first run with no files, and
 an invalid `forced.json`.
 
-Then it writes the rebuilt index atomically. The job runs `pending` pages, then retries each
-`failed` page once per run. M2c moves `skipped` into the page file, where it belongs. Reading 202
+Then it writes the rebuilt index atomically. The job runs `pending` pages, then retries each page that was
+`failed` when the run started, once per run. A recorded failure wins over a current layer, so a
+page whose forced re-run failed is retried even though its older layer is still current. M2c moves `skipped` into the page file, where it belongs. Reading 202
 small JSON files takes milliseconds. Tests cover a crash after a few pages, a missing and an
 invalid old index (no page comes back `skipped`), and a carried-over failure.
 
