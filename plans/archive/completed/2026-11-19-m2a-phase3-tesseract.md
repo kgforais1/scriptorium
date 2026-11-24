@@ -1,7 +1,10 @@
 # Plan: M2a Phase 3, the Tesseract engine and bundling
 
+Last reviewed: 2026-11-23
+Status: complete (merged in #86, #93, #96 and #98)
+
 This is the implementation plan for Phase 3 of
-[`2026-11-07-m2a-ocr-pipeline.md`](2026-11-07-m2a-ocr-pipeline.md). The parent plan's
+[`2026-11-07-m2a-ocr-pipeline.md`](../../2026-11-07-m2a-ocr-pipeline.md). The parent plan's
 "Engine interface" and "Bundling Tesseract" sections hold the design. This plan fixes the
 order of work, the details those sections leave open, and the checks for each chunk. Where the
 two disagree, this plan wins for Phase 3, and the parent plan is corrected in the same PR.
