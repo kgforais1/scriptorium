@@ -3,7 +3,7 @@
 //! The child runs in the image's directory with bare file names, so a non-ASCII temp path
 //! never reaches Tesseract's argument handling on Windows. Its environment is cleared, and on
 //! Windows it gets `CREATE_NO_WINDOW` so no console flashes. See decisions 7 to 10 in
-//! `plans/2026-11-19-m2a-phase3-tesseract.md`.
+//! `plans/archive/completed/2026-11-19-m2a-phase3-tesseract.md`.
 
 use super::engine::{EngineId, Lang, Line, OcrEngine, OcrError, PageOcr, PixelBox, Word};
 use super::OcrUnavailable;

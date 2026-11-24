@@ -227,7 +227,7 @@ jobs:
           overwrite: true
 
   # Publishing is manual: dispatching a run with a release_tag creates a public release, so the
-  # user approves each publish. See decision 2 in plans/2026-11-19-m2a-phase3-tesseract.md.
+  # user approves each publish. See decision 2 in plans/archive/completed/2026-11-19-m2a-phase3-tesseract.md.
   publish:
     name: Publish the binaries
     if: github.event_name == 'workflow_dispatch'

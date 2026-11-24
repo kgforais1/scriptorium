@@ -1,6 +1,6 @@
 # Plan: M2a OCR engine and pipeline
 
-Last reviewed: 2026-11-09
+Last reviewed: 2026-11-23
 Date: 2026-11-07
 Author: planning pass (branch `plan/m2-ocr`)
 Status: in-progress
@@ -138,10 +138,11 @@ allows. A page that overruns is therefore bounded by one stage, not abandoned to
 no transform. Only PDF pages are capped at ingest. An image page keeps its full size, and may be
 WebP, which a static Tesseract may not read. So the job prepares the engine's input. It reads the
 size from the header first, with `image::ImageReader::into_dimensions`, before decoding
-anything. (`decode::header_info` does not return a size, and it and `JP2_MAX_PIXELS` are
-`pub(super)`, so Phase 4 widens the constant to `pub(crate)` for reuse.) A
+anything. (`decode::header_info` does not return a size, and `JP2_MAX_PIXELS` sits in the private
+`decode` module, so Phase 4 re-exports it from `ingest` for reuse.) A
 page within the PDF caps (4000 px long edge, 12 MP) is decoded as it is. A larger JPEG is decoded
-through `jpeg-decoder`'s `Decoder::scale`, which picks the smallest DCT scale (1/8, 1/4, 1/2, or
+through `jpeg-decoder`'s `Decoder::scale` (a new direct dependency, because the app's `zune-jpeg`
+has no DCT scaling; see decision 2 of the Phase 4 plan), which picks the smallest DCT scale (1/8, 1/4, 1/2, or
 1/1) whose output is still at or above the requested size. The job requests the capped size, so
 the decoded image is never smaller than the caps, and is then resized down to them. The step never
 upscales. A 16 MP JPEG therefore decodes at 1/1, because 1/2 would fall below the cap. A 100 MP
@@ -152,8 +153,9 @@ above 50 MP, and a 16-bit RGBA PNG, at 8 bytes a pixel, above 25 MP. Any page ov
 is marked `failed` with "too large" and never decoded.
 
 **Memory budget.** Every allocation counts: the decode buffer, any conversion to RGB, the resized
-buffer, and the PNG encoder's buffers. A page whose decode buffer is within 12 MP is a small page.
-At 4 bytes a pixel its decode is at most 48 MB, the resized copy at most 48 MB, and the encoder
+buffer, and the PNG encoder's buffers. A page whose decode buffer is at most 48 MB is a small page,
+so a 12 MP page qualifies only at 4 bytes a pixel or fewer. A 12 MP 16-bit RGBA page, at 96 MB,
+is a large page. A small page's decode is at most 48 MB, the resized copy at most 48 MB, and the encoder
 at most 16 MB, so 112 MB. Any other page, a scaled JPEG above the cap or a whole PNG or WebP with a
 buffer up to 200 MB, is a large page and needs the single large-page permit. Its budget is 200 MB to decode,
 48 MB resized, and 16 MB to encode, so 264 MB. There is no separate RGB copy. The resize reads
@@ -178,9 +180,9 @@ so scaling does not move them. The input is always the display image path from `
 Ingest has already turned TIFF and JPEG 2000 into JPEG or PNG, so the step sees only JPEG, PNG,
 and WebP. Tests run a 16 MP display JPEG, a 100 MP JPEG, a 16 MP PNG, a WebP display page, a
 60 MP PNG, and a header claiming 200 MP. They check each output is within the PDF caps. A counting
-allocator checks each page's peak against its budget. The 16 MP JPEG decodes at 1/1, so its full
-48 MB buffer is expected, within the 264 MB large-page budget. The 100 MP JPEG must peak below that
-budget, which proves it never decoded at full size (400 MB). The 60 MP PNG, a 50 MP 16-bit RGBA PNG,
+allocator checks each page's peak against its budget. The 16 MP JPEG decodes at 1/1. Its full
+48 MB buffer sits exactly at the small-page limit, so it runs as a small page within the 112 MB
+budget. The 100 MP JPEG must peak below the 264 MB large-page budget, which proves it never decoded at full size (400 MB). The 60 MP PNG, a 50 MP 16-bit RGBA PNG,
 and the 200 MP header are refused without decoding. A 20 MP 16-bit PNG is accepted within budget.
 A test runs large pages from two books at once, so both wait on the one large-page permit. It
 checks only one holds it at a time, and the combined peak stays within 600 MB.
@@ -268,7 +270,8 @@ file or the new one. Every `ocr/` write goes through it.
 
 **The index is a cache.** The page files are the truth for `done`. The job writes the index at
 most once per second, so after a crash it can lag. A page failure is the exception: it writes
-the index at once, outside the throttle. Failures are rare, so this costs little, and a crash can
+the index at once, outside the throttle. The job also writes it once more when it ends, on
+success, cancel, or error, so the index on disk is never behind the last event. Failures are rare, so this costs little, and a crash can
 lose only `done` entries, which step 2 recovers from the page files. Before it starts, the job rebuilds the index
 in two steps:
 
@@ -305,13 +308,16 @@ logs it. It shows no message, because no re-run is known to have happened. Tests
 index during a forced run, which still resumes the forced pages, a first run with no files, and
 an invalid `forced.json`.
 
-Then it writes the rebuilt index atomically. The job runs `pending` pages, then retries each
-`failed` page once per run. M2c moves `skipped` into the page file, where it belongs. Reading 202
+Then it writes the rebuilt index atomically. The job runs `pending` pages, then retries each page that was
+`failed` when the run started, once per run. A recorded failure wins over a current layer, so a
+page whose forced re-run failed is retried even though its older layer is still current. M2c moves `skipped` into the page file, where it belongs. Reading 202
 small JSON files takes milliseconds. Tests cover a crash after a few pages, a missing and an
 invalid old index (no page comes back `skipped`), and a carried-over failure.
 
 **Cancel and timeout.** A page in flight when `cancel_ocr` lands goes back to `pending`, because
-it never failed. A page that hits the deadline or crashes the engine is `failed`, and that status
+it never failed. The one exception is a retry of a page that was `failed` when the run started.
+It stays `failed` with its recorded `afterRunId`, so a later rebuild cannot class its old layer as
+`done`. A page that hits the deadline or crashes the engine is `failed`, and that status
 is written to the index at once, outside the throttle, under the per-book mutex. Every index
 write takes that mutex, so two workers' writes never race.
 
@@ -361,8 +367,9 @@ file leaves the file unchanged and marks the page `failed`.
   two books OCR at once never use more than that. Each worker runs one page at a time. Books take
   turns page by page. [ocrs: same pool.]
 - It starts automatically after a successful ingest, and from a new `run_ocr` command. A new
-  `cancel_ocr` command sets the stop flag. Pages in flight end within about 100 ms and are
-  left `pending`. On exit, `RunEvent::Exit` sets every stop flag and waits up to 2 seconds for
+  `cancel_ocr` command sets the stop flag. Pages in recognition end within about 100 ms and
+  are left `pending`. A page still in the engine-input step ends after its one decode call, which
+  the Phase 4 plan bounds (its decision 7). On exit, `RunEvent::Exit` sets every stop flag and waits up to 2 seconds for
   the workers, then lets the process end. Atomic writes make an end mid-page safe. The next
   start resumes, because finished pages are on disk.
 - It visits pages in order and skips a page whose `ocr` layer has the same engine id and the same
@@ -371,6 +378,8 @@ file leaves the file unchanged and marks the page `failed`.
 - `run_ocr` takes `force: bool`. A forced run re-runs every page that is not `skipped`, including
   fresh `done` pages with the same engine and checksum. It still writes only the `ocr` layer. The
   automatic run after ingest is not forced.
+- While a forced run is active, the skip rule above does not apply to a page whose layer
+  carries a different `runId`, so the forced run redoes fresh pages.
 - A forced run is made durable by `ocr/forced.json`, written atomically before its
   first page. While it exists, a page counts as unfinished until its `ocr` layer carries
   that `runId`. So a forced run that is cancelled, or ends in a crash, resumes on its unfinished
@@ -394,7 +403,8 @@ file leaves the file unchanged and marks the page `failed`.
   channel, because a job started after ingest has no command in flight to carry one.
   - `ocr-progress` is `{ root, seq, done, failed, total }`, throttled to 4 a second with the
     existing throttle.
-  - `ocr-state` is `{ root, seq, state }`, sent on every change, never throttled. `state` is
+  - `ocr-state` is `{ root, seq, state, reason }`, sent on every change, never throttled.
+    `reason` is set only for `unavailable`. `state` is
     `idle`, `running`, `cancelling`, `finished`, `unavailable`, or `busy`.
   - `seq` is one counter per book that rises with every event.
 - `ocr_status(root)` returns the book's job `state`, the current `seq`, and the page statuses, as
@@ -412,7 +422,7 @@ reader only ever compares it with events from the same session. The reader subsc
 - A page failure (timeout, a crash, unreadable output) marks that page `failed` with a short
   error and moves on. If that failure, or any page file or index write, cannot be written, the
   job stops at once, because it can no longer record what it did. It reports `OcrStorage` with
-  the path and the OS error, and the state becomes `unavailable`. Nothing is lost: an unwritten
+  the path and the OS error's text, and the state becomes `unavailable`. Nothing is lost: an unwritten
   page has no fresh layer, so the next rebuild finds it `pending` and the next run retries it. A
   test makes the `ocr/` folder read-only mid-run and checks this. The job fails as a whole only if the pre-check fails: the binary will not
   start, or a requested language is missing. That is reported as `OcrUnavailable`, like
@@ -421,14 +431,14 @@ reader only ever compares it with events from the same session. The reader subsc
   registry, keyed by the canonical package root like `commands/session.rs`, never by the
   book's self-declared id. It is held only while a page file is read, changed, and written back.
   The job registry uses the same key. M2c's editor takes
-  the same mutex. Reading the book while OCR runs is unaffected. `load_book` still does not read `ocr/`. It gains a cheap
-  `ocr_status` read for the UI, which reads only `index.json`.
+  the same mutex. Reading the book while OCR runs is unaffected. `load_book` still does not read `ocr/`. The UI gets a
+  separate `ocr_status` command, which reads only `index.json`.
 
 ### UI
 
 M2a adds only status, since showing text is M2b:
 
-- The home screen has no book list until M5, so status shows in the reader. `ReaderStatus`
+- The home screen has no book list until M5, so status shows in the reader. `ReaderHeader`, beside the page indicator,
   shows "Reading text… 34 of 202" while the job runs, and "Text ready" or "Text ready, 1 page
   failed" after.
 - `ReaderHeader` gets a "Text" button with three actions. "Recognise text again" calls
@@ -530,7 +540,8 @@ scan, and no one has to transcribe by hand. Only validated pages are used.
   texts stay in gitignored `tmp/`, and the script rebuilds them from the pinned revisions. On a
   rebuild it checks the file's timestamp and SHA-1 first, then each page image's SHA-256.
 - The rendered page images are also kept durably. When the manifest is first built, the script
-  packs the images into one archive and uploads it as a pinned release asset on this repo, as
+  packs the images into one archive, and the maintainer publishes it by hand, with the user's
+  approval, as a pinned release asset on this repo, as
   the Tesseract binaries are. The images are public domain, so they may be redistributed. A
   rebuild fetches from Commons first. If Commons has a newer upload, no longer serves the page,
   or renders it to different bytes, the script fetches the pinned image from the release asset
@@ -608,7 +619,7 @@ and the curator's own setting in M2c stay as described above.
 | `OcrUnavailable` | The engine binary or language data is missing or will not start. The job's pre-check finds this before any page. |
 | `OcrStorage` | A page file or the index cannot be written. The job stops. The next run, once the disk is writable, redoes the unrecorded pages. |
 | `OcrError::NoLanguage` | Internal only. An empty `langs` is a caller bug, caught by a unit test, and never reaches the UI. |
-| `OcrAlreadyRunning` | Not an error to the UI; `run_ocr` returns the running job's id. |
+| `OcrAlreadyRunning` | Not added. `run_ocr` returns the running job's state instead. |
 | `InvalidPackage` | `meta.json` cannot be read, so the job cannot list the pages. |
 | (page status) | An `ocr/<NNNN>.json` fails validation. This is not an error. The job leaves the file untouched and marks the page `failed` with the reason. M2c adds the repair action. |
 
@@ -640,11 +651,11 @@ Per-page failures are statuses, not errors.
 - `src-tauri/src/ocr/{mod.rs, engine.rs, tesseract.rs, fake.rs, job.rs, store.rs}` (new).
 - `src-tauri/src/library/ocr.rs`: write v1, keep v0 reading for the shim.
 - `src-tauri/src/commands/`: `run_ocr`, `cancel_ocr`, `ocr_status`.
-- `src-tauri/src/bin/ocr_page.rs` (new, dev only): one page through the app's OCR path, for
-  the calibration script.
+- `src-tauri/src/bin/ocr_page.rs` (new, dev only, behind a `dev-tools` feature): one page through
+  the app's OCR path, for the calibration script.
 - `src-tauri/src/lib.rs`: register the commands, cancel jobs on exit.
 - `src-tauri/tauri.conf.json`: the sidecar and its language data.
-- `src/features/reader/` (`ReaderStatus`, `ReaderHeader`): status and the Text button. `src/lib/errors.ts`.
+- `src/features/reader/` (`ReaderHeader`): status and the Text button. `src/lib/errors.ts`.
 - `THIRD_PARTY_NOTICES.md`, `docs/ci-and-hooks.md`, `docs/development.md`, both changelogs.
 
 ## Phases & checklist
@@ -661,10 +672,9 @@ Per-page failures are statuses, not errors.
 - [x] Write `scripts/ocr_spike.py`. It runs each engine on the 12 pages and prints CER, WER, and
       seconds per page. It must pass ruff and basedpyright.
 - [x] Run Tesseract with `tessdata_fast` and with `tessdata_best`, and ocrs.
-- [ ] Prove the packaging route for the leading engine on macOS arm64: a binary that runs with
+- [x] Prove the packaging route for the leading engine on macOS arm64: a binary that runs with
       Homebrew moved aside, signed ad hoc under the hardened runtime, inside a built app. The
-      standalone binary passed on 2026-11-09. This stays open until the built-app check in
-      Phase 3 passes. Build
+      standalone binary passed on 2026-11-09, and the built-app check passed in Phase 3. Build
       the Linux x64 and Windows x64 binaries in CI, and run each on a runner with no Tesseract
       installed. A failure on any platform fails the gate for Tesseract.
 - [x] Apply the gate, write `docs/ocr.md`, and update this plan. Get the choice reviewed before
@@ -705,6 +715,9 @@ Per-page failures are statuses, not errors.
 - [x] Add the notices and the bump policy entry.
 
 ### Phase 4: job, commands, and UI
+
+The order of work and the details are in the
+[Phase 4 plan](2026-11-23-m2a-phase4-ocr-job.md).
 
 - [ ] Write `ocr/job.rs`: pool, ordering, skip rule, progress, cancel, and per-page failure.
 - [ ] Add `run_ocr`, `cancel_ocr`, and `ocr_status`, and start a job after ingest.
@@ -763,8 +776,10 @@ Per-page failures are statuses, not errors.
       PDF text has boxes, so the text layer matches its own boxes.
 - [x] `tessdata_fast` or `tessdata_best`? Decided 2026-11-09: `fast`. The spike found them equally
       accurate, and `fast` is quicker and a quarter of the size.
-- [ ] Should OCR start automatically after ingest, or wait for the curator? The recommendation is
-      automatic, because it is offline and cancellable.
+- [x] Should OCR start automatically after ingest, or wait for the curator? Decided 2026-11-23:
+      automatically after ingest only, because it is offline and cancellable. Opening a book
+      does not start a job. See decision 1 of the
+      [Phase 4 plan](2026-11-23-m2a-phase4-ocr-job.md).
 - [ ] Follow-up, in the same plan as the language manager: bundle 14 languages in the
       installer, so a curator with no internet can OCR them from the start. They are English,
       French, German, Spanish, Italian, Portuguese, Dutch, Latin, Russian, Ancient Greek, Chinese
