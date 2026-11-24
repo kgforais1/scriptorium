@@ -133,7 +133,8 @@ Each chunk is one PR, reviewed and merged before the next starts.
 ### Chunk 1: errors, locks, and the temp run directory
 
 - Add `OcrUnavailable` and `OcrStorage` (decision 3).
-- Generalise the lock helper (decision 6). Re-export `JP2_MAX_PIXELS` from `ingest/mod.rs` as
+- Generalise the lock helper (decision 6). Change `JP2_MAX_PIXELS` in `ingest/decode.rs` from
+  `pub(super)` to `pub(crate)`, then re-export it from `ingest/mod.rs` as
   `pub(crate) use decode::JP2_MAX_PIXELS as MAX_PAGE_PIXELS`, so the input step reuses ingest's
   150 MP limit while `decode` stays private.
 - Add `ocr/run_dir.rs`: a `RunDir` guard that creates `scriptorium-ocr-run-<pid>-<nanos>` under
