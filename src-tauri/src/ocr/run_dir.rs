@@ -161,10 +161,29 @@ fn is_old(entry: &std::fs::DirEntry, max_age: Duration) -> bool {
 
 /// True when no process holds the run directory's lock. A missing lock file means the run died
 /// before creating it, so an old directory is safe to remove.
+///
+/// The lock is opened without blocking and without following a link, and only a regular file
+/// counts. Another local user can make a `scriptorium-ocr-run-*` directory in the shared temp
+/// directory, where a FIFO named `.ocr.lock` would otherwise stall the open forever. Any other
+/// object type, and a link, is treated as held, so the sweep leaves that directory alone.
 fn lock_is_free(dir: &Path) -> bool {
-    match File::open(dir.join(RUN_LOCK)) {
-        Ok(file) => file.try_lock().is_ok(),
-        Err(e) => e.kind() == std::io::ErrorKind::NotFound,
+    let path = dir.join(RUN_LOCK);
+    let mut options = OpenOptions::new();
+    options.read(true);
+    // Never follow a link, and never wait for a FIFO's writer.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW);
+    }
+    let file = match options.open(&path) {
+        Ok(file) => file,
+        Err(e) => return e.kind() == std::io::ErrorKind::NotFound,
+    };
+    // Check the opened handle, not the path, so a swap between open and check cannot help.
+    match file.metadata() {
+        Ok(meta) if meta.is_file() => file.try_lock().is_ok(),
+        _ => false,
     }
 }
 
@@ -272,5 +291,52 @@ mod tests {
 
         assert_eq!(sweep_stale(&base.0, Duration::ZERO), 0);
         assert!(target.is_dir());
+    }
+
+    /// Create a FIFO at `path`.
+    #[cfg(unix)]
+    fn make_fifo(path: &Path) {
+        use std::os::unix::ffi::OsStrExt;
+        let c_path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+        // SAFETY: `c_path` is a valid NUL-terminated path that outlives the call.
+        let result = unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) };
+        assert_eq!(
+            result,
+            0,
+            "mkfifo failed: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sweep_does_not_hang_on_a_fifo_lock_and_leaves_its_directory() {
+        let base = Base::new("fifo");
+        let dir = base.run_dir("fifo");
+        make_fifo(&dir.join(RUN_LOCK));
+
+        let started = std::time::Instant::now();
+        assert_eq!(sweep_stale(&base.0, Duration::ZERO), 0);
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "the sweep must not block on a FIFO lock"
+        );
+        assert!(dir.is_dir(), "a directory with a FIFO lock is left alone");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sweep_does_not_follow_a_symlink_lock() {
+        let base = Base::new("lock-link");
+        let dir = base.run_dir("lock-link");
+        let target = base.0.join("link-target.lock");
+        std::fs::write(&target, b"").unwrap();
+        std::os::unix::fs::symlink(&target, dir.join(RUN_LOCK)).unwrap();
+
+        assert_eq!(sweep_stale(&base.0, Duration::ZERO), 0);
+        assert!(
+            dir.is_dir(),
+            "a directory whose lock is a symlink is left alone"
+        );
     }
 }
