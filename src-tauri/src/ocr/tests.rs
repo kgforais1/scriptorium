@@ -4,6 +4,7 @@ use super::engine::{EngineId, Lang, Line, OcrEngine, PageOcr, PixelBox, Word};
 use super::fake::FakeEngine;
 use super::store::*;
 use crate::book_format::BookMeta;
+use crate::library::BookError;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -541,4 +542,21 @@ fn a_v1_document_of_the_wrong_shape_is_not_a_page() {
         panic!("a forced file is not a page");
     };
     assert!(reason.contains("not a page"), "{reason}");
+}
+
+#[test]
+fn a_write_failure_is_ocr_storage() {
+    let book = Book::new("storage");
+    std::fs::remove_dir_all(book.0.join("ocr")).unwrap();
+    std::fs::write(book.0.join("ocr"), "not a directory").unwrap();
+    let page = json!({ "schema": 1, "layers": { "pdf": { "text": "x" } } });
+
+    let err = write_json(&book.page(0), &page).unwrap_err();
+    match err {
+        BookError::OcrStorage { path, error } => {
+            assert_eq!(path, book.page(0));
+            assert!(!error.is_empty());
+        }
+        other => panic!("expected OcrStorage, got {other:?}"),
+    }
 }

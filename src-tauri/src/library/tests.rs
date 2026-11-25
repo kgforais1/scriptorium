@@ -4,7 +4,7 @@
 use super::create::{check_space, create_book_from_folder, estimate_bytes, CreateOptions};
 use super::load::{load_book, parse_meta};
 use super::progress::save_last_read_page;
-use super::sweep::{lock_ingest_dir, sweep_orphans, ORPHAN_AGE, TMP_PREFIX};
+use super::sweep::{lock_dir, sweep_orphans, INGEST_LOCK, ORPHAN_AGE, TMP_PREFIX};
 use super::BookError;
 use crate::book_format::{BookMeta, CURRENT_FORMAT_VERSION};
 use image::codecs::jpeg::JpegEncoder;
@@ -586,7 +586,7 @@ fn sweep_removes_only_old_temp_entries() {
     // A running ingest holds its lock, so its temp dir is left alone however old it is.
     let running = lib.join(format!("{TMP_PREFIX}running"));
     std::fs::create_dir(&running).unwrap();
-    let held = lock_ingest_dir(&running).unwrap();
+    let held = lock_dir(&running, INGEST_LOCK).unwrap();
 
     assert_eq!(
         sweep_orphans(&lib, ORPHAN_AGE),

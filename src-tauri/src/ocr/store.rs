@@ -8,7 +8,7 @@
 use super::engine::{normalise, EngineId, PageOcr, StoredLine};
 use crate::book_format::BookMeta;
 use crate::library::create::numbered;
-use crate::library::{io_error, now_rfc3339, write_atomic, BookError};
+use crate::library::{io_error, now_rfc3339, write_atomic_io, BookError};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -56,6 +56,9 @@ pub(crate) fn validate_v0(value: &Value) -> Result<(), String> {
 }
 
 /// Write `value` as pretty JSON, atomically, after checking it against the v1 schema.
+///
+/// A schema or serialization failure is `InvalidPackage`, because it is a bug. A disk failure
+/// is `OcrStorage`, with the operating system's own error text.
 pub(crate) fn write_json(path: &Path, value: &Value) -> Result<(), BookError> {
     validate_v1(value).map_err(|reason| BookError::InvalidPackage {
         reason: format!("{} would fail the ocr schema: {reason}", path.display()),
@@ -63,7 +66,10 @@ pub(crate) fn write_json(path: &Path, value: &Value) -> Result<(), BookError> {
     let text = serde_json::to_string_pretty(value).map_err(|e| BookError::InvalidPackage {
         reason: e.to_string(),
     })?;
-    write_atomic(path, (text + "\n").as_bytes())
+    write_atomic_io(path, (text + "\n").as_bytes()).map_err(|(_, error)| BookError::OcrStorage {
+        path: path.to_path_buf(),
+        error: error.to_string(),
+    })
 }
 
 /// A page file as read from disk.

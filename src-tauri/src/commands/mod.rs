@@ -20,6 +20,7 @@ use crate::library::load::{load_book, LoadedBook};
 use crate::library::progress::save_last_read_page;
 use crate::library::sweep::{sweep_orphans, ORPHAN_AGE};
 use crate::library::BookError;
+use crate::ocr::run_dir::{sweep_stale, RUN_ORPHAN_AGE};
 use serde::Serialize;
 use session::{canonical_key, Session, WorkerStep, SAVE_INTERVAL};
 use state_file::{read_last_book, write_last_book};
@@ -68,8 +69,8 @@ impl ProgressSaved {
     }
 }
 
-/// Resolve the library folder, create it, register the app state, and sweep stale ingest
-/// temp files once on a background thread.
+/// Resolve the library folder, create it, register the app state, and sweep stale ingest and
+/// OCR run temp files once on a background thread.
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = app.path().app_data_dir()?;
     let library = data_dir.join("books");
@@ -83,6 +84,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Never a zero age: another instance may be between making its temp dir and locking it.
     std::thread::spawn(move || {
         sweep_orphans(&swept, ORPHAN_AGE);
+        sweep_stale(&std::env::temp_dir(), RUN_ORPHAN_AGE);
     });
     Ok(())
 }
