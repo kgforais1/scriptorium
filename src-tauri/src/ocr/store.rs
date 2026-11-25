@@ -66,9 +66,11 @@ pub(crate) fn write_json(path: &Path, value: &Value) -> Result<(), BookError> {
     let text = serde_json::to_string_pretty(value).map_err(|e| BookError::InvalidPackage {
         reason: e.to_string(),
     })?;
-    write_atomic_io(path, (text + "\n").as_bytes()).map_err(|(_, error)| BookError::OcrStorage {
-        path: path.to_path_buf(),
-        error: error.to_string(),
+    write_atomic_io(path, (text + "\n").as_bytes()).map_err(|(failed, error)| {
+        BookError::OcrStorage {
+            path: failed,
+            error: error.to_string(),
+        }
     })
 }
 

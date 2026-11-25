@@ -42,7 +42,7 @@ impl RunDir {
                 std::process::id(),
                 nanos + attempt
             ));
-            match std::fs::create_dir(&path) {
+            match create_dir(&path) {
                 Ok(()) => {
                     // Nothing can exist inside a fresh directory, so create_new is safe here.
                     let lock = match create_lock(&path) {
@@ -65,6 +65,22 @@ impl RunDir {
             path: base.to_path_buf(),
             error: "no unique temporary directory name".into(),
         })
+    }
+}
+
+/// Create the run directory. On Unix it is owner-only from the moment it exists, because the
+/// system temp directory is shared. Windows' per-user temp directory needs no extra mode.
+fn create_dir(path: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        let mut builder = std::fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder.create(path)
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::create_dir(path)
     }
 }
 
@@ -114,7 +130,13 @@ pub(crate) fn sweep_stale(base: &Path, max_age: Duration) -> usize {
         if !lock_is_free(&path) {
             continue;
         }
-        removed += usize::from(std::fs::remove_dir_all(&path).is_ok());
+        match std::fs::remove_dir_all(&path) {
+            Ok(()) => removed += 1,
+            Err(error) => eprintln!(
+                "could not remove stale OCR run directory {}: {error}",
+                path.display()
+            ),
+        }
     }
     removed
 }
@@ -199,6 +221,16 @@ mod tests {
         assert!(taken.is_dir(), "the existing directory is untouched");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn a_run_dir_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = Base::new("mode");
+        let dir = RunDir::create_in(&base.0, 1).unwrap();
+        let mode = std::fs::metadata(dir.path()).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700);
+    }
+
     #[test]
     fn sweep_removes_only_old_unlocked_run_dirs() {
         let base = Base::new("sweep");
@@ -214,6 +246,19 @@ mod tests {
         assert!(!stale.exists());
         assert!(live.exists());
         assert!(other.exists());
+    }
+
+    #[test]
+    fn sweep_removes_a_stale_run_dir_whose_lock_was_released() {
+        let base = Base::new("crash");
+        let crashed = base.run_dir("crashed");
+        {
+            let lock = File::create(crashed.join(RUN_LOCK)).unwrap();
+            lock.lock().unwrap();
+        }
+        assert!(crashed.join(RUN_LOCK).is_file(), "the lock file survives");
+        assert_eq!(sweep_stale(&base.0, Duration::ZERO), 1);
+        assert!(!crashed.exists());
     }
 
     #[cfg(unix)]

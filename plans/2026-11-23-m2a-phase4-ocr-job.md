@@ -237,7 +237,9 @@ Each chunk is one PR, reviewed and merged before the next starts.
 - `run_ocr` with `force` writes `ocr/forced.json` atomically before its first page. A forced
   request during a run writes a new `runId` at once, and the running job adopts it and makes one
   more pass.
-- The job holds `ocr/.job.lock` with `lock_dir`. An instance that cannot take it reports `busy`
+- Add `try_lock_dir(dir, name)`, which opens the lock file like `lock_dir` but takes the lock
+  with `try_lock`, so it never blocks. The job holds `ocr/.job.lock` with it. An instance that
+  cannot take it reports `busy`
   and writes nothing. A forced request there is refused with `busy`. `book_status` tries the lock
   without blocking and releases it at once.
 - The second-instance tests re-run the test binary itself as a child process, with an environment
