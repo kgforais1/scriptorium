@@ -347,8 +347,8 @@ file leaves the file unchanged and marks the page `failed`.
 ### The OCR job
 
 - One job runs per book at a time, across app instances too. The app does not stop a second
-  instance from opening, so a job takes an exclusive lock on `ocr/.job.lock`, with the same
-  `lock_dir` helper, before it rebuilds the index. Only the lock holder writes the index, the
+  instance from opening, so a job takes an exclusive lock on `ocr/.job.lock`, with
+  `try_lock_dir`, which never blocks, before it rebuilds the index. Only the lock holder writes the index, the
   `ocr` layers, or `ocr/forced.json`, so two instances cannot overwrite each other's index or erase a failure. The lock
   is released when the job finishes, fails, or is cancelled, and the OS releases it if the app
   crashes. An instance that cannot take the lock reports the state `busy`, writes nothing, and

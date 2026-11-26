@@ -98,6 +98,18 @@ pub enum BookError {
         /// Why it could not be loaded.
         reason: String,
     },
+    /// The OCR engine or its language data is missing or will not start.
+    OcrUnavailable {
+        /// What could not be found, and where it was looked for.
+        reason: String,
+    },
+    /// An OCR page file or index could not be written.
+    OcrStorage {
+        /// The file that could not be written.
+        path: PathBuf,
+        /// The operating system's error text.
+        error: String,
+    },
 }
 
 impl std::fmt::Display for BookError {
@@ -152,6 +164,15 @@ impl std::fmt::Display for BookError {
             Self::PdfiumUnavailable { reason } => write!(
                 f,
                 "PDF import is unavailable because the PDF component could not be loaded ({reason})."
+            ),
+            Self::OcrUnavailable { reason } => write!(
+                f,
+                "Text recognition is unavailable because the OCR component could not be loaded ({reason})."
+            ),
+            Self::OcrStorage { path, error } => write!(
+                f,
+                "Could not save the text recognition result to {}: {error}.",
+                path.display()
             ),
         }
     }
@@ -235,6 +256,12 @@ fn dir_sync_unsupported(e: &std::io::Error) -> bool {
 /// Write `bytes` to `path` atomically: a uniquely named sibling temp file, fsync, rename
 /// over, then fsync the directory.
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
+    write_atomic_io(path, bytes).map_err(|(p, e)| io_error(&p, &e))
+}
+
+/// Write `bytes` atomically, returning the raw OS error and the path it concerns, for callers
+/// that map it to their own error kind.
+pub(crate) fn write_atomic_io(path: &Path, bytes: &[u8]) -> Result<(), (PathBuf, std::io::Error)> {
     use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
     // A unique name keeps two overlapping saves (a page turn and the close flush) from
@@ -254,12 +281,11 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
     if let Err(e) = written {
         // Never leave a half-written temp file behind.
         let _ = std::fs::remove_file(&tmp);
-        // Name the file the user knows, not the temp file next to it.
-        return Err(io_error(path, &e));
+        return Err((path.to_path_buf(), e));
     }
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
-        io_error(path, &e)
+        (path.to_path_buf(), e)
     })?;
     // Sync the directory too, so the rename itself survives a crash.
     #[cfg(unix)]
@@ -269,7 +295,7 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BookError> {
             // open a directory. The new file is already in place, so that is not a failed save;
             // only a real I/O error is reported.
             if !dir_sync_unsupported(&e) {
-                return Err(io_error(dir, &e));
+                return Err((dir.to_path_buf(), e));
             }
         }
     }

@@ -6,7 +6,7 @@
 //! `plans/archive/completed/2026-11-19-m2a-phase3-tesseract.md`.
 
 use super::engine::{EngineId, Lang, Line, OcrEngine, OcrError, PageOcr, PixelBox, Word};
-use super::OcrUnavailable;
+use crate::library::BookError;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -63,7 +63,7 @@ impl TesseractEngine {
     /// Both paths must exist; the binary is not run. The chosen paths are absolute, because
     /// the child runs in the image's directory and would otherwise resolve a relative
     /// override from there.
-    pub fn locate(resource_dir: Option<&Path>) -> Result<Self, OcrUnavailable> {
+    pub fn locate(resource_dir: Option<&Path>) -> Result<Self, BookError> {
         let binary = absolutise(first_file(binary_candidates(), "Tesseract binary")?);
         let tessdata = absolutise(first_dir(
             tessdata_candidates(resource_dir),
@@ -234,19 +234,23 @@ fn absolutise(path: PathBuf) -> PathBuf {
 }
 
 /// The first candidate that is a file, or an error naming every path tried.
-fn first_file(candidates: Vec<PathBuf>, what: &str) -> Result<PathBuf, OcrUnavailable> {
+fn first_file(candidates: Vec<PathBuf>, what: &str) -> Result<PathBuf, BookError> {
     if let Some(path) = candidates.iter().find(|path| path.is_file()) {
         return Ok(path.clone());
     }
-    Err(OcrUnavailable::new(not_found(what, &candidates)))
+    Err(BookError::OcrUnavailable {
+        reason: not_found(what, &candidates),
+    })
 }
 
 /// The first candidate that is a directory, or an error naming every path tried.
-fn first_dir(candidates: Vec<PathBuf>, what: &str) -> Result<PathBuf, OcrUnavailable> {
+fn first_dir(candidates: Vec<PathBuf>, what: &str) -> Result<PathBuf, BookError> {
     if let Some(path) = candidates.iter().find(|path| path.is_dir()) {
         return Ok(path.clone());
     }
-    Err(OcrUnavailable::new(not_found(what, &candidates)))
+    Err(BookError::OcrUnavailable {
+        reason: not_found(what, &candidates),
+    })
 }
 
 /// The "not found" message for `what`, listing `candidates`.

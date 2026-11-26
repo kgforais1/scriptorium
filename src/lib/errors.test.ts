@@ -16,6 +16,8 @@ const HEADINGS: [string, string][] = [
   ["TooManyPages", "Too many pages"],
   ["EncryptedPdf", "PDF is password-protected"],
   ["PdfiumUnavailable", "PDF import is unavailable"],
+  ["OcrUnavailable", "Text recognition is unavailable"],
+  ["OcrStorage", "Could not save OCR text"],
   ["Internal", "Scriptorium hit a problem"],
 ];
 

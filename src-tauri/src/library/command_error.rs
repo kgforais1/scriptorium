@@ -31,6 +31,8 @@ fn variant_name(err: &BookError) -> &'static str {
         BookError::TooManyPages { .. } => "TooManyPages",
         BookError::EncryptedPdf { .. } => "EncryptedPdf",
         BookError::PdfiumUnavailable { .. } => "PdfiumUnavailable",
+        BookError::OcrUnavailable { .. } => "OcrUnavailable",
+        BookError::OcrStorage { .. } => "OcrStorage",
     }
 }
 
@@ -96,8 +98,15 @@ mod tests {
                 pages: 100_001,
                 max: 100_000,
             },
+            BookError::OcrStorage {
+                path: p.clone(),
+                error: "disk full".into(),
+            },
             BookError::EncryptedPdf { file: p },
             BookError::PdfiumUnavailable {
+                reason: "missing".into(),
+            },
+            BookError::OcrUnavailable {
                 reason: "missing".into(),
             },
         ]
@@ -138,7 +147,7 @@ mod tests {
             assert_eq!(mapped.message, err.to_string());
             assert!(seen.insert(mapped.kind), "duplicate kind");
         }
-        assert_eq!(seen.len(), 13);
+        assert_eq!(seen.len(), 15);
     }
 
     #[test]

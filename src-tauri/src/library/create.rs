@@ -276,7 +276,7 @@ impl Builder {
         };
         // Held for the whole build, so the orphan sweep can tell a running ingest from a
         // crashed one. The OS releases it if the process dies.
-        guard.lock = Some(sweep::lock_ingest_dir(&tmp)?);
+        guard.lock = Some(sweep::lock_dir(&tmp, sweep::INGEST_LOCK)?);
         for dir in ["pages", "ocr"] {
             let d = tmp.join(dir);
             std::fs::create_dir(&d).map_err(|e| io_error(&d, &e))?;

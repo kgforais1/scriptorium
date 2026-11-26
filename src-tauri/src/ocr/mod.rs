@@ -12,33 +12,9 @@ pub(crate) mod store;
 // Phase 4's job is the consumer.
 #[allow(dead_code)]
 pub(crate) mod tesseract;
-
-/// The engine binary or its language data is missing or will not start.
-///
-/// The parent plan's `OcrUnavailable` becomes a `BookError` kind in Phase 4, next to
-/// `PdfiumUnavailable`. This is the minimal form `TesseractEngine::locate` returns until then.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct OcrUnavailable {
-    /// What could not be found, and where it was looked for.
-    pub(crate) reason: String,
-}
-
-impl OcrUnavailable {
-    /// Build the error from `reason`.
-    pub(crate) fn new(reason: impl Into<String>) -> Self {
-        Self {
-            reason: reason.into(),
-        }
-    }
-}
-
-impl std::fmt::Display for OcrUnavailable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.reason)
-    }
-}
-
-impl std::error::Error for OcrUnavailable {}
+// Phase 4 Chunk 3's job creates the run directory; startup sweeps stale ones.
+#[allow(dead_code)]
+pub(crate) mod run_dir;
 
 #[cfg(test)]
 mod tests;

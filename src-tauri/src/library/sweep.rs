@@ -12,11 +12,17 @@ pub const ORPHAN_AGE: Duration = Duration::from_secs(60 * 60);
 
 /// Name of the lock file an ingest holds inside its temp directory while it runs.
 pub const INGEST_LOCK: &str = ".ingest.lock";
+/// Name of the lock file a running OCR job holds in the book's `ocr/` folder.
+#[allow(dead_code)] // Phase 4 Chunk 3's job takes this lock.
+pub const JOB_LOCK: &str = "ocr/.job.lock";
+/// Name of the lock file a temp OCR run directory holds while it is live.
+pub const RUN_LOCK: &str = ".ocr.lock";
 
-/// Create and exclusively lock the ingest lock file in `dir`. Keep the returned file open for
-/// the whole build; the OS drops the lock if the process crashes.
-pub(crate) fn lock_ingest_dir(dir: &Path) -> Result<std::fs::File, super::BookError> {
-    let path = dir.join(INGEST_LOCK);
+/// Create and exclusively lock `name` inside `dir`. Keep the returned file open for the whole
+/// operation; the OS drops the lock if the process crashes. The file may already exist, so it is
+/// opened, never created with `create_new`.
+pub(crate) fn lock_dir(dir: &Path, name: &str) -> Result<std::fs::File, super::BookError> {
+    let path = dir.join(name);
     let file = std::fs::File::create(&path).map_err(|e| super::io_error(&path, &e))?;
     file.lock().map_err(|e| super::io_error(&path, &e))?;
     Ok(file)
