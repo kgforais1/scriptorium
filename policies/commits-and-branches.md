@@ -1,6 +1,6 @@
 # Policy: Commits & Branches
 
-Last reviewed: 2026-10-30
+Last reviewed: 2026-11-26
 Enforced by: convention; optional CI check (commitlint / branch-name regex);
 advisory open-PR check via [`ci/scripts/check_open_prs.py`](../ci/scripts/check_open_prs.py).
 
@@ -26,7 +26,9 @@ Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `build`, `perf`
 <type>/<short-kebab-summary>      e.g. feat/search-api-inventory
 ```
 
-- Keep work off the default branch; branch first.
+- Do not commit or push on `main`. Branch first and open a pull request. If a commit lands on
+  local `main` and has not been pushed, move it onto a branch and reset local `main` to
+  `origin/main`.
 - Long-lived feature branches should rebase on the default branch regularly.
 
 ## Pull requests

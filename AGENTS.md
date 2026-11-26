@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Last reviewed: 2026-10-30
+Last reviewed: 2026-11-26
 
 Single source of truth for AI coding agents working in this repository. Other agent
 entrypoints (`CLAUDE.md`, `GEMINI.md`, `QWEN.md`, `.github/copilot-instructions.md`,
@@ -70,6 +70,10 @@ Do not load everything. Start here, then open only what the task needs.
     issues before pushing and scan again. Ask the user to accept one only if it is truly
     trivial. If the scan reports no server, run `bash scripts/sonar_up.sh` before asking the
     user. See [`docs/sonarqube.md`](docs/sonarqube.md#read-the-issues).
+13. **No commits on `main`.** Do not commit or push on `main`. Branch first and open a pull
+    request. If a commit lands on local `main` and has not been pushed, move it onto a branch
+    and reset local `main` to `origin/main`. See
+    [`policies/commits-and-branches.md`](policies/commits-and-branches.md).
 
 ## Agent tooling policy
 
