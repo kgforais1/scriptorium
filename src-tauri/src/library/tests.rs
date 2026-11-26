@@ -709,10 +709,33 @@ fn every_error_has_a_user_message() {
             },
             "PDF component",
         ),
+        (
+            BookError::OcrUnavailable {
+                reason: "missing".into(),
+            },
+            "OCR component",
+        ),
+        (
+            BookError::OcrStorage {
+                path: p,
+                error: "disk full".into(),
+            },
+            "Could not save the text recognition result",
+        ),
     ];
+    // Same 15 variants as `command_error`'s `every_variant`. A new variant has to land here.
+    assert_eq!(
+        cases.len(),
+        15,
+        "every BookError variant needs a user message"
+    );
     for (err, want) in cases {
         let msg = err.to_string();
         assert!(msg.contains(want), "{err:?} -> {msg:?}");
+        // The storage sentence must include the operating system's own text.
+        if let BookError::OcrStorage { error, .. } = &err {
+            assert!(msg.contains(error), "{msg:?}");
+        }
     }
 }
 

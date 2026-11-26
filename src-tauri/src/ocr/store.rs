@@ -1,7 +1,7 @@
 //! Reading and writing `ocr/`: page files, the index, and `forced.json`.
 //!
 //! Page files are the truth; `index.json` is a cache rebuilt from them (see
-//! `docs/book-format.md`). Every write goes through [`write_atomic`] and is validated against
+//! `docs/book-format.md`). Every write goes through [`write_atomic_io`] and is validated against
 //! `docs/ocr.v1.schema.json` first. A page file that cannot be parsed and validated is never
 //! rewritten, so a damaged file that still holds curator text survives as it is.
 
