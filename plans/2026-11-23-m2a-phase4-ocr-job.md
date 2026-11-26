@@ -1,7 +1,7 @@
 # Plan: M2a Phase 4, the OCR job, commands, and UI
 
-Last reviewed: 2026-11-23
-Status: draft
+Last reviewed: 2026-11-26
+Status: in-progress
 
 This is the implementation plan for Phase 4 of
 [`2026-11-07-m2a-ocr-pipeline.md`](2026-11-07-m2a-ocr-pipeline.md). The parent plan's "The OCR
@@ -19,6 +19,9 @@ run resumes without redoing finished pages. The word-confidence threshold M2c ne
 on a calibration set and recorded in `docs/ocr.md`. Showing the text is M2b, not this phase.
 
 ## Starting point
+
+Chunk 1 replaced the `OcrUnavailable` struct and `lock_ingest_dir` (#100). The list below is the
+state this plan started from.
 
 Phases 2 and 3 left these pieces, which this phase consumes:
 
@@ -134,16 +137,18 @@ Each chunk is one PR, reviewed and merged before the next starts.
 
 ### Chunk 1: errors, locks, and the temp run directory
 
-- Add `OcrUnavailable` and `OcrStorage` (decision 3).
-- Generalise the lock helper (decision 6).
-- Add `ocr/run_dir.rs`: a `RunDir` guard that creates `scriptorium-ocr-run-<pid>-<nanos>` under
+Merged in #100.
+
+- [x] Add `OcrUnavailable` and `OcrStorage` (decision 3).
+- [x] Generalise the lock helper (decision 6).
+- [x] Add `ocr/run_dir.rs`: a `RunDir` guard that creates `scriptorium-ocr-run-<pid>-<nanos>` under
   `std::env::temp_dir()`, holds its `.ocr.lock`, and removes the directory on drop.
-- Add the temp sweep: top level only, the `scriptorium-ocr-run-` prefix only, no symlinks, older
+- [x] Add the temp sweep: top level only, the `scriptorium-ocr-run-` prefix only, no symlinks, older
   than 1 hour, and only when the lock can be taken. `commands::setup` calls it at startup. The job
   calls it before each run from Chunk 3.
-- Tests: a stale and a live directory, a directory without the prefix, a symlink with the prefix,
+- [x] Tests: a stale and a live directory, a directory without the prefix, a symlink with the prefix,
   and a name clash on create.
-- Checks: `cargo test`, clippy on the library and all targets, and the existing ingest lock tests
+- [x] Checks: `cargo test`, clippy on the library and all targets, and the existing ingest lock tests
   unchanged.
 
 ### Chunk 2: the engine-input step

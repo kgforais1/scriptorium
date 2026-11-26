@@ -1,6 +1,6 @@
 # Scriptorium backlog
 
-Last reviewed: 2026-11-23
+Last reviewed: 2026-11-26
 
 Agents: start at **Next Up** (3–5 pointer lines). Detail lives in linked plans, not here.
 Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
@@ -10,7 +10,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 - [M1 follow-ups](plans/2026-11-02-m1-followups.md) — manual script (macOS exhaustive, A9 Dulac), Windows WebView2 release build, ADR-0001 open platform items, layout default
 - [Drop the openjpeg-sys patch](#unplanned--small) — when an `openjpeg-sys` release bundles OpenJPEG 2.5.4
 - [M1.5 PDF import](plans/2026-11-07-m15-pdf-import.md) — merged in #82; manual checks in M1 follow-ups
-- [M2a OCR engine and pipeline](plans/2026-11-07-m2a-ocr-pipeline.md) — Phases 1–3 merged (Phase 3 in #86, #93, #96, #98); Phase 4 in [its plan](plans/2026-11-23-m2a-phase4-ocr-job.md)
+- [M2a OCR engine and pipeline](plans/2026-11-07-m2a-ocr-pipeline.md) — Phases 1–3 merged (Phase 3 in #86, #93, #96, #98); Phase 4 chunk 1 merged in #100; next is chunk 2 in [its plan](plans/2026-11-23-m2a-phase4-ocr-job.md)
 
 ## Active plans
 
@@ -20,7 +20,7 @@ Policy: [`policies/plans-and-todos.md`](policies/plans-and-todos.md).
 | [M1 follow-ups](plans/2026-11-02-m1-followups.md) | in-progress | Manual and platform remainder after 0.2.0 |
 | [M1.5 PDF import](plans/2026-11-07-m15-pdf-import.md) | in-progress | pdfium rasteriser, PDF originals, plain text under `ocr/` |
 | [M2a OCR engine and pipeline](plans/2026-11-07-m2a-ocr-pipeline.md) | in-progress | engine spike, bundled OCR, background job, `ocr/` v1 with boxes |
-| [M2a Phase 4: OCR job](plans/2026-11-23-m2a-phase4-ocr-job.md) | draft | job, commands, reader UI, word-confidence threshold |
+| [M2a Phase 4: OCR job](plans/2026-11-23-m2a-phase4-ocr-job.md) | in-progress | Chunk 1 merged in #100; next is the engine-input step |
 
 ## Unplanned / small
 

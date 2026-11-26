@@ -721,9 +721,8 @@ The order of work and the details are in the
 
 - [ ] Write `ocr/job.rs`: pool, ordering, skip rule, progress, cancel, and per-page failure.
 - [ ] Add `run_ocr`, `cancel_ocr`, and `ocr_status`, and start a job after ingest.
-      Note: `ocr/store.rs` reports a schema violation as `InvalidPackage` today. When
-      `OcrStorage` is added, map write failures to `OcrStorage`, and keep schema errors (a bug,
-      not a disk problem) out of it.
+      Note: write failures already map to `OcrStorage` (#100). Schema errors stay
+      `InvalidPackage`. These commands are still to build.
 - [ ] Write the engine-input step: header size, scaled JPEG decode, the large-page permit, the
       refusals, and a temp PNG. Test it on a 16 MP and a 100 MP JPEG, a 16 MP PNG, a WebP page,
       a 60 MP PNG, 50 MP and 20 MP 16-bit PNGs, and a header claiming 200 MP, with the
