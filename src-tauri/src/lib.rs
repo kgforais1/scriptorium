@@ -207,7 +207,7 @@ pub(crate) mod test_alloc {
             let mut index = 0;
             while index < buf.len() {
                 let unit = *wide.add(index);
-                if unit == 0 || !unit.is_ascii() {
+                if unit == 0 || unit > 0x7F {
                     break;
                 }
                 buf[index] = unit as u8;

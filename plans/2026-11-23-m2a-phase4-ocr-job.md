@@ -146,8 +146,7 @@ Merged in #100.
 - [x] Add `ocr/run_dir.rs`: a `RunDir` guard that creates `scriptorium-ocr-run-<pid>-<nanos>` under
   `std::env::temp_dir()`, holds its `.ocr.lock`, and removes the directory on drop.
 - [x] Add the temp sweep: top level only, the `scriptorium-ocr-run-` prefix only, no symlinks, older
-  than 1 hour, and only when the lock can be taken. `commands::setup` calls it at startup. The job
-  calls it before each run from Chunk 3.
+  than 1 hour, and only when the lock can be taken. `commands::setup` calls it at startup.
 - [x] Tests: a stale and a live directory, a directory without the prefix, a symlink with the prefix,
   and a name clash on create.
 - [x] Checks: `cargo test`, clippy on the library and all targets, and the existing ingest lock tests
@@ -227,8 +226,8 @@ Merged in #100.
   stops the job with `OcrStorage`, and the state becomes `unavailable`.
 - If the book has no `ocr/` folder, as an older image book may not, the job creates it before it
   takes `ocr/.job.lock` or writes the index.
-- The pre-check runs once per job, before any page (decision 11). It and the stale sweep run
-  before the first page.
+- The pre-check runs once per job, before any page (decision 11). The job calls the stale temp
+  sweep before each run, so the sweep and the pre-check both run before the first page.
 - Events and the in-memory snapshot (decision 9). Cancel sets the stop flag. A page in flight is
   left `pending`, except a retry of a page that was `failed` when the run started, which stays
   `failed` with its recorded `afterRunId`. Either way, its temp files are deleted (decision 8).

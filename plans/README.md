@@ -26,7 +26,7 @@ Do **not** delete archived plans. Move them; do not rewrite history in place.
 | [`2026-11-02-m1-followups.md`](2026-11-02-m1-followups.md) | Manual and platform M1 checks after the 0.2.0 release |
 | [`2026-11-07-m15-pdf-import.md`](2026-11-07-m15-pdf-import.md) | M1.5 PDF import (in progress) |
 | [`2026-11-07-m2a-ocr-pipeline.md`](2026-11-07-m2a-ocr-pipeline.md) | M2a OCR engine and pipeline (in progress) |
-| [`2026-11-23-m2a-phase4-ocr-job.md`](2026-11-23-m2a-phase4-ocr-job.md) | M2a Phase 4: OCR job, commands, and reader UI (draft) |
+| [`2026-11-23-m2a-phase4-ocr-job.md`](2026-11-23-m2a-phase4-ocr-job.md) | M2a Phase 4: OCR job, commands, and reader UI (in progress) |
 
 Completed: [`archive/completed/2026-08-23-m0-tauri-foundation.md`](archive/completed/2026-08-23-m0-tauri-foundation.md),
 [`archive/completed/2026-08-23-m1-scan-viewer.md`](archive/completed/2026-08-23-m1-scan-viewer.md),
