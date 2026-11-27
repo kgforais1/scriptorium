@@ -183,10 +183,17 @@ and WebP. Tests run a 16 MP display JPEG, a 100 MP JPEG, a 16 MP PNG, a WebP dis
 claiming 200 MP. They check each output is within the PDF caps. A counting
 allocator checks each page's peak against its budget. A baseline 16 MP JPEG decodes at 1/1.
 Its finished buffer is 48 MB, so it runs as a small page within the 112 MB budget. A progressive
-RGB page also keeps two bytes of coefficients per sample per component (96 MB at 16 MP, about
-120 MB peak), so that page takes the large-page permit and stays inside the 264 MB budget. A progressive
+RGB page also keeps two bytes of coefficients per sample per component (96 MB at 16 MP). With
+the sample planes and the interleaved output the peak is about 192 MB, so that page takes the
+large-page permit and stays inside the 264 MB budget. A progressive
 RGB page above about 33.3 MP is refused: its full-frame coefficient buffer passes 200 MB, and
-scaling does not shrink that buffer. A buffer of exactly 200 MB is allowed.
+scaling does not shrink that buffer. A buffer of exactly 200 MB is allowed. A JPEG is also
+refused when the buffers held at once would pass the 264 MB large-page budget, which is not
+raised. Those buffers are the full-frame coefficients plus the sample planes at the selected
+scale, and for colour a second copy that is the interleaved output. Greyscale reuses its one
+plane as the output. The scale stays 1/1 when a half-size image would fall below the caps, so
+a progressive RGB page over the caps can reach that sum while each buffer is still under 200 MB.
+Exactly 264 MB is allowed, and the pool total stays 600 MB.
 The 100 MP JPEG must peak below the 264 MB large-page budget. The test reads the
 chosen DCT scale directly (1/2, 5000×5000). The baseline greyscale peak must also stay under a
 full-size plane (100 MB), which fails if that page is decoded whole. The 60 MP RGBA PNG

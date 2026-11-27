@@ -1,7 +1,7 @@
 //! Tests for the engine-input step: caps, refusals, budgets, the large-page permit, and
 //! cancellation. Fixtures are generated into a temp folder; no large image is committed.
 //!
-//! policy:file-size allow=700 reason=the progressive header refusal stays with these tests
+//! policy:file-size allow=780 reason=the progressive budget refusal stays with these tests
 
 use super::input::*;
 use crate::library::BookError;
@@ -15,7 +15,7 @@ use std::sync::{Arc, Barrier, Mutex, OnceLock, Weak};
 use std::time::{Duration, Instant, SystemTime};
 
 const SMALL_BUDGET: usize = 112_000_000;
-const LARGE_BUDGET: usize = 264_000_000;
+const LARGE_BUDGET: usize = LARGE_PAGE_BUDGET as usize;
 const COMBINED_BUDGET: usize = 600_000_000;
 /// Sample plane of the 100 MP greyscale fixture at the 1/2 DCT scale.
 const SCALED_100MP_PLANE: usize = 5_000 * 5_000;
@@ -133,6 +133,10 @@ fn write_jpeg(path: &Path, width: u32, height: u32, rgb: bool, progressive: bool
     }
     let mut encoder = jpeg_encoder::Encoder::new_file(path, 70).unwrap();
     encoder.set_optimized_huffman_tables(false);
+    // Quality 70 otherwise subsamples chroma, which hides the full-frame coefficient buffer.
+    if rgb {
+        encoder.set_sampling_factor(jpeg_encoder::SamplingFactor::F_1_1);
+    }
     if progressive {
         encoder.set_progressive(true);
         encoder.set_progressive_scans(2);
@@ -297,9 +301,17 @@ fn a_jpeg_worker_allocation_counts_against_the_armed_meter() {
 }
 
 fn assert_too_large(result: Result<Prepared, InputError>) {
+    assert_too_large_mentioning(result, "too large");
+}
+
+fn assert_too_large_mentioning(result: Result<Prepared, InputError>, fragment: &str) {
     match result {
         Err(InputError::Failed(BookError::UnreadableFile { reason, .. })) => {
             assert!(reason.starts_with("too large"), "reason was {reason:?}");
+            assert!(
+                reason.contains(fragment),
+                "reason {reason:?} did not mention {fragment}"
+            );
         }
         other => panic!("expected a too-large refusal, got {other:?}"),
     }
@@ -338,8 +350,8 @@ fn a_16mp_progressive_jpeg_takes_the_large_page_permit() {
     LargePagePermit::reset_holders();
     let budget = Budget::arm();
     let prepared = prepare_ok(&path, &run, 1);
-    // 16 MP RGB progressive keeps a 96 MB coefficient buffer, so it is not a small page.
-    // The measured peak is about 120 MB, inside the large-page budget.
+    // 16 MP RGB progressive keeps a 96 MB coefficient buffer plus the planes and the
+    // interleaved output, about 192 MB, so it takes the large-page permit.
     budget.assert_within(LARGE_BUDGET, "16 MP progressive JPEG");
     assert_eq!(
         LargePagePermit::max_holders(),
@@ -415,11 +427,11 @@ fn a_100mp_progressive_jpeg_is_decoded_at_a_reduced_scale() {
     );
 }
 
-/// Progressive SOF2 plus a start-of-scan marker and no entropy data.
+/// A JPEG frame header and a start-of-scan marker, with no entropy data.
 ///
-/// The header reader stops at the scan marker, so the frame size is known before any
-/// coefficient is stored.
-fn write_progressive_rgb_header(path: &Path, width: u32, height: u32) {
+/// `marker` is SOF0 (`0xC0`) or SOF2 (`0xC2`). The header reader stops at the scan marker,
+/// so the frame size is known before any coefficient is stored.
+fn write_jpeg_rgb_header(path: &Path, marker: u8, width: u32, height: u32) {
     let mut sof = vec![8];
     sof.extend_from_slice(&(height as u16).to_be_bytes());
     sof.extend_from_slice(&(width as u16).to_be_bytes());
@@ -434,7 +446,7 @@ fn write_progressive_rgb_header(path: &Path, width: u32, height: u32) {
     }
     sos.extend_from_slice(&[0, 63, 0]);
     let mut out = vec![0xFF, 0xD8];
-    push_marker(&mut out, 0xC2, &sof);
+    push_marker(&mut out, marker, &sof);
     push_marker(&mut out, 0xDA, &sos);
     fs::write(path, out).unwrap();
 }
@@ -451,15 +463,85 @@ fn a_progressive_rgb_jpeg_over_33mp_is_refused_before_decoding() {
     let path = fixtures.path("jpeg-34mp-progressive-header.jpg");
     // 6000×5600 is 33.6 MP. Three components at two bytes a sample is 201.6 MB.
     // The page is over the PDF caps, so only the coefficient check can refuse it.
-    write_progressive_rgb_header(&path, 6000, 5600);
+    write_jpeg_rgb_header(&path, 0xC2, 6000, 5600);
     let run = RunDir::new().unwrap();
-    assert_too_large(prepare(
-        &path,
-        &run,
-        1,
-        &AtomicBool::new(false),
-        Instant::now() + PAGE_DEADLINE,
-    ));
+    assert_too_large_mentioning(
+        prepare(
+            &path,
+            &run,
+            1,
+            &AtomicBool::new(false),
+            Instant::now() + PAGE_DEADLINE,
+        ),
+        "200 MB",
+    );
+}
+
+#[test]
+fn a_progressive_rgb_jpeg_over_the_caps_stays_within_the_large_budget() {
+    let fixtures = fixtures();
+    let path = fixtures.path("jpeg-13mp-progressive.jpg");
+    {
+        let _heavy = test_alloc::lock_budget();
+        write_jpeg(&path, 4200, 3200, true, true);
+    }
+    let run = RunDir::new().unwrap();
+    let budget = Budget::arm();
+    let prepared = prepare_ok(&path, &run, 1);
+    // 4200×3200 is 13.44 MP and over both PDF caps. 4:4:4 coefficients are 80.6 MB and
+    // stay live with the planes and the interleaved output. Half scale falls below the caps.
+    budget.assert_within(LARGE_BUDGET, "13 MP progressive RGB JPEG");
+    assert!(
+        budget.peak() >= 80_640_000,
+        "coefficient buffer was not in the peak: {}",
+        budget.peak()
+    );
+    assert_within_caps(prepared.width, prepared.height);
+    assert_eq!(
+        scaled_jpeg_output(&path).unwrap(),
+        (4200, 3200),
+        "a page just over the caps stays 1/1"
+    );
+}
+
+#[test]
+fn a_progressive_rgb_jpeg_over_the_page_budget_is_refused_before_decoding() {
+    let fixtures = fixtures();
+    let path = fixtures.path("jpeg-25mp-progressive-header.jpg");
+    // 5000×5000 is 25 MP. Coefficients are 150 MB, under the 200 MB buffer limit.
+    // At 1/1 the planes and the interleaved output add another 150 MB, past 264 MB.
+    write_jpeg_rgb_header(&path, 0xC2, 5000, 5000);
+    let run = RunDir::new().unwrap();
+    assert_too_large_mentioning(
+        prepare(
+            &path,
+            &run,
+            1,
+            &AtomicBool::new(false),
+            Instant::now() + PAGE_DEADLINE,
+        ),
+        "264 MB",
+    );
+}
+
+#[test]
+fn a_baseline_rgb_jpeg_over_the_page_budget_is_refused_before_decoding() {
+    let fixtures = fixtures();
+    let path = fixtures.path("jpeg-45mp-baseline-header.jpg");
+    // 6688×6688 is 44.7 MP. No coefficient buffer. The planes and the interleaved
+    // output at 1/1 are 268 MB, and half scale is still below the caps.
+    write_jpeg_rgb_header(&path, 0xC0, 6688, 6688);
+    let run = RunDir::new().unwrap();
+    assert_too_large_mentioning(
+        prepare(
+            &path,
+            &run,
+            1,
+            &AtomicBool::new(false),
+            Instant::now() + PAGE_DEADLINE,
+        ),
+        "264 MB",
+    );
 }
 
 #[test]

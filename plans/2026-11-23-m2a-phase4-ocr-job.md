@@ -163,7 +163,10 @@ Merged in #100.
   decoding pixels. Bytes per pixel come from the colour type. It refuses a page over 150 MP, and a
   whole decode whose buffer would pass 200 MB. A progressive JPEG is included: its coefficient
   buffer is the full frame, two bytes a sample a component, and scaling does not shrink it. A
-  buffer of exactly 200 MB is allowed. Every JPEG goes through `jpeg-decoder` (decision
+  buffer of exactly 200 MB is allowed. A JPEG whose buffers would pass the 264 MB large-page
+  budget together is refused as well, and that budget is not raised. The sum is the coefficient
+  buffer plus the scaled sample planes, and for colour the interleaved output too, because those
+  are live at once. Greyscale reuses its plane. Exactly 264 MB is allowed. Every JPEG goes through `jpeg-decoder` (decision
   2): at 1/1 within the caps, and at the smallest DCT scale at or above the caps beyond them. It
   resizes to the caps in one pass, never upscales, and streams the RGBA rows as a PNG into the
   run directory, so it holds no second full RGBA copy. It takes the stop flag and the deadline
@@ -194,8 +197,11 @@ Merged in #100.
   JPEGs are greyscale, so building them needs 100 MB, not 300 MB. CI runners have 7 GB, so this
   fits. Each refusal happens before any decode. A baseline 16 MP JPEG fits the 112 MB small
   budget. A progressive RGB page also keeps two bytes of coefficients per sample per component,
-  so a 16 MP progressive page (96 MB of coefficients, about 120 MB peak) takes the large-page
-  permit and stays inside the 264 MB budget. A helper reads the chosen scale without decoding
+  so a 16 MP progressive page (96 MB of coefficients, about 192 MB with its planes and output) takes the large-page
+  permit and stays inside the 264 MB budget. A 13.44 MP progressive RGB page over the caps is
+  decoded at 1/1, and its measured peak includes the coefficient buffer and stays inside 264 MB.
+  A 25 MP progressive RGB header and a 44.7 MP baseline RGB header are refused on that sum
+  before any pixels are decoded. A helper reads the chosen scale without decoding
   pixels and asserts 1/1 for 16 MP and 1/2
   (5000x5000) for 100 MP. Both 100 MP peaks fit the 264 MB large budget, and the baseline peak
   stays under a full-size 100 MB plane, so a decode that skipped the scale fails. The two-book

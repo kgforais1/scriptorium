@@ -3,9 +3,10 @@
 //! A display image is already 8-bit sRGB and orientation-applied by ingest, so the step only
 //! has to bound its size and make it readable. Pages within the PDF caps are decoded as they
 //! are; larger JPEGs decode at a reduced DCT scale and then resize down to the caps. A page is
-//! refused before decoding when its header claims more than 150 MP or a whole decode would
-//! allocate more than 200 MB. Large pages share one permit, so their peaks add up to the
-//! memory budget (Phase 4 decisions 2, 7, and 12).
+//! refused before decoding when its header claims more than 150 MP, a whole decode would
+//! allocate more than 200 MB, or the buffers a JPEG holds at once would pass the 264 MB
+//! large-page budget. Large pages share one permit, so their peaks add up to the memory
+//! budget (Phase 4 decisions 2, 7, and 12).
 
 use crate::ingest::pdf::{MAX_LONG_EDGE, MAX_PIXELS};
 use crate::ingest::MAX_PAGE_PIXELS;
@@ -23,6 +24,11 @@ use std::time::Instant;
 pub(crate) const SMALL_PAGE_BYTES: u64 = 48_000_000;
 /// Largest buffer a whole decode may allocate: 200 MB. Any larger page is refused.
 pub(crate) const MAX_WHOLE_DECODE_BYTES: u64 = 200_000_000;
+/// Largest peak one large page may reach: 264 MB. A page past this is refused.
+///
+/// The figure is a 200 MB decode, the capped resize, and the encoder. It is not raised
+/// for a progressive JPEG, so the pool total stays 600 MB.
+pub(crate) const LARGE_PAGE_BUDGET: u64 = 264_000_000;
 
 /// Why the input step produced no page image.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,11 +223,43 @@ fn plan_page(source: &Path, header: &Header) -> Result<Plan, InputError> {
     // A scaled baseline JPEG never allocates its full pixel buffer. A progressive JPEG still
     // does: `jpeg-decoder` sizes the coefficient buffer from the frame's blocks, and the DCT
     // scale does not shrink that buffer. Two bytes a sample, so the check runs for every page.
-    let jpeg = header.format == Some(ImageFormat::Jpeg);
-    let scaled_jpeg = jpeg && over_caps(header.width, header.height);
-    let bytes = pixels.saturating_mul(header.bytes_per_pixel);
     let coefficients = progressive_coefficient_bytes(source, header)?;
-    // Exactly 200 MB is allowed. Only a buffer past the limit is refused.
+    let (target_width, target_height) = fit_caps(header.width, header.height);
+    refuse_decode_budget(
+        source,
+        header,
+        pixels,
+        coefficients,
+        target_width,
+        target_height,
+    )?;
+    let bytes = pixels.saturating_mul(header.bytes_per_pixel);
+    Ok(Plan {
+        target_width,
+        target_height,
+        jpeg: header.format == Some(ImageFormat::Jpeg),
+        // The permit follows the larger single buffer. The 264 MB check above is what
+        // refuses a page whose buffers, added together, would pass the large-page budget.
+        large: bytes > SMALL_PAGE_BYTES || coefficients > SMALL_PAGE_BYTES,
+    })
+}
+
+/// Refuse a page whose single buffer passes 200 MB, or whose JPEG buffers would pass 264 MB.
+///
+/// Exactly either limit is allowed. A JPEG that will be DCT-scaled is not refused for its
+/// full pixel buffer, because that buffer is not allocated. The combined check still runs:
+/// the coefficient buffer and the scaled output are live together.
+fn refuse_decode_budget(
+    source: &Path,
+    header: &Header,
+    pixels: u64,
+    coefficients: u64,
+    target_width: u32,
+    target_height: u32,
+) -> Result<(), InputError> {
+    let scaled_jpeg =
+        header.format == Some(ImageFormat::Jpeg) && over_caps(header.width, header.height);
+    let bytes = pixels.saturating_mul(header.bytes_per_pixel);
     if coefficients > MAX_WHOLE_DECODE_BYTES || (!scaled_jpeg && bytes > MAX_WHOLE_DECODE_BYTES) {
         return Err(too_large(
             source,
@@ -230,14 +268,84 @@ fn plan_page(source: &Path, header: &Header) -> Result<Plan, InputError> {
             "over the 200 MB decode limit",
         ));
     }
-    let (target_width, target_height) = fit_caps(header.width, header.height);
-    // That same coefficient buffer, not the finished pixels, decides the permit.
-    Ok(Plan {
-        target_width,
-        target_height,
-        jpeg,
-        large: bytes > SMALL_PAGE_BYTES || coefficients > SMALL_PAGE_BYTES,
-    })
+    if simultaneous_jpeg_bytes(header, coefficients, target_width, target_height)
+        > LARGE_PAGE_BUDGET
+    {
+        return Err(too_large(
+            source,
+            header,
+            pixels,
+            "over the 264 MB page budget",
+        ));
+    }
+    Ok(())
+}
+
+/// Bytes a JPEG decode holds at once, or 0 for any other format.
+///
+/// Progressive coefficients stay allocated until decode returns. The sample planes are
+/// then built at the selected scale. Greyscale reuses its one plane as the output.
+/// Colour keeps those planes and allocates the interleaved image as well, so the output
+/// is counted twice. The scale is the one `jpeg-decoder` would pick for the capped size,
+/// which stays 1/1 when a half-size image would fall below the caps.
+fn simultaneous_jpeg_bytes(
+    header: &Header,
+    coefficients: u64,
+    target_width: u32,
+    target_height: u32,
+) -> u64 {
+    if header.format != Some(ImageFormat::Jpeg) {
+        return 0;
+    }
+    let (out_width, out_height) =
+        jpeg_output_size(header.width, header.height, target_width, target_height);
+    let output = u64::from(out_width)
+        .saturating_mul(u64::from(out_height))
+        .saturating_mul(header.bytes_per_pixel);
+    let copies = if header.bytes_per_pixel > 1 { 2 } else { 1 };
+    coefficients.saturating_add(output.saturating_mul(copies))
+}
+
+/// The size `jpeg-decoder::Decoder::scale` would return for this request.
+///
+/// `choose_idct_size` tries 1/8, 1/4, and 1/2, then 1/1. A dimension that does not fit
+/// in `u16` stays at full size, which is the larger buffer.
+fn jpeg_output_size(
+    width: u32,
+    height: u32,
+    requested_width: u32,
+    requested_height: u32,
+) -> (u32, u32) {
+    let (Ok(width), Ok(height)) = (u16::try_from(width), u16::try_from(height)) else {
+        return (width, height);
+    };
+    let requested_width = u16::try_from(requested_width).unwrap_or(u16::MAX);
+    let requested_height = u16::try_from(requested_height).unwrap_or(u16::MAX);
+    let idct = jpeg_idct_size(width, height, requested_width, requested_height);
+    (
+        jpeg_scaled_axis(width, idct),
+        jpeg_scaled_axis(height, idct),
+    )
+}
+
+/// `jpeg-decoder`'s `choose_idct_size`: 1, 2, 4, or 8 samples per block.
+fn jpeg_idct_size(width: u16, height: u16, requested_width: u16, requested_height: u16) -> u32 {
+    for scale in [1u32, 2, 4] {
+        if jpeg_scaled_len(width, scale) >= requested_width
+            || jpeg_scaled_len(height, scale) >= requested_height
+        {
+            return scale;
+        }
+    }
+    8
+}
+
+fn jpeg_scaled_len(len: u16, scale: u32) -> u16 {
+    ((u32::from(len) * scale - 1) / 8 + 1) as u16
+}
+
+fn jpeg_scaled_axis(len: u16, idct: u32) -> u32 {
+    u32::from((f32::from(len) * idct as f32 / 8.0).ceil() as u16)
 }
 
 /// Bytes of DCT coefficients a progressive JPEG will hold, or 0 for any other page.
@@ -437,4 +545,23 @@ fn too_large(source: &Path, header: &Header, pixels: u64, why: &str) -> InputErr
             header.bytes_per_pixel
         ),
     )
+}
+
+#[cfg(test)]
+mod scale_estimate {
+    use super::{fit_caps, jpeg_output_size};
+
+    #[test]
+    fn a_100mp_request_uses_half_scale() {
+        assert_eq!(
+            jpeg_output_size(10_000, 10_000, 4_000, 4_000),
+            (5_000, 5_000)
+        );
+    }
+
+    #[test]
+    fn a_page_just_over_the_caps_stays_full_scale() {
+        let (width, height) = fit_caps(4200, 3200);
+        assert_eq!(jpeg_output_size(4200, 3200, width, height), (4200, 3200));
+    }
 }
