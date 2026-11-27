@@ -28,11 +28,18 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 time = { version = "0.3.55", default-features = false, features = ["parsing", "formatting", "std"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "bmp", "gif", "tiff"] }
+# The PNG stream writer lets the engine-input step resize and encode row by row, so a page
+# needs no second full RGBA buffer next to its decoded one.
+png = "0.18"
 tiff = "0.11.3"
 lcms2 = { version = "6.2.0", features = ["static"] }
 jpeg2k = { version = "0.10.1", default-features = false, features = ["openjpeg-sys"] }
 zune-jpeg = "0.5"
 zune-core = "0.5"
+# JPEG decode for the OCR input step. `image`'s zune-jpeg path has no reduced-size decode and
+# holds two full buffers. See Phase 4 decision 2. No default features: the rayon backend would
+# decode buffers in parallel and break the page's memory budget.
+jpeg-decoder = { version = "0.3", default-features = false }
 sha2 = "0.11.1"
 fs4 = "1.1.0"
 # Binds the bundled pdfium library at runtime. `thread_safe` serialises pdfium calls, because
@@ -41,6 +48,11 @@ pdfium-render = { version = "0.9.5", default-features = false, features = ["pdfi
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+# Test-only JPEG encoder: `image`'s encoder is baseline only, and the input-step tests need
+# progressive JPEGs.
+jpeg-encoder = "0.7"
 
 # `missing_docs` is set in src/lib.rs so it covers the lib crate only (not build.rs or main.rs).
 [lints.clippy]

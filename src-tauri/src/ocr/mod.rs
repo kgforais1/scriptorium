@@ -8,6 +8,11 @@
 pub(crate) mod engine;
 #[cfg(test)]
 pub(crate) mod fake;
+// Phase 4 Chunk 3's job is the consumer (decision 12).
+#[allow(dead_code)]
+pub(crate) mod input;
+#[cfg(test)]
+mod input_tests;
 pub(crate) mod store;
 // Phase 4's job is the consumer.
 #[allow(dead_code)]

@@ -179,11 +179,18 @@ such as the one a test in `library/ocr.rs` creates. Boxes are normalised by the 
 so scaling does not move them. The input is always the display image path from `meta.json`.
 Ingest has already turned TIFF and JPEG 2000 into JPEG or PNG, so the step sees only JPEG, PNG,
 and WebP. Tests run a 16 MP display JPEG, a 100 MP JPEG, a 16 MP PNG, a WebP display page, a
-60 MP PNG, and a header claiming 200 MP. They check each output is within the PDF caps. A counting
-allocator checks each page's peak against its budget. The 16 MP JPEG decodes at 1/1. Its full
-48 MB buffer sits exactly at the small-page limit, so it runs as a small page within the 112 MB
-budget. The 100 MP JPEG must peak below the 264 MB large-page budget, which proves it never decoded at full size (400 MB). The 60 MP PNG, a 50 MP 16-bit RGBA PNG,
-and the 200 MP header are refused without decoding. A 20 MP 16-bit PNG is accepted within budget.
+60 MP RGB8 PNG (accepted under the large-page permit), a 60 MP RGBA PNG (refused), and a header
+claiming 200 MP. They check each output is within the PDF caps. A counting
+allocator checks each page's peak against its budget. A baseline 16 MP JPEG decodes at 1/1.
+Its finished buffer is 48 MB, so it runs as a small page within the 112 MB budget. A progressive
+RGB page also keeps two bytes of coefficients per sample per component (96 MB at 16 MP, about
+120 MB peak), so that page takes the large-page permit and stays inside the 264 MB budget.
+The 100 MP JPEG must peak below the 264 MB large-page budget. The test reads the
+chosen DCT scale directly (1/2, 5000×5000). The baseline greyscale peak must also stay under a
+full-size plane (100 MB), which fails if that page is decoded whole. The 60 MP RGBA PNG
+(240 MB), a 50 MP 16-bit RGBA PNG (400 MB),
+and the 200 MP header are refused without decoding. A 60 MP RGB8 PNG (180 MB) is accepted under
+the one large-page permit, and a 20 MP 16-bit RGBA PNG (160 MB) is accepted within budget.
 A test runs large pages from two books at once, so both wait on the one large-page permit. It
 checks only one holds it at a time, and the combined peak stays within 600 MB.
 
@@ -723,9 +730,10 @@ The order of work and the details are in the
 - [ ] Add `run_ocr`, `cancel_ocr`, and `ocr_status`, and start a job after ingest.
       Note: write failures already map to `OcrStorage` (#100). Schema errors stay
       `InvalidPackage`. These commands are still to build.
-- [ ] Write the engine-input step: header size, scaled JPEG decode, the large-page permit, the
+- [x] Write the engine-input step: header size, scaled JPEG decode, the large-page permit, the
       refusals, and a temp PNG. Test it on a 16 MP and a 100 MP JPEG, a 16 MP PNG, a WebP page,
-      a 60 MP PNG, 50 MP and 20 MP 16-bit PNGs, and a header claiming 200 MP, with the
+      a 60 MP RGBA PNG and a 50 MP 16-bit RGBA PNG (both refused), a 60 MP RGB8 PNG and a
+      20 MP 16-bit RGBA PNG (both accepted), and a header claiming 200 MP, with the
       counting-allocator check. Add the two-book large-permit test.
 - [ ] Tests with `FakeEngine`: resume after cancel, cancel returning within a second while a page
       is in flight, a failing page, a second request joining the running job, two books sharing
