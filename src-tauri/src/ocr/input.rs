@@ -214,12 +214,15 @@ fn plan_page(source: &Path, header: &Header) -> Result<Plan, InputError> {
             "over the 150 MP page limit",
         ));
     }
-    // A large JPEG decodes through a reduced DCT scale, so its header buffer is not allocated
-    // whole. Every other format is decoded whole and must fit the 200 MB rule.
+    // A scaled baseline JPEG never allocates its full pixel buffer. A progressive JPEG still
+    // does: `jpeg-decoder` sizes the coefficient buffer from the frame's blocks, and the DCT
+    // scale does not shrink that buffer. Two bytes a sample, so the check runs for every page.
     let jpeg = header.format == Some(ImageFormat::Jpeg);
     let scaled_jpeg = jpeg && over_caps(header.width, header.height);
     let bytes = pixels.saturating_mul(header.bytes_per_pixel);
-    if !scaled_jpeg && bytes > MAX_WHOLE_DECODE_BYTES {
+    let coefficients = progressive_coefficient_bytes(source, header)?;
+    // Exactly 200 MB is allowed. Only a buffer past the limit is refused.
+    if coefficients > MAX_WHOLE_DECODE_BYTES || (!scaled_jpeg && bytes > MAX_WHOLE_DECODE_BYTES) {
         return Err(too_large(
             source,
             header,
@@ -228,9 +231,7 @@ fn plan_page(source: &Path, header: &Header) -> Result<Plan, InputError> {
         ));
     }
     let (target_width, target_height) = fit_caps(header.width, header.height);
-    // A progressive JPEG keeps every coefficient (two bytes a sample) until the planes exist.
-    // That buffer, not the finished pixels, decides whether the page needs the permit.
-    let coefficients = progressive_coefficient_bytes(source, header)?;
+    // That same coefficient buffer, not the finished pixels, decides the permit.
     Ok(Plan {
         target_width,
         target_height,

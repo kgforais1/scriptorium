@@ -1,5 +1,7 @@
 //! Tests for the engine-input step: caps, refusals, budgets, the large-page permit, and
 //! cancellation. Fixtures are generated into a temp folder; no large image is committed.
+//!
+//! policy:file-size allow=700 reason=the progressive header refusal stays with these tests
 
 use super::input::*;
 use crate::library::BookError;
@@ -411,6 +413,53 @@ fn a_100mp_progressive_jpeg_is_decoded_at_a_reduced_scale() {
         (5000, 5000),
         "100 MP uses 1/2"
     );
+}
+
+/// Progressive SOF2 plus a start-of-scan marker and no entropy data.
+///
+/// The header reader stops at the scan marker, so the frame size is known before any
+/// coefficient is stored.
+fn write_progressive_rgb_header(path: &Path, width: u32, height: u32) {
+    let mut sof = vec![8];
+    sof.extend_from_slice(&(height as u16).to_be_bytes());
+    sof.extend_from_slice(&(width as u16).to_be_bytes());
+    sof.push(3);
+    for id in 1..=3u8 {
+        sof.extend_from_slice(&[id, 0x11, 0]);
+    }
+    // Three components, spectral selection 0–63, approximation 0. Length is 6 + 2 per component.
+    let mut sos = vec![3];
+    for id in 1..=3u8 {
+        sos.extend_from_slice(&[id, 0]);
+    }
+    sos.extend_from_slice(&[0, 63, 0]);
+    let mut out = vec![0xFF, 0xD8];
+    push_marker(&mut out, 0xC2, &sof);
+    push_marker(&mut out, 0xDA, &sos);
+    fs::write(path, out).unwrap();
+}
+
+fn push_marker(out: &mut Vec<u8>, marker: u8, body: &[u8]) {
+    out.extend_from_slice(&[0xFF, marker]);
+    out.extend_from_slice(&((body.len() + 2) as u16).to_be_bytes());
+    out.extend_from_slice(body);
+}
+
+#[test]
+fn a_progressive_rgb_jpeg_over_33mp_is_refused_before_decoding() {
+    let fixtures = fixtures();
+    let path = fixtures.path("jpeg-34mp-progressive-header.jpg");
+    // 6000×5600 is 33.6 MP. Three components at two bytes a sample is 201.6 MB.
+    // The page is over the PDF caps, so only the coefficient check can refuse it.
+    write_progressive_rgb_header(&path, 6000, 5600);
+    let run = RunDir::new().unwrap();
+    assert_too_large(prepare(
+        &path,
+        &run,
+        1,
+        &AtomicBool::new(false),
+        Instant::now() + PAGE_DEADLINE,
+    ));
 }
 
 #[test]

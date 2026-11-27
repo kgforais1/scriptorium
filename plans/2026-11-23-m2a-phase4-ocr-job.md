@@ -161,7 +161,9 @@ Merged in #100.
   clippy's `unused_imports`.
 - [x] Add `ocr/input.rs`. It reads the size and colour type with `image::ImageReader`, without
   decoding pixels. Bytes per pixel come from the colour type. It refuses a page over 150 MP, and a
-  whole decode whose buffer would pass 200 MB. Every JPEG goes through `jpeg-decoder` (decision
+  whole decode whose buffer would pass 200 MB. A progressive JPEG is included: its coefficient
+  buffer is the full frame, two bytes a sample a component, and scaling does not shrink it. A
+  buffer of exactly 200 MB is allowed. Every JPEG goes through `jpeg-decoder` (decision
   2): at 1/1 within the caps, and at the smallest DCT scale at or above the caps beyond them. It
   resizes to the caps in one pass, never upscales, and streams the RGBA rows as a PNG into the
   run directory, so it holds no second full RGBA copy. It takes the stop flag and the deadline
