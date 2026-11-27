@@ -116,21 +116,7 @@ fn fixtures() -> Arc<Fixtures> {
 fn write_jpeg(path: &Path, width: u32, height: u32, rgb: bool, progressive: bool) {
     let channels = if rgb { 3 } else { 1 };
     let mut pixels = vec![0u8; width as usize * height as usize * channels];
-    // A high-frequency checkerboard gives the encoder real coefficients to write, so decoding
-    // costs what a scanned page costs instead of a flat fill.
-    for y in 0..height as usize {
-        for x in 0..width as usize {
-            let value = if ((x / 2) ^ (y / 2)) & 1 == 0 {
-                32
-            } else {
-                224
-            };
-            let start = (y * width as usize + x) * channels;
-            for channel in 0..channels {
-                pixels[start + channel] = value;
-            }
-        }
-    }
+    fill_checkerboard(&mut pixels, width as usize, channels);
     let mut encoder = jpeg_encoder::Encoder::new_file(path, 70).unwrap();
     encoder.set_optimized_huffman_tables(false);
     // Quality 70 otherwise subsamples chroma, which hides the full-frame coefficient buffer.
@@ -149,6 +135,28 @@ fn write_jpeg(path: &Path, width: u32, height: u32, rgb: bool, progressive: bool
     encoder
         .encode(&pixels, width as u16, height as u16, color)
         .unwrap();
+}
+
+/// A high-frequency checkerboard, so decoding costs what a scanned page costs.
+fn fill_checkerboard(pixels: &mut [u8], width: usize, channels: usize) {
+    let height = pixels.len() / (width * channels);
+    for y in 0..height {
+        for x in 0..width {
+            let value = checker_value(x, y);
+            let start = (y * width + x) * channels;
+            for channel in 0..channels {
+                pixels[start + channel] = value;
+            }
+        }
+    }
+}
+
+fn checker_value(x: usize, y: usize) -> u8 {
+    if ((x / 2) ^ (y / 2)) & 1 == 0 {
+        32
+    } else {
+        224
+    }
 }
 
 /// Write an RGB8 PNG.
