@@ -1,7 +1,7 @@
 # Plan: M2a Phase 4, the OCR job, commands, and UI
 
-Last reviewed: 2026-11-23
-Status: draft
+Last reviewed: 2026-11-26
+Status: in-progress
 
 This is the implementation plan for Phase 4 of
 [`2026-11-07-m2a-ocr-pipeline.md`](2026-11-07-m2a-ocr-pipeline.md). The parent plan's "The OCR
@@ -19,6 +19,9 @@ run resumes without redoing finished pages. The word-confidence threshold M2c ne
 on a calibration set and recorded in `docs/ocr.md`. Showing the text is M2b, not this phase.
 
 ## Starting point
+
+Chunk 1 replaced the `OcrUnavailable` struct and `lock_ingest_dir` (#100). The list below is the
+state this plan started from.
 
 Phases 2 and 3 left these pieces, which this phase consumes:
 
@@ -49,10 +52,12 @@ Phases 2 and 3 left these pieces, which this phase consumes:
    Opening an existing book does not start a job. If it has unfinished pages, the reader shows
    Resume. A book OCRed by an older engine therefore waits for the curator, so an app update
    does not start work in every book a curator opens.
-2. **Large JPEGs decode through `jpeg-decoder`.** The app decodes JPEG with `zune-jpeg`, through
-   `image`, and `zune-jpeg` has no DCT scaling: its `set_max_width` is a limit, not a scale. So
-   Chunk 2 adds `jpeg-decoder` 0.3 as a direct dependency, used only for a JPEG above the PDF
-   caps. Display images are already 8-bit sRGB and orientation-applied, because ingest
+2. **JPEGs decode through `jpeg-decoder`.** The app decodes JPEG with `zune-jpeg`, through
+   `image`, and `zune-jpeg` has no DCT scaling: its `set_max_width` is a limit, not a scale. It
+   also holds two full-size buffers while it converts, so a 16 MP page peaked at 144 MB against
+   the 112 MB small-page budget. So Chunk 2 adds `jpeg-decoder` 0.3 as a direct dependency and
+   decodes every JPEG with it, at 1/1 within the PDF caps and at a reduced `Decoder::scale`
+   above them. Display images are already 8-bit sRGB and orientation-applied, because ingest
    re-encodes CMYK, deep, non-sRGB, and rotated JPEGs. So the checks that matter are a large
    baseline JPEG and a large progressive JPEG, with both output dimensions within the caps, plus
    `cargo about` and `cargo audit`. If a check fails, the fallback treats a large JPEG like a
@@ -134,51 +139,77 @@ Each chunk is one PR, reviewed and merged before the next starts.
 
 ### Chunk 1: errors, locks, and the temp run directory
 
-- Add `OcrUnavailable` and `OcrStorage` (decision 3).
-- Generalise the lock helper (decision 6).
-- Add `ocr/run_dir.rs`: a `RunDir` guard that creates `scriptorium-ocr-run-<pid>-<nanos>` under
+Merged in #100.
+
+- [x] Add `OcrUnavailable` and `OcrStorage` (decision 3).
+- [x] Generalise the lock helper (decision 6).
+- [x] Add `ocr/run_dir.rs`: a `RunDir` guard that creates `scriptorium-ocr-run-<pid>-<nanos>` under
   `std::env::temp_dir()`, holds its `.ocr.lock`, and removes the directory on drop.
-- Add the temp sweep: top level only, the `scriptorium-ocr-run-` prefix only, no symlinks, older
-  than 1 hour, and only when the lock can be taken. `commands::setup` calls it at startup. The job
-  calls it before each run from Chunk 3.
-- Tests: a stale and a live directory, a directory without the prefix, a symlink with the prefix,
+- [x] Add the temp sweep: top level only, the `scriptorium-ocr-run-` prefix only, no symlinks, older
+  than 1 hour, and only when the lock can be taken. `commands::setup` calls it at startup.
+- [x] Tests: a stale and a live directory, a directory without the prefix, a symlink with the prefix,
   and a name clash on create.
-- Checks: `cargo test`, clippy on the library and all targets, and the existing ingest lock tests
+- [x] Checks: `cargo test`, clippy on the library and all targets, and the existing ingest lock tests
   unchanged.
 
 ### Chunk 2: the engine-input step
 
-- Change `JP2_MAX_PIXELS` in `ingest/decode.rs` from `pub(super)` to `pub(crate)`, and re-export
-  it from `ingest/mod.rs` as `pub(crate) use decode::JP2_MAX_PIXELS as MAX_PAGE_PIXELS`, so the
-  input step reuses ingest's 150 MP limit while `decode` stays private. The re-export lands here,
-  with its first consumer, because an unused `pub(crate) use` fails clippy's `unused_imports`.
-- Add `ocr/input.rs`. It reads the size and colour type with `image::ImageReader`, without
+- [x] Change `JP2_MAX_PIXELS` in `ingest/decode.rs` from `pub(super)` to `pub(crate)`, and
+  re-export it from `ingest/mod.rs` as `pub(crate) use decode::JP2_MAX_PIXELS as
+  MAX_PAGE_PIXELS`, so the input step reuses ingest's 150 MP limit while `decode` stays private.
+  The re-export lands here, with its first consumer, because an unused `pub(crate) use` fails
+  clippy's `unused_imports`.
+- [x] Add `ocr/input.rs`. It reads the size and colour type with `image::ImageReader`, without
   decoding pixels. Bytes per pixel come from the colour type. It refuses a page over 150 MP, and a
-  whole decode whose buffer would pass 200 MB. It decodes a page within the caps as it is, and a
-  larger JPEG through `jpeg-decoder` at the smallest scale at or above the caps (decision 2). It
-  resizes to the caps in one pass, never upscales, and writes a PNG into the run directory. It
-  takes the stop flag and the deadline (decision 7).
-- Add the large-page permit: one slot shared by all books. A page is small only when its decode
-  buffer, from the header's size and bytes per pixel, is at most 48 MB. Every other page needs
-  the permit. So a 12 MP RGBA16 page, which decodes to 96 MB, is a large page even though it is
-  within the size caps.
-- Add the counting allocator as a `#[cfg(test)] #[global_allocator]` in `lib.rs`, so it exists
-  only in the unit-test binary, which can reach the private `ocr::input`. It counts only on a
-  thread that has armed it. Each budget test arms its own thread after building its fixture, and
-  the budget tests share one mutex, so they run one at a time. Other tests running in parallel do
-  not count, because they never arm their threads.
-- Tests on generated images: a 16 MP and a 100 MP JPEG, both baseline and progressive, a 16 MP
-  PNG, a WebP page, a 60 MP RGBA PNG (240 MB, refused), a 60 MP RGB8 PNG (180 MB, accepted under the
-  large-page permit), 50 MP and 20 MP 16-bit RGBA PNGs, and a header claiming
-  200 MP. Each output is within the caps in both dimensions, and each peak is within its budget.
-  Refused pages need only a valid header, so their fixtures are written header-first with a short
-  body and never hold a full pixel buffer. The large accepted fixtures, the 100 MP JPEGs and the
-  60 MP RGB8 PNG, are generated once per test run into a temp folder, one at a time under the
-  budget tests' mutex. The 100 MP JPEGs are greyscale, so building them needs 100 MB, not 300 MB.
-  CI runners have 7 GB, so this fits.
-  Each refusal happens before any decode. The two-book permit test checks one holder at a time and
-  a combined peak within 600 MB. A cancel during a 100 MP decode returns within the measured bound.
-- Run `pnpm licenses:gen` and commit `THIRD_PARTY_LICENSES.generated.md`. Then `pnpm
+  whole decode whose buffer would pass 200 MB. A progressive JPEG is included: its coefficient
+  buffer is the full frame, two bytes a sample a component, and scaling does not shrink it. A
+  buffer of exactly 200 MB is allowed. A JPEG whose buffers would pass the 264 MB large-page
+  budget together is refused as well, and that budget is not raised. The sum is the coefficient
+  buffer plus the scaled sample planes, and for colour the interleaved output too, because those
+  are live at once. Greyscale reuses its plane. Exactly 264 MB is allowed. Every JPEG goes through `jpeg-decoder` (decision
+  2): at 1/1 within the caps, and at the smallest DCT scale at or above the caps beyond them. It
+  resizes to the caps in one pass, never upscales, and streams the RGBA rows as a PNG into the
+  run directory, so it holds no second full RGBA copy. It takes the stop flag and the deadline
+  (decision 7).
+- [x] Add the large-page permit: one slot shared by all books. A page is small only when its
+  decode buffer, from the header's size and bytes per pixel, is at most 48 MB. Every other page
+  needs the permit. So a 12 MP RGBA16 page, which decodes to 96 MB, is a large page even though
+  it is within the size caps. The permit guard is held by the page and dropped on every exit,
+  including an error or cancel.
+- [x] Add the counting allocator as a `#[cfg(test)] #[global_allocator]` in `lib.rs`, so it
+  exists only in the unit-test binary, which can reach the private `ocr::input`. It counts
+  allocations made by a thread that has armed it. It also counts allocations and frees on a
+  `jpeg-decoder` worker thread when exactly one meter is armed: those threads are named
+  `worker thread for component N` and they allocate each component's sample plane. The meter
+  matches the operating-system name (Linux keeps only `worker thread f`) rather than
+  `thread::current`, which panics once a worker's thread-locals are gone. Any other
+  thread is ignored, so tests running in parallel do not count. Each budget test arms its own
+  thread after building its fixture, and the budget tests share one mutex, so they run one at
+  a time.
+- [x] Tests on generated images: a 16 MP and a 100 MP JPEG, both baseline and progressive, a
+  16 MP PNG, a WebP page, a 60 MP RGBA PNG (240 MB, refused), a 60 MP RGB8 PNG (180 MB, accepted
+  under the large-page permit), a 50 MP 16-bit RGBA PNG (400 MB, refused), a 20 MP 16-bit RGBA
+  PNG (160 MB, accepted), and a header claiming 200 MP. Each output is within the caps in both
+  dimensions, and each peak is within its budget. Refused pages need only a valid header, so
+  their fixtures are written header-first with a short body and never hold a full pixel buffer.
+  The large accepted fixtures, the 100 MP greyscale JPEGs and the 60 MP RGB8 PNG, are generated
+  once per test run into a temp folder, one at a time under the budget tests' mutex. The 100 MP
+  JPEGs are greyscale, so building them needs 100 MB, not 300 MB. CI runners have 7 GB, so this
+  fits. Each refusal happens before any decode. A baseline 16 MP JPEG fits the 112 MB small
+  budget. A progressive RGB page also keeps two bytes of coefficients per sample per component,
+  so a 16 MP progressive page (96 MB of coefficients, about 192 MB with its planes and output) takes the large-page
+  permit and stays inside the 264 MB budget. A 13.44 MP progressive RGB page over the caps is
+  decoded at 1/1, and its measured peak includes the coefficient buffer and stays inside 264 MB.
+  A 25 MP progressive RGB header and a 44.7 MP baseline RGB header are refused on that sum
+  before any pixels are decoded. A helper reads the chosen scale without decoding
+  pixels and asserts 1/1 for 16 MP and 1/2
+  (5000x5000) for 100 MP. Both 100 MP peaks fit the 264 MB large budget, and the baseline peak
+  stays under a full-size 100 MB plane, so a decode that skipped the scale fails. The two-book
+  permit test checks one holder at a time and a combined peak within 600 MB. A cancel during a
+  100 MP decode returns within the measured bound.
+- [x] Add `jpeg-decoder` 0.3 without default features (its rayon backend decodes buffers in
+  parallel and would break the page budget) and the test-only `jpeg-encoder` 0.7 for progressive
+  fixtures. Run `pnpm licenses:gen` and commit `THIRD_PARTY_LICENSES.generated.md`. Then `pnpm
   licenses:check` and `cargo audit` must pass.
 
 ### Chunk 3: the job core
@@ -203,8 +234,8 @@ Each chunk is one PR, reviewed and merged before the next starts.
   stops the job with `OcrStorage`, and the state becomes `unavailable`.
 - If the book has no `ocr/` folder, as an older image book may not, the job creates it before it
   takes `ocr/.job.lock` or writes the index.
-- The pre-check runs once per job, before any page (decision 11). It and the stale sweep run
-  before the first page.
+- The pre-check runs once per job, before any page (decision 11). The job calls the stale temp
+  sweep before each run, so the sweep and the pre-check both run before the first page.
 - Events and the in-memory snapshot (decision 9). Cancel sets the stop flag. A page in flight is
   left `pending`, except a retry of a page that was `failed` when the run started, which stays
   `failed` with its recorded `afterRunId`. Either way, its temp files are deleted (decision 8).

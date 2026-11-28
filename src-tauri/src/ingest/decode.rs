@@ -231,7 +231,7 @@ fn decode_tiff(bytes: &[u8], frame: u32) -> Result<Decoded, ConvertError> {
 
 /// Largest JPEG 2000 image ingest will decode (150 megapixels; a scanned page is ~11 MP).
 /// OpenJPEG allocates the full image itself, so the header is checked before decoding.
-pub(super) const JP2_MAX_PIXELS: u64 = 150_000_000;
+pub(crate) const JP2_MAX_PIXELS: u64 = 150_000_000;
 
 /// The `(type, payload)` boxes in `bytes`, walking box lengths (an 8-byte header, a 16-byte
 /// one when the length field is 1, and "to the end" when it is 0). Stops at a malformed box.
