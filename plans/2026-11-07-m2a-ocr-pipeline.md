@@ -1,6 +1,6 @@
 # Plan: M2a OCR engine and pipeline
 
-Last reviewed: 2026-11-23
+Last reviewed: 2026-11-27
 Date: 2026-11-07
 Author: planning pass (branch `plan/m2-ocr`)
 Status: in-progress
@@ -337,22 +337,21 @@ It stays `failed` with its recorded `afterRunId`, so a later rebuild cannot clas
 is written to the index at once, outside the throttle, under the per-book mutex. Every index
 write takes that mutex, so two workers' writes never race.
 
-**`ocr_status`.** It never parses page files. While a job runs, it returns the registry's live
-snapshot only, and computes the summary from that snapshot, because the index on disk lags. With
-no job running, it reads `index.json`. It checks each `done` entry's `imageSha256` against
-`meta.json`, and the index's `engine` against the engine the app ships now. If `ocr/forced.json`
-names a run, a `done` entry whose `runId` is not the forced run's id is unfinished. It also checks that each
-`done` entry's page file exists, which is a cheap `stat` and no read. Any of these reports that
-page as `pending`, so the reader never says "Text ready" over stale text or text
-from an older engine. A page file that exists but is invalid is caught by the next job's
-rebuild, which marks it `failed`, because only a parse can find it. Pages that are done and
-untouched by a forced run stay `done`, so Resume never redoes them. It recomputes the summary
-after those checks. A crashed run may still
-show a few finished pages as `pending` until the next job starts. That errs the safe way.
+**`ocr_status`.** While a job runs, or while `unavailable` is still held, it returns the
+registry's live snapshot, including `reason`, and does not parse page files. The summary comes
+from that snapshot, because the index on disk lags. Otherwise it calls `rebuild_index`, which
+reads `index.json` for `skipped` and failures and then reads every page file. A current `ocr`
+layer is `done`. A different engine or checksum, a missing page file, or a `forced.json` whose
+`runId` is not the layer's makes that page `pending`. An invalid page file is `failed` in the
+result. The query does not write the index; the next job's pre-run write records it. So the
+reader never says "Text ready" over stale text or text from an older engine, and a crashed run's
+finished pages come back `done` from their layers. `unavailable` stays, with its reason, until
+the next start.
 
-**Books with no v1 index.** `ocr_status` treats a missing `index.json`, which every M1 image book
-has, as every page `pending`. It treats a valid v0 index the same way. It never fails on either.
-The next job writes a v1 index.
+**Books with no v1 index.** A missing `index.json`, which every M1 image book has, is rebuilt
+from the page files. A valid page whose `ocr` layer is current is `done`. An invalid page file
+is `failed`. Every other valid page is `pending`. A valid v0 index is treated the same way. The
+query never fails on either. The next job writes a v1 index.
 
 **Guarantee.** The job writes only the `ocr` layer of a page file. It reads the file, replaces
 `layers.ocr`, and writes it back. It never rewrites a file it cannot parse and validate, so a
@@ -422,13 +421,21 @@ file leaves the file unchanged and marks the page `failed`.
   - `ocr-state` is `{ root, seq, state, reason }`, sent on every change, never throttled.
     `reason` is set only for `unavailable`. `state` is
     `idle`, `running`, `cancelling`, `finished`, `unavailable`, or `busy`.
-  - `seq` is one counter per book that rises with every event.
+  - `seq` is one counter per book that rises with every event. Events for one book are queued
+    under the registry lock and sent in `seq` order after that lock is released. The sender
+    keeps `seq` order, and an `ocr_status` read reports the state its `seq` belongs to, so the
+    reader cannot drop `running` and stay idle with no Stop.
 - `ocr_status(root)` returns the book's job `state`, the current `seq`, and the page statuses, as
   one snapshot. While a job runs, the registry holds the live statuses and counts in memory, and
   every event is built from that state. `ocr_status` reads the state and `seq` together under the
   registry's lock, so its counts are never older than its `seq`, even when the index on disk lags.
-  With no job running, it reads `index.json`, and `seq` is the last one the registry issued for
-that book in this app session. `seq` is not stored on disk. It starts at 0 each launch, and a
+  With no job running and no held `unavailable`, it holds the per-book mutex across
+  `rebuild_index` and, while holding it, reads the state and `seq` under the registry lock,
+  and returns that snapshot instead if a job now exists or `unavailable` is held, then
+  releases both. A completion writes the page, and any index write it triggers, under that
+  mutex before it bumps `seq`, so a `seq` that includes a completion is never returned with
+  older counts. `seq` is the last value this
+  process issued for that book in this app session. `seq` is not stored on disk. It starts at 0 each launch, and a
 reader only ever compares it with events from the same session. The reader subscribes to both events first, then calls `ocr_status`. It applies the
   query result, then applies only events with a higher `seq`. An event that arrives during the
   call is buffered, and dropped if its `seq` is not higher. So a job that starts, finishes, or is
@@ -445,10 +452,14 @@ reader only ever compares it with events from the same session. The reader subsc
   `PdfiumUnavailable`.
 - There is no per-book write lock today. M2a adds one: a mutex per book in the job
   registry, keyed by the canonical package root like `commands/session.rs`, never by the
-  book's self-declared id. It is held only while a page file is read, changed, and written back.
-  The job registry uses the same key. M2c's editor takes
+  book's self-declared id. It is held for a page file's read-change-write, for an index or
+  `forced.json` write, and for the no-job `ocr_status` rebuild. It is never held across
+  recognition or a decode. The job registry uses the same key. M2c's editor takes
   the same mutex. Reading the book while OCR runs is unaffected. `load_book` still does not read `ocr/`. The UI gets a
-  separate `ocr_status` command, which reads only `index.json`.
+  separate `ocr_status` command. While a job runs, or while `unavailable` is held, that command
+  returns the registry snapshot. Otherwise it calls `rebuild_index` under that mutex and, while
+  still holding it, returns the registry snapshot instead if a job or `unavailable` is now held.
+  It does not write the index.
 
 ### UI
 
@@ -747,11 +758,11 @@ The order of work and the details are in the
 - [ ] Tests with `FakeEngine`: resume after cancel, cancel returning within a second while a page
       is in flight, a failing page, a second request joining the running job, two books sharing
       the pool, progress throttling, and cancel on exit.
-- [ ] Test that `run_ocr` returns `OcrUnavailable` when `SCRIPTORIUM_TESSERACT` points at a
-      missing file, and at a file that is not executable. Test that a missing `eng.traineddata`
-      also fails the whole job, with no page attempted and no page marked `failed`. So does a
-      truncated `eng.traineddata`, which `--list-langs` would still list, caught by the
-      test-image recognition.
+- [ ] Test a missing Tesseract binary, a binary that is not executable, and a missing or
+      truncated `eng.traineddata`. The tests construct the engine. They do not set
+      `SCRIPTORIUM_TESSERACT`, because `cargo test` is one process. Each fails the whole job
+      with `OcrUnavailable`, no page attempted and no page marked `failed`. The truncated file
+      is one `--list-langs` would still list, caught by the test-image recognition.
 - [ ] Test `force`: a forced run redoes a fresh page and keeps a `skipped` one. Test that a
       forced run cancelled halfway resumes on exactly the pages without its `runId`, that a
       lost index keeps the forced run through `forced.json`, and that a failure survives a

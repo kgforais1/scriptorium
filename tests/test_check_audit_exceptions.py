@@ -95,6 +95,13 @@ class CheckAuditExceptionsTests(unittest.TestCase):
             )
             self.assertEqual(_run(audit, exc, "2026-11-27", tmp), 0)
 
+    def test_no_ignores_needs_no_exception_rows(self) -> None:
+        """An empty ignore list matches `exceptions = []`, which is the committed pair."""
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            audit, exc = _write_pair(tmp, ignore_ids=[], exceptions=[])
+            self.assertEqual(_run(audit, exc, "2026-11-27", tmp), 0)
+
     def test_single_quoted_ignore_list(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)

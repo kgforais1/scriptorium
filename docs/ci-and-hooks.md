@@ -1,6 +1,6 @@
 # Scriptorium — CI & hooks
 
-Last reviewed: 2026-11-22
+Last reviewed: 2026-11-27
 
 ## Recommendation (what runs where)
 
@@ -113,12 +113,13 @@ the log:
    repo controls.** Bump it in `src-tauri/Cargo.toml`, then update the lockfile. That is a
    manifest change, not a suppression.
 3. **No version you can select contains the fix, because a third-party requirement blocks it.**
-   Existing case: `RUSTSEC-2024-0429` (glib 0.20.0 contains the fix; gtk 0.18, pulled in by
-   tauri 2.11.5, does not allow it; `expires = "2026-11-27"`). Add the ID
-   under `advisories.ignore` in `src-tauri/.cargo/audit.toml` and a matching `id` / `expires` /
-   `reason` row in `src-tauri/.cargo/audit-exceptions.toml`. `cargo audit` stays green while
-   the ignore is present; required `Policy (file size, docs, backlog)` fails once `today` is
-   after `expires`.
+   Add the ID under `advisories.ignore` in `src-tauri/.cargo/audit.toml` and a matching `id` /
+   `expires` / `reason` row in `src-tauri/.cargo/audit-exceptions.toml`. `cargo audit` stays
+   green while the ignore is present; required `Policy (file size, docs, backlog)` fails once
+   `today` is after `expires`. Do this only for a vulnerability. An unsound, unmaintained,
+   notice, or yanked finding already exits 0, and suppressing it hides the warning.
+   `RUSTSEC-2024-0429` is that kind: `glib` 0.18.5 via `gtk` 0.18.2, required by tauri 2.12.5,
+   fixed in `glib` 0.20. It is not ignored. `cargo audit` prints it.
 
 Then `cargo audit` (expect exit 0) and `cargo test`, both from `src-tauri`. PR the lockfile —
 and `Cargo.toml` when step 2 applied.
