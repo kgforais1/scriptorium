@@ -1,6 +1,6 @@
 # Plan: M2a OCR engine and pipeline
 
-Last reviewed: 2026-11-23
+Last reviewed: 2026-11-27
 Date: 2026-11-07
 Author: planning pass (branch `plan/m2-ocr`)
 Status: in-progress
@@ -337,22 +337,21 @@ It stays `failed` with its recorded `afterRunId`, so a later rebuild cannot clas
 is written to the index at once, outside the throttle, under the per-book mutex. Every index
 write takes that mutex, so two workers' writes never race.
 
-**`ocr_status`.** It never parses page files. While a job runs, it returns the registry's live
-snapshot only, and computes the summary from that snapshot, because the index on disk lags. With
-no job running, it reads `index.json`. It checks each `done` entry's `imageSha256` against
-`meta.json`, and the index's `engine` against the engine the app ships now. If `ocr/forced.json`
-names a run, a `done` entry whose `runId` is not the forced run's id is unfinished. It also checks that each
-`done` entry's page file exists, which is a cheap `stat` and no read. Any of these reports that
-page as `pending`, so the reader never says "Text ready" over stale text or text
-from an older engine. A page file that exists but is invalid is caught by the next job's
-rebuild, which marks it `failed`, because only a parse can find it. Pages that are done and
-untouched by a forced run stay `done`, so Resume never redoes them. It recomputes the summary
-after those checks. A crashed run may still
-show a few finished pages as `pending` until the next job starts. That errs the safe way.
+**`ocr_status`.** While a job runs, or while `unavailable` is still held, it returns the
+registry's live snapshot, including `reason`, and does not parse page files. The summary comes
+from that snapshot, because the index on disk lags. Otherwise it calls `rebuild_index`, which
+reads `index.json` for `skipped` and failures and then reads every page file. A current `ocr`
+layer is `done`. A different engine or checksum, a missing page file, or a `forced.json` whose
+`runId` is not the layer's makes that page `pending`. An invalid page file is `failed` in the
+result. The query does not write the index; the next job's pre-run write records it. So the
+reader never says "Text ready" over stale text or text from an older engine, and a crashed run's
+finished pages come back `done` from their layers. `unavailable` stays, with its reason, until
+the next start.
 
-**Books with no v1 index.** `ocr_status` treats a missing `index.json`, which every M1 image book
-has, as every page `pending`. It treats a valid v0 index the same way. It never fails on either.
-The next job writes a v1 index.
+**Books with no v1 index.** A missing `index.json`, which every M1 image book has, is rebuilt
+from the page files: a page whose `ocr` layer is current is `done`, and every other page is
+`pending`. A valid v0 index is treated the same way. The query never fails on either. The next
+job writes a v1 index.
 
 **Guarantee.** The job writes only the `ocr` layer of a page file. It reads the file, replaces
 `layers.ocr`, and writes it back. It never rewrites a file it cannot parse and validate, so a
@@ -747,11 +746,11 @@ The order of work and the details are in the
 - [ ] Tests with `FakeEngine`: resume after cancel, cancel returning within a second while a page
       is in flight, a failing page, a second request joining the running job, two books sharing
       the pool, progress throttling, and cancel on exit.
-- [ ] Test that `run_ocr` returns `OcrUnavailable` when `SCRIPTORIUM_TESSERACT` points at a
-      missing file, and at a file that is not executable. Test that a missing `eng.traineddata`
-      also fails the whole job, with no page attempted and no page marked `failed`. So does a
-      truncated `eng.traineddata`, which `--list-langs` would still list, caught by the
-      test-image recognition.
+- [ ] Test a missing Tesseract binary, a binary that is not executable, and a missing or
+      truncated `eng.traineddata`. The tests construct the engine. They do not set
+      `SCRIPTORIUM_TESSERACT`, because `cargo test` is one process. Each fails the whole job
+      with `OcrUnavailable`, no page attempted and no page marked `failed`. The truncated file
+      is one `--list-langs` would still list, caught by the test-image recognition.
 - [ ] Test `force`: a forced run redoes a fresh page and keeps a `skipped` one. Test that a
       forced run cancelled halfway resumes on exactly the pages without its `runId`, that a
       lost index keeps the forced run through `forced.json`, and that a failure survives a

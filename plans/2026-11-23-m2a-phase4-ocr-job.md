@@ -255,13 +255,16 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   stderr beside the image and the bundle directory is not writable. A failure is `OcrUnavailable`.
   No page is attempted, and none is marked `failed`.
 - The job then calls `rebuild_index`. That function already applies the skip and the forced-run
-  exception in `rebuild_entry`, so this chunk does not add a second `is_current` check. It runs
-  `pending` pages in order, then retries the pages that were `failed` when the run started, once
-  each. A page that fails during this run is not retried until the next run. A recorded failure
-  whose `afterRunId` still matches the layer stays `failed` through the rebuild, so the retry
-  pass runs it even though the older layer is current. A planted `forced.json` only changes what
-  `rebuild_index` returns, which the store tests already cover. This chunk does not run that page
-  again. Writing, adopting, and deleting the file is chunk 4.
+  exception in `rebuild_entry`, so this chunk does not add a second `is_current` check. It writes
+  the rebuilt index atomically before the first page, the first of the once-a-second writes, then
+  runs `pending` pages in order, then retries the pages that were `failed` when the run started,
+  once each. A page that fails during this run is not retried until the next run. A recorded
+  failure whose `afterRunId` still matches the layer stays `failed` through the rebuild, so the
+  retry pass runs it even though the older layer is current. A planted `forced.json` still makes
+  a current page `pending` through `rebuild_index`, so the job re-runs it as an ordinary
+  `pending` page and leaves it `pending` again, because this chunk does not adopt or delete the
+  file. Writing, adopting, and deleting `forced.json` is chunk 4. The store tests cover the
+  rebuild rule.
 - Each page attempt creates its own `RunDir`, calls `prepare` in it with the stop flag and the
   page deadline (decision 7), then `recognize`, then `OcrLayer::new` and `write_ocr_layer` under
   the per-book mutex. The large-page permit stays inside `prepare`. The job does not add another.
@@ -271,9 +274,13 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   `run_dir.rs` currently describes one directory for a whole run, and leaving every PNG until the
   run ends would hold more than decision 8's 200 MB. The module comment is updated to one
   directory per page attempt. Today `OcrWrite::Written` carries nothing. This chunk changes it to
-  carry the merged page, and a refusal stays `OcrWrite::Refused`. The job reads `published_text`
-  from that page. An empty `ocr` layer shadows a `pdf` layer, so `withText` is recomputed from
-  that page and is not incremented. After a successful write the snapshot entry is what
+  carry the merged page, and a refusal stays `OcrWrite::Refused`. Under the per-book mutex, the
+  job reads the page before the write and computes its old `published_text`. After
+  `write_ocr_layer` returns the merged page, it computes the new one and adjusts
+  `summary.withText` by the difference, using the same non-empty trim as `rebuild_index`. An
+  empty `ocr` layer that shadows a `pdf` layer decrements `withText`. A page that keeps or lacks
+  non-empty published text leaves the count unchanged. After a successful write the snapshot
+  entry is what
   `rebuild_entry` would produce for the new layer: `Done` only when the layer is current and any
   forced id is absent or equal to the new run id.
 - A cancel from `prepare` or `recognize` leaves the page `pending`, unless this attempt was the
@@ -287,7 +294,8 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   recorded stops the job. The state becomes `unavailable`, and the reason is the error text
   (`OcrStorage` for a disk error). A page that was not written is still `pending` on the next
   rebuild.
-- The index is written at most once a second, at once after a page failure, and once more on
+- The index is written at most once a second, including the rebuilt index before the first page,
+  at once after a page failure, and once more on
   every exit (finished, cancelled, or error) before the registry drops the in-flight page list.
   A terminal record stays: the state, `seq`, `reason`, and the final counts. `seq` is not dropped.
   `unavailable` stays until the next `start` replaces it. So `book_status` never pairs the last
@@ -305,12 +313,16 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   scripted fake, which waits until the stop flag is set. It does not use a real decode. A decode
   already inside `prepare` cannot be interrupted. That wait is the bound chunk 2 measured.
 - `book_status(root, jobs)` is what `ocr_status` will call in chunk 5. While a job runs, or while
-  `unavailable` is still held, it returns the registry snapshot, including `reason`. Otherwise it
-  reads `index.json`. The engine id comes from the factory. If that locate fails, the state is
-  `unavailable` with the locate error, and pages are not promoted for an engine mismatch. When
-  locate succeeds, a different engine or checksum makes a `done` page `pending`, a missing page
-  file makes it `pending`, and a planted `forced.json` keeps a `done` page unfinished unless its
-  `runId` is the forced id. A missing or v0 index makes every page `pending`. The state is
+  `unavailable` is still held, it returns the registry snapshot, including `reason`, and does not
+  parse page files. Otherwise it calls `rebuild_index`, which reads `index.json` for `skipped`
+  and failures and then re-reads the page files. The engine id comes from the factory. If that
+  locate fails, the state is `unavailable` with the locate error, and pages are not promoted for
+  an engine mismatch. When locate succeeds, a different engine or checksum makes a `done` page
+  `pending`, a missing page file makes it `pending`, and a planted `forced.json` keeps a `done`
+  page unfinished unless its `runId` is the forced id. A missing or v0 index is rebuilt from the
+  page files: a page whose `ocr` layer is current is `done`, and every other page is `pending`.
+  An invalid page file is `failed` in that result. The query does not write the index. This
+  corrects the parent's `ocr_status` and "Books with no v1 index" paragraphs. The state is
   `finished` when `pending` is 0, including a book whose only unfinished pages are `failed`, and
   `idle` when any page is `pending`. `seq` is the last value this process issued for the book, or
   0.
@@ -335,11 +347,13 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   store tests already cover a different engine, a changed checksum, a missing page file, a
   planted `forced.json`, and a missing or v0 index. One `book_status` test plants `forced.json`
   only to show that a current page comes back `pending` and the state is `idle`.
-- A fake whose pre-check returns `OcrUnavailable` proves the job attempts no page. The missing
-  binary, the non-executable binary, and the missing or truncated `eng.traineddata` are tests in
-  `tesseract/tests.rs`. They use a `#[cfg(test)] pub(crate)` constructor and do not call
-  `set_var`. `cargo test` runs in one process, and `SCRIPTORIUM_TESSERACT` would race every
-  other `locate`.
+- A fake whose pre-check returns `OcrUnavailable` proves the job attempts no page. This chunk
+  adds the missing-binary, non-executable-binary, and missing or truncated `eng.traineddata`
+  tests in `tesseract/tests.rs`. They do not exist yet. It also adds the `#[cfg(test)]
+  pub(crate)` constructor they use. The tests do not call `set_var`. `cargo test` runs in one
+  process, and `SCRIPTORIUM_TESSERACT` would race every other `locate`. The check-image field
+  changes `TesseractEngine`, so convert the struct literals in
+  `id_matches_the_fetch_script_and_the_trait`, `stand_in_engine`, and `tesseract/integration.rs`.
 - The kill path is already tested. `cancel_stops_the_child_within_two_seconds` and
   `a_passed_deadline_returns_timeout` drive the sleeping stand-in through `wait`. This chunk
   does not add another.
