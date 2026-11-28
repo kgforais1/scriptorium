@@ -115,12 +115,17 @@ Phases 2 and 3 left these pieces, which this phase consumes:
     in `ReaderHeader`, beside its page indicator (`reader__indicator`) and the Text button, so they
     never cover the page.
 11. **The pre-check image is bundled.** `tests/fixtures/ocr/smoke.png` (4 KB, one known line) is
-    copied to `src-tauri/resources/ocr-check.png` and listed in `bundle.resources`. Debug builds and
-    tests fall back to that file under `CARGO_MANIFEST_DIR`, as `TesseractEngine::locate` does for
-    the binary. `recognize` writes its TSV and stderr beside the image, so the pre-check copies
-    the image into a `RunDir` first and does not write into the bundle. The method returns
-    `Result<(), BookError>`, because `OcrError` has no unavailable kind. The pre-check requires
-    the known words in the output, so a truncated `eng.traineddata` fails it.
+    copied to `src-tauri/resources/ocr-check.png`. `bundle.resources` maps
+    `"resources/ocr-check.png"` to `"ocr-check.png"`, beside `tessdata/`. `locate` already takes
+    `resource_dir`. The check image is `resource_dir.join("ocr-check.png")` when that argument is
+    set, and `CARGO_MANIFEST_DIR/resources/ocr-check.png` in debug builds when it is `None` or the
+    bundled copy is missing. Passing the manifest directory itself does not find the file: that
+    join would look for `src-tauri/ocr-check.png`. Real-engine tests pass `None` and use the
+    fallback. They do not set `SCRIPTORIUM_TESSERACT`. `recognize` writes its TSV and stderr
+    beside the image, so the pre-check copies the image into a per-page `RunDir` first and does
+    not write into the bundle. The method returns `Result<(), BookError>`, because `OcrError` has
+    no unavailable kind. The pre-check requires the known words in the output, so a truncated
+    `eng.traineddata` fails it.
 12. **Dead code between chunks.** Chunks 1 to 4 add code whose production caller lands in
     Chunk 5. CI runs clippy with `-D warnings` twice: on the library target (`ci.yml:241-242`)
     and with `--all-targets` (`ci.yml:457-458`). Both compile the library without `cfg(test)`, so
@@ -231,36 +236,46 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   one book does not stop another. The job does not take `ocr/.job.lock`. Chunk 4 adds
   `try_lock_dir` before the rebuild. In this process the per-book mutex is the write lock.
 - A run opens the book with `load_book`. That error is returned unchanged, so a checksum mismatch
-  or a permission error keeps its own kind. Only an unreadable or invalid `meta.json` is
-  `InvalidPackage`. Each page's `imageSha256` comes from that checked meta. The run id is the
-  process id and the clock's nanoseconds, the same source as decision 6. The job passes
-  `[Lang("eng")]` only.
+  or a permission error keeps its own kind. Only a missing, non-file, symlink, oversized,
+  non-UTF-8, or schema-invalid `meta.json` is `InvalidPackage`. A permission error on that file
+  stays `PermissionDenied`. Each page's `imageSha256` comes from that checked meta. The run id is
+  the process id and the clock's nanoseconds, the same source as decision 6. The job passes
+  `[Lang("eng")]` only. Tests start a run with `OcrJobs::start(root)`. Chunk 4 adds `force`.
 - Before any page, the job calls `sweep_stale` on the temp directory with `RUN_ORPHAN_AGE`, then
-  the pre-check, then creates `ocr/` with `create_dir` when it is missing, as ingest does. The
-  pre-check is a method on `OcrEngine` and returns `Result<(), BookError>` (decision 11).
-  `FakeEngine` succeeds. This chunk copies `tests/fixtures/ocr/smoke.png` to
-  `src-tauri/resources/ocr-check.png` and adds that file to `bundle.resources` in
-  `tauri.conf.json`. `TesseractEngine` stores the check-image path, from the resource directory
-  or the `CARGO_MANIFEST_DIR` fallback, the same way it finds `tessdata`. It copies that image
-  into a `RunDir` and recognises the copy, because `recognize` writes its TSV and stderr beside
-  the image and the bundle directory is not writable. A failure is `OcrUnavailable`. No page is
-  attempted, and none is marked `failed`.
+  the pre-check, then creates `ocr/` with `create_dir` when it is missing. An existing directory
+  is success. Any other failure, including a file already at that path, is `OcrStorage`. Ingest
+  creates `ocr/` only inside a new package, so this is not the same call. The pre-check is a
+  method on `OcrEngine` and returns `Result<(), BookError>` (decision 11). `FakeEngine` succeeds.
+  This chunk copies `tests/fixtures/ocr/smoke.png` to `src-tauri/resources/ocr-check.png` and maps
+  `"resources/ocr-check.png"` to `"ocr-check.png"` in `bundle.resources`. `TesseractEngine`
+  resolves that file from `locate`'s `resource_dir` (`resource_dir.join("ocr-check.png")`) and, in
+  debug builds, from `CARGO_MANIFEST_DIR/resources/ocr-check.png` when the argument is `None` or
+  the copy is missing. The real-engine tests pass `None` and use that fallback. It copies the
+  image into a per-page `RunDir` and recognises the copy, because `recognize` writes its TSV and
+  stderr beside the image and the bundle directory is not writable. A failure is `OcrUnavailable`.
+  No page is attempted, and none is marked `failed`.
 - The job then calls `rebuild_index`. That function already applies the skip and the forced-run
   exception in `rebuild_entry`, so this chunk does not add a second `is_current` check. It runs
   `pending` pages in order, then retries the pages that were `failed` when the run started, once
   each. A page that fails during this run is not retried until the next run. A recorded failure
   whose `afterRunId` still matches the layer stays `failed` through the rebuild, so the retry
-  pass runs it even though the older layer is current. A planted `forced.json` is how this chunk
-  proves a current page is redone. Writing, adopting, and deleting that file is chunk 4.
-- Each page calls `prepare` in a `RunDir`, with the stop flag and the page deadline (decision 7),
-  then `recognize`, then `OcrLayer::new` and `write_ocr_layer` under the per-book mutex. The
-  large-page permit stays inside `prepare`. The job does not add another. Dropping the `RunDir`
-  removes its directory. The page's input PNG, TSV, and stderr are still deleted when the page
-  ends, including on cancel and failure (decision 8). `write_ocr_layer` returns the merged page,
-  or the refusal, so the job can read `published_text` from it. An empty `ocr` layer shadows a
-  `pdf` layer, so `withText` is recomputed from that page and is not incremented. After a
-  successful write the snapshot entry is what `rebuild_entry` would produce for the new layer:
-  `Done` only when the layer is current and any forced id is absent or equal to the new run id.
+  pass runs it even though the older layer is current. A planted `forced.json` only changes what
+  `rebuild_index` returns, which the store tests already cover. This chunk does not run that page
+  again. Writing, adopting, and deleting the file is chunk 4.
+- Each page attempt creates its own `RunDir`, calls `prepare` in it with the stop flag and the
+  page deadline (decision 7), then `recognize`, then `OcrLayer::new` and `write_ocr_layer` under
+  the per-book mutex. The large-page permit stays inside `prepare`. The job does not add another.
+  The attempt drops that `RunDir` when it returns, including cancel and failure, so the PNG is
+  removed even when `prepare` returns an error after writing it and does not hand the path back.
+  `TempFiles::drop` already removes the TSV and stderr. One directory is not shared across pages.
+  `run_dir.rs` currently describes one directory for a whole run, and leaving every PNG until the
+  run ends would hold more than decision 8's 200 MB. The module comment is updated to one
+  directory per page attempt. Today `OcrWrite::Written` carries nothing. This chunk changes it to
+  carry the merged page, and a refusal stays `OcrWrite::Refused`. The job reads `published_text`
+  from that page. An empty `ocr` layer shadows a `pdf` layer, so `withText` is recomputed from
+  that page and is not incremented. After a successful write the snapshot entry is what
+  `rebuild_entry` would produce for the new layer: `Done` only when the layer is current and any
+  forced id is absent or equal to the new run id.
 - A cancel from `prepare` or `recognize` leaves the page `pending`, unless this attempt was the
   retry of a page that was `failed` at the start, which stays `failed` with its recorded
   `afterRunId`. A timeout, an engine failure, an input `Failed` (including "too large", and a
@@ -273,8 +288,10 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   (`OcrStorage` for a disk error). A page that was not written is still `pending` on the next
   rebuild.
 - The index is written at most once a second, at once after a page failure, and once more on
-  every exit (finished, cancelled, or error) before the registry drops the live snapshot. So
-  `book_status` never pairs the last `seq` with an older index.
+  every exit (finished, cancelled, or error) before the registry drops the in-flight page list.
+  A terminal record stays: the state, `seq`, `reason`, and the final counts. `seq` is not dropped.
+  `unavailable` stays until the next `start` replaces it. So `book_status` never pairs the last
+  `seq` with an older index, and a query after an `unavailable` job still returns that reason.
 - `OcrJobs` takes an event sink as well as the engine factory and the resource paths. Chunk 5
   connects that sink to `app.emit`. This chunk's tests record it. There is no `AppHandle` here.
   `commands::session` and `commands::throttle` become `pub(crate)`, so the job can use
@@ -297,23 +314,27 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   `finished` when `pending` is 0, including a book whose only unfinished pages are `failed`, and
   `idle` when any page is `pending`. `seq` is the last value this process issued for the book, or
   0.
-- Extend `FakeEngine` with a script: a result per page index, an optional wait until the stop
-  flag is set, and a log of calls. The one-result constructor stays, so the store tests in
-  `ocr/tests.rs` keep working.
+- `FakeEngine` is a public struct with no constructor. `ocr/tests.rs` and `fake.rs`'s own test
+  build it with struct literals. Add `FakeEngine::new(id, result)` and convert both literals to
+  it, then add the script fields with defaults: a result per page index, an optional wait until
+  the stop flag is set, a log of calls, and a pre-check result that defaults to success. The
+  one-result constructor keeps the store tests working.
 - Tests on the scripted fake, except where named: resume after cancel; cancel within a second
   with a page in flight; a cancelled retry stays `failed`; a failure is not retried in the same
   run and is retried once in the next; a second request joins the running job; two books share
   the pool and never exceed its size; progress is throttled and the last tick is sent after a
   failure; a progress event sent before the index flush is what `book_status` returns, with that
-  `seq`; a page that finishes inside the one-second window is on disk when the snapshot drops; a
-  failed page whose layer is still current is retried on the next run; a planted `forced.json`
-  makes that current page run again; a "too large" input is a page failure, not `unavailable`;
-  on Unix, a read-only `ocr/` folder mid-run stops the job with `OcrStorage` and no later page
-  is written. That test is `#[cfg(unix)]`: a read-only directory does not block creates on
-  Windows. A reader that queries after an `unavailable` job ended gets that state and its reason.
-  With no job, `book_status` covers a different engine, a changed checksum, a missing page file,
-  a planted `forced.json`, a missing or v0 index, `finished` when nothing is `pending`, and
-  `idle` when something is.
+  `seq`; a page that finishes inside the one-second window is on disk when the in-flight list
+  drops; a failed page whose layer is still current is retried on the next run; a "too large"
+  input is a page failure, not `unavailable`; on Unix, a read-only `ocr/` folder mid-run stops
+  the job with `OcrStorage` and no later page is written. That test is `#[cfg(unix)]`: a
+  read-only directory does not block creates on Windows. A reader that queries after an
+  `unavailable` job ended gets that state and its reason. With no job, `book_status` reports
+  `finished` when nothing is `pending`, `idle` when something is, and `unavailable` with the
+  locate error when the factory cannot find the engine. The page list is `rebuild_index`'s. The
+  store tests already cover a different engine, a changed checksum, a missing page file, a
+  planted `forced.json`, and a missing or v0 index. One `book_status` test plants `forced.json`
+  only to show that a current page comes back `pending` and the state is `idle`.
 - A fake whose pre-check returns `OcrUnavailable` proves the job attempts no page. The missing
   binary, the non-executable binary, and the missing or truncated `eng.traineddata` are tests in
   `tesseract/tests.rs`. They use a `#[cfg(test)] pub(crate)` constructor and do not call
@@ -330,10 +351,10 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
 
 ### Chunk 4: forced runs and the cross-instance lock
 
-- `OcrJobs::start(root, force)` writes `ocr/forced.json` atomically before its first page. A
-  forced `start` during a run writes a new `runId` at once, and the running job adopts it and
-  makes one more pass. Chunk 4 tests call `start`. Chunk 5's `run_ocr` calls it too. The command
-  does not exist in this chunk.
+- Chunk 3's `OcrJobs::start(root)` gains `force`. A forced `start` writes `ocr/forced.json`
+  atomically before its first page. A forced `start` during a run writes a new `runId` at once,
+  and the running job adopts it and makes one more pass. Chunk 4 tests call `start(root, force)`.
+  Chunk 5's `run_ocr` calls it too. The command does not exist in this chunk.
 - Add `try_lock_dir(dir, name)`, which opens the lock file like `lock_dir` but takes the lock
   with `try_lock`, so it never blocks. The job holds `ocr/.job.lock` with it. An instance that
   cannot take it reports `busy`
@@ -353,10 +374,11 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
 - Add `run_ocr(root, force)`, `cancel_ocr(root)`, and `ocr_status(root)` in a new
   `commands/ocr.rs`, and register them in `lib.rs`. Start a job after `create_and_open`
   (decision 1). On `RunEvent::Exit`, set every stop flag and wait up to 2 seconds.
-- Remove every `#[allow(dead_code)]` added for Phase 4, the two in `ocr/mod.rs`, and the 11
-  `cfg_attr(not(test), allow(dead_code))` markers in `ocr/store.rs`, whose items now have
-  callers (decision 12). Keep a marker only where clippy shows the item is still unused, with a
-  comment saying why.
+- Remove every `#[allow(dead_code)]` added for Phase 4. `ocr/mod.rs` has four module markers
+  today (`engine`, `input`, `tesseract`, `run_dir`); `job` and `status` make six, and chunk 5
+  removes all six. Also remove the 11 `cfg_attr(not(test), allow(dead_code))` markers in
+  `ocr/store.rs`, whose items now have callers (decision 12). Keep a marker only where clippy
+  shows the item is still unused, with a comment saying why.
 - Frontend: `api.ts` gains the three calls and the two listeners. `src/lib/ocrStatus.ts` holds the
   event-ordering logic as a pure function, so Vitest's coverage gate on `src/lib/**` covers it. A
   thin `useOcrStatus` hook in `src/features/reader/` subscribes first, then queries, and applies
