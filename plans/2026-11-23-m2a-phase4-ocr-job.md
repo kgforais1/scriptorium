@@ -1,6 +1,6 @@
 # Plan: M2a Phase 4, the OCR job, commands, and UI
 
-Last reviewed: 2026-11-26
+Last reviewed: 2026-11-27
 Status: in-progress
 
 This is the implementation plan for Phase 4 of
@@ -20,8 +20,10 @@ on a calibration set and recorded in `docs/ocr.md`. Showing the text is M2b, not
 
 ## Starting point
 
-Chunk 1 replaced the `OcrUnavailable` struct and `lock_ingest_dir` (#100). The list below is the
-state this plan started from.
+Chunk 1 replaced the `OcrUnavailable` struct and `lock_ingest_dir` (#100). Chunk 2 added the
+engine-input step (#101). The list below is the state this plan started from. Chunk 3 consumes
+`prepare`, `RunDir`, `sweep_stale`, and the store functions as they are on main, not the older
+names in that list.
 
 Phases 2 and 3 left these pieces, which this phase consumes:
 
@@ -154,6 +156,8 @@ Merged in #100.
 
 ### Chunk 2: the engine-input step
 
+Merged in #101.
+
 - [x] Change `JP2_MAX_PIXELS` in `ingest/decode.rs` from `pub(super)` to `pub(crate)`, and
   re-export it from `ingest/mod.rs` as `pub(crate) use decode::JP2_MAX_PIXELS as
   MAX_PAGE_PIXELS`, so the input step reuses ingest's 150 MP limit while `decode` stays private.
@@ -214,54 +218,84 @@ Merged in #100.
 
 ### Chunk 3: the job core
 
-- Add `ocr/job.rs` with `OcrJobs` (decisions 4 and 5). A job opens the book with `load_book`, so
-  page paths stay confined, and takes each page's `imageSha256` from the checked `meta.json`.
-  A `load_book` failure is passed on unchanged, so a checksum mismatch or a permission error keeps
-  its own kind. Only an unreadable or invalid `meta.json` is `InvalidPackage`.
-- The job rebuilds the index, then runs `pending` pages in order, then retries the pages that were
-  `failed` when the run started, once each. A page that fails during this run is not retried until
-  the next run. It skips a `pending` page whose layer `is_current`, unless a forced
-  run is active and the layer's `runId` differs from it. `is_current` checks only the engine and
-  the checksum, so without that exception a forced run would skip every fresh page it marked
-  `pending`, and do nothing. This mirrors the guard in `store.rs`'s `rebuild_entry`. The retry pass ignores that
-  skip: a recorded failure wins over a current layer, so a page whose forced re-run failed is
-  retried even though its older layer is still current. It writes each result with
-  `write_ocr_layer` under the per-book mutex, keyed by `canonical_key`.
-- It writes the index at most once a second, and at once after a page failure. When the job ends,
-  whether it finished, was cancelled, or stopped on an error, it writes the index once more before
-  the registry drops the live snapshot. So `book_status` never pairs the last `seq` with an older
-  index. A failed write
-  stops the job with `OcrStorage`, and the state becomes `unavailable`.
-- If the book has no `ocr/` folder, as an older image book may not, the job creates it before it
-  takes `ocr/.job.lock` or writes the index.
-- The pre-check runs once per job, before any page (decision 11). The job calls the stale temp
-  sweep before each run, so the sweep and the pre-check both run before the first page.
-- Events and the in-memory snapshot (decision 9). Cancel sets the stop flag. A page in flight is
-  left `pending`, except a retry of a page that was `failed` when the run started, which stays
-  `failed` with its recorded `afterRunId`. Either way, its temp files are deleted (decision 8).
-- Add `ocr/status.rs` with `book_status(root, jobs)`, the function `ocr_status` will call. While a
-  job runs, it returns the registry's snapshot. After a job ends as `unavailable`, the registry
-  keeps that state and its `reason` until the next run starts, and `book_status` returns them, so
-  a reader that opens later still sees why. Otherwise it reads `index.json` as the parent's
-  "`ocr_status`" and "Books with no v1 index" paragraphs describe: a different `engine` or a
-  changed `imageSha256` makes a `done` page `pending`, a missing page file makes it `pending`, an
-  existing `forced.json` keeps the forced pages unfinished, and a missing or v0 index makes every
-  page `pending`.
-- Extend `FakeEngine` into a scripted fake: a result per page index, an optional wait until the
-  stop flag is set, and a log of calls. Its current one-result form stays as a constructor, so the
-  store tests in `ocr/tests.rs` keep working.
-- Tests: resume after cancel, cancel within a second with a page in flight, a cancelled retry
-  that keeps its page `failed`, a failing page that is not
-  retried in the same run, then retried once in the next, a second request joining the running job, two books sharing the
-  pool, progress throttling and the last tick after a failure, `OcrUnavailable` for a missing or
-  non-executable binary and for missing or truncated language data with no page attempted, the
-  read-only `ocr/` folder mid-run, a progress event sent before the index flush with `book_status`
-  returning that event's counts and `seq`, every `book_status` case above, and a reader that queries after an `unavailable` job
-  ended gets the state and its reason. A page that finishes inside the one-second window just
-  before the job ends, or before a cancel, is in the index on disk when the snapshot drops. A
-  failed page whose layer is still current is retried on the next run.
-- Test the Tesseract kill path with a stub binary that sleeps: both `stop` and the deadline end
-  it, and no child is left.
+This chunk does not add commands, the start after ingest, `RunEvent::Exit`, or `try_lock_dir`.
+Those are chunks 5 and 4. `OcrJobs` is built in tests. `ocr/mod.rs` declares `job` and `status`
+with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12).
+
+- Add `ocr/job.rs` and `ocr/status.rs`. The registry owns the pool and one mutex per book, keyed
+  by `canonical_key` (decisions 4 and 5). The production pool is half of
+  `available_parallelism`, at least 1 and at most 4. Tests pass an explicit size, so the two-book
+  test does not depend on the machine. Workers take turns, one page per book per turn. Cancelling
+  one book does not stop another. The job does not take `ocr/.job.lock`. Chunk 4 adds
+  `try_lock_dir` before the rebuild. In this process the per-book mutex is the write lock.
+- A run opens the book with `load_book`. That error is returned unchanged, so a checksum mismatch
+  or a permission error keeps its own kind. Only an unreadable or invalid `meta.json` is
+  `InvalidPackage`. Each page's `imageSha256` comes from that checked meta. The run id is the
+  process id and the clock's nanoseconds, the same source as decision 6. The job passes
+  `[Lang("eng")]` only.
+- Before any page, the job calls `sweep_stale` on the temp directory with `RUN_ORPHAN_AGE`, then
+  the pre-check, then creates `ocr/` with `create_dir` when it is missing, as ingest does. The
+  pre-check is a method on `OcrEngine` (decision 11). `FakeEngine` succeeds. `TesseractEngine`
+  locates the binary and recognises the bundled check image. A failure is `OcrUnavailable`. No
+  page is attempted, and none is marked `failed`.
+- The job then calls `rebuild_index`. That function already applies the skip and the forced-run
+  exception in `rebuild_entry`, so this chunk does not add a second `is_current` check. It runs
+  `pending` pages in order, then retries the pages that were `failed` when the run started, once
+  each. A page that fails during this run is not retried until the next run. A recorded failure
+  whose `afterRunId` still matches the layer stays `failed` through the rebuild, so the retry
+  pass runs it even though the older layer is current. A planted `forced.json` is how this chunk
+  proves a current page is redone. Writing, adopting, and deleting that file is chunk 4.
+- Each page calls `prepare` in a `RunDir`, with the stop flag and the page deadline (decision 7),
+  then `recognize`, then `OcrLayer::new` and `write_ocr_layer` under the per-book mutex. The
+  large-page permit stays inside `prepare`. The job does not add another. Dropping the `RunDir`
+  removes its directory. The page's input PNG, TSV, and stderr are still deleted when the page
+  ends, including on cancel and failure (decision 8).
+- A cancel from `prepare` or `recognize` leaves the page `pending`, unless this attempt was the
+  retry of a page that was `failed` at the start, which stays `failed` with its recorded
+  `afterRunId`. A timeout, an engine failure, an input `Failed` (including "too large"), or
+  `OcrWrite::Refused` marks that page `failed` with a short error, and the job continues. A page
+  or index write that cannot be recorded stops the job. The state becomes `unavailable`, and the
+  reason is the error text (`OcrStorage` for a disk error). A page that was not written is still
+  `pending` on the next rebuild.
+- The index is written at most once a second, at once after a page failure, and once more on
+  every exit (finished, cancelled, or error) before the registry drops the live snapshot. So
+  `book_status` never pairs the last `seq` with an older index.
+- Events follow decision 9. `seq` is one counter per book, starts at 0, and is not stored on
+  disk. This chunk emits `running`, `cancelling`, `finished`, and `unavailable`. It does not emit
+  `idle` or `busy`: no job reads the index, and `busy` is the other instance's lock in chunk 4.
+  Events are built under the registry lock and emitted after it is released. Code may hold the
+  per-book mutex and then the registry lock, never the reverse.
+- Cancel sets the stop flag and the state to `cancelling`. The "within a second" test uses the
+  scripted fake, which waits until the stop flag is set. It does not use a real decode. A decode
+  already inside `prepare` cannot be interrupted. That wait is the bound chunk 2 measured.
+- `book_status(root, jobs)` is what `ocr_status` will call in chunk 5. While a job runs, or while
+  `unavailable` is still held, it returns the registry snapshot, including `reason`. Otherwise it
+  reads `index.json`, as the parent's `ocr_status` paragraphs describe: a different engine or
+  checksum makes a `done` page `pending`, a missing page file makes it `pending`, a planted
+  `forced.json` keeps those pages unfinished, and a missing or v0 index makes every page
+  `pending`.
+- Extend `FakeEngine` with a script: a result per page index, an optional wait until the stop
+  flag is set, and a log of calls. The one-result constructor stays, so the store tests in
+  `ocr/tests.rs` keep working.
+- Tests on the scripted fake, except where named: resume after cancel; cancel within a second
+  with a page in flight; a cancelled retry stays `failed`; a failure is not retried in the same
+  run and is retried once in the next; a second request joins the running job; two books share
+  the pool and never exceed its size; progress is throttled and the last tick is sent after a
+  failure; a progress event sent before the index flush is what `book_status` returns, with that
+  `seq`; a page that finishes inside the one-second window is on disk when the snapshot drops; a
+  failed page whose layer is still current is retried on the next run; a planted `forced.json`
+  makes that current page run again; a "too large" input is a page failure, not `unavailable`;
+  the read-only `ocr/` folder mid-run stops the job with `OcrStorage` and no later page is
+  written. A reader that queries after an `unavailable` job ended gets that state and its reason.
+- The pre-check tests use `TesseractEngine`, not the fake. `SCRIPTORIUM_TESSERACT` is missing or
+  not executable, and `eng.traineddata` is missing or truncated. No page is attempted.
+- The kill-path test is on `tesseract.rs`, which already kills the child in `wait`. A stub binary
+  sleeps. Both `stop` and the deadline end it, and no child is left. It does not need the job.
+- Keep each function at or under the complexity limit of 15. If `job.rs` would pass 600 lines,
+  split the pool or the page loop out. Do not raise the limit. Checks: `cargo test --locked
+  --lib`, clippy on `--lib --tests` and `--all-targets` with `-D warnings`, and a local Sonar
+  scan before every commit and push. The developer changelog notes the job. There is no version
+  bump, because the job is not user-facing until chunk 5.
 
 ### Chunk 4: forced runs and the cross-instance lock
 
