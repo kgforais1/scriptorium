@@ -349,9 +349,9 @@ finished pages come back `done` from their layers. `unavailable` stays, with its
 the next start.
 
 **Books with no v1 index.** A missing `index.json`, which every M1 image book has, is rebuilt
-from the page files: a page whose `ocr` layer is current is `done`, and every other page is
-`pending`. A valid v0 index is treated the same way. The query never fails on either. The next
-job writes a v1 index.
+from the page files. A valid page whose `ocr` layer is current is `done`. An invalid page file
+is `failed`. Every other valid page is `pending`. A valid v0 index is treated the same way. The
+query never fails on either. The next job writes a v1 index.
 
 **Guarantee.** The job writes only the `ocr` layer of a page file. It reads the file, replaces
 `layers.ocr`, and writes it back. It never rewrites a file it cannot parse and validate, so a
@@ -421,13 +421,18 @@ file leaves the file unchanged and marks the page `failed`.
   - `ocr-state` is `{ root, seq, state, reason }`, sent on every change, never throttled.
     `reason` is set only for `unavailable`. `state` is
     `idle`, `running`, `cancelling`, `finished`, `unavailable`, or `busy`.
-  - `seq` is one counter per book that rises with every event.
+  - `seq` is one counter per book that rises with every event. Events for one book are queued
+    under the registry lock and sent in `seq` order after that lock is released, so a progress
+    event cannot overtake `running`.
 - `ocr_status(root)` returns the book's job `state`, the current `seq`, and the page statuses, as
   one snapshot. While a job runs, the registry holds the live statuses and counts in memory, and
   every event is built from that state. `ocr_status` reads the state and `seq` together under the
   registry's lock, so its counts are never older than its `seq`, even when the index on disk lags.
-  With no job running and no held `unavailable`, it calls `rebuild_index`, and `seq` is the last one the registry issued for
-that book in this app session. `seq` is not stored on disk. It starts at 0 each launch, and a
+  With no job running and no held `unavailable`, it holds the per-book mutex across
+  `rebuild_index` and, while holding it, reads `seq` under the registry lock. A completion
+  writes the page and the index under that mutex before it bumps `seq`, so a `seq` that
+  includes a completion is never returned with older counts. `seq` is the last value this
+  process issued for that book in this app session. `seq` is not stored on disk. It starts at 0 each launch, and a
 reader only ever compares it with events from the same session. The reader subscribes to both events first, then calls `ocr_status`. It applies the
   query result, then applies only events with a higher `seq`. An event that arrives during the
   call is buffered, and dropped if its `seq` is not higher. So a job that starts, finishes, or is

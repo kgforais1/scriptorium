@@ -1,8 +1,8 @@
 # Machine-readable cargo-audit ignore expirations.
 # Kept in sync with advisories.ignore in audit.toml.
 # Enforced by ci/scripts/check_audit_exceptions.py (CI audit job).
+#
+# No vulnerability is ignored. RUSTSEC-2024-0429 is an unsound warning, so it
+# is not listed here and not listed in audit.toml.
 
-[[exceptions]]
-id = "RUSTSEC-2024-0429"
-expires = "2027-02-27"
-reason = "glib 0.18.5 via gtk 0.18.2, required by tauri 2.12.5 on Linux; glib 0.20 has the fix and gtk 0.18 cannot use it. Re-checked 2026-11-27."
+exceptions = []

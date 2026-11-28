@@ -108,7 +108,10 @@ Phases 2 and 3 left these pieces, which this phase consumes:
    the throttle's count, so the last tick is always sent even when a page failed. `ocr-state` is
    `{ root, seq, state, reason }`, never throttled. `reason` is set only for `unavailable`, so a
    job started after ingest can still tell the reader why OCR is unavailable. The `ocr_status`
-   snapshot carries the same `reason`. Both carry the root
+   snapshot carries the same `reason`. Events for one book are queued under the registry lock
+   and sent in `seq` order after that lock is released, so a progress event cannot overtake
+   `running`. The reader still applies only a higher `seq`; state and progress are not ordered
+   separately. Both carry the root
    as `BookView.root` does, simplified with `dunce`, so the reader can compare them on Windows.
 10. **Status lives in the reader header.** `ReaderStatus` is a full-page overlay for loading,
     empty, and error states, and returns nothing otherwise. OCR progress and "Text ready" are shown
@@ -307,21 +310,26 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   one counter per book, starts at 0, and is not stored on disk. This chunk emits `running`,
   `cancelling`, `finished`, and `unavailable`. It does not emit `idle` or `busy`: no job reads
   the index, and `busy` is the other instance's lock in chunk 4. Events are built under the
-  registry lock and emitted after it is released. Code may hold the per-book mutex and then the
+  registry lock and sent after it is released, in `seq` order, by one sender per book (decision
+  9). A progress event cannot pass `running`, so the reader cannot drop `running` and stay idle
+  with no Stop while OCR runs. Code may hold the per-book mutex and then the
   registry lock, never the reverse.
 - Cancel sets the stop flag and the state to `cancelling`. The "within a second" test uses the
   scripted fake, which waits until the stop flag is set. It does not use a real decode. A decode
   already inside `prepare` cannot be interrupted. That wait is the bound chunk 2 measured.
 - `book_status(root, jobs)` is what `ocr_status` will call in chunk 5. While a job runs, or while
   `unavailable` is still held, it returns the registry snapshot, including `reason`, and does not
-  parse page files. Otherwise it calls `rebuild_index`, which reads `index.json` for `skipped`
+  parse page files. Otherwise it holds the per-book mutex across `rebuild_index` and, while
+  holding it, reads `seq` under the registry lock, then releases both. A completion writes the
+  page and the index under that mutex before it bumps `seq`, so any completion included in the
+  returned `seq` is in the returned counts. `rebuild_index` reads `index.json` for `skipped`
   and failures and then re-reads the page files. The engine id comes from the factory. If that
   locate fails, the state is `unavailable` with the locate error, and pages are not promoted for
   an engine mismatch. When locate succeeds, a different engine or checksum makes a `done` page
   `pending`, a missing page file makes it `pending`, and a planted `forced.json` keeps a `done`
   page unfinished unless its `runId` is the forced id. A missing or v0 index is rebuilt from the
-  page files: a page whose `ocr` layer is current is `done`, and every other page is `pending`.
-  An invalid page file is `failed` in that result. The query does not write the index. This
+  page files: a valid page whose `ocr` layer is current is `done`, an invalid page file is
+  `failed`, and every other valid page is `pending`. The query does not write the index. This
   corrects the parent's `ocr_status` and "Books with no v1 index" paragraphs. The state is
   `finished` when `pending` is 0, including a book whose only unfinished pages are `failed`, and
   `idle` when any page is `pending`. `seq` is the last value this process issued for the book, or
@@ -396,7 +404,8 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
 - Frontend: `api.ts` gains the three calls and the two listeners. `src/lib/ocrStatus.ts` holds the
   event-ordering logic as a pure function, so Vitest's coverage gate on `src/lib/**` covers it. A
   thin `useOcrStatus` hook in `src/features/reader/` subscribes first, then queries, and applies
-  only events with a higher `seq`. `ReaderHeader` shows "Reading text… 34 of 202", "Text ready",
+  only events with a higher `seq`. The job's per-book sender keeps `seq` order, so a progress
+  event cannot drop `running` and leave the header idle with no Stop. `ReaderHeader` shows "Reading text… 34 of 202", "Text ready",
   "Text ready, 1 page failed", or "Reading text in another window" (decision 10), and the reason
   when OCR is unavailable. `ReaderHeader` gains the Text button with "Recognise text again", Stop,
   and Resume, shown as the parent's UI section says.

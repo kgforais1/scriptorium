@@ -1,14 +1,13 @@
 # cargo-audit config for the Tauri crate (discovered as src-tauri/.cargo/audit.toml
 # when CI runs cargo-audit with working-directory: src-tauri).
 #
-# glib 0.18.5 is transitive via gtk 0.18.2 → tauri 2.12.5 (Linux-only).
-# Vulnerability: RUSTSEC-2024-0429 / GHSA-wrw7-89jp-8q8g — VariantStrIter unsoundness
-# Vulnerable range: >=0.15.0, <0.20.0 ; fixed in 0.20.0 (breaking, blocked by GTK 0.18)
-# Tracking: Dependabot alert #21 dismissed (tolerable_risk) until Tauri GTK 0.20 bump.
-# CI: `Dependency audit` runs `cargo audit` here (see .github/workflows/ci.yml).
-# To verify locally: cargo install cargo-audit && cargo audit (from src-tauri)
+# RUSTSEC-2024-0429 / GHSA-wrw7-89jp-8q8g is informational = unsound
+# (glib::VariantStrIter, glib >=0.15.0, <0.20.0). Tauri 2.12.5 still requires
+# gtk 0.18.2, which requires glib 0.18.5, and glib 0.20 has the fix.
+# cargo audit prints that warning and exits 0. Do not ignore it: the runbook
+# says not to suppress a warning to clear Dependency audit.
 #
-# Time-bound exceptions live in audit-exceptions.toml; CI enforces expires dates.
+# A real vulnerability ignore is time-bound in audit-exceptions.toml.
 
 [advisories]
-ignore = ["RUSTSEC-2024-0429"]
+ignore = []
