@@ -422,16 +422,19 @@ file leaves the file unchanged and marks the page `failed`.
     `reason` is set only for `unavailable`. `state` is
     `idle`, `running`, `cancelling`, `finished`, `unavailable`, or `busy`.
   - `seq` is one counter per book that rises with every event. Events for one book are queued
-    under the registry lock and sent in `seq` order after that lock is released, so a progress
-    event cannot overtake `running`.
+    under the registry lock and sent in `seq` order after that lock is released. The sender
+    keeps `seq` order, and an `ocr_status` read reports the state its `seq` belongs to, so the
+    reader cannot drop `running` and stay idle with no Stop.
 - `ocr_status(root)` returns the book's job `state`, the current `seq`, and the page statuses, as
   one snapshot. While a job runs, the registry holds the live statuses and counts in memory, and
   every event is built from that state. `ocr_status` reads the state and `seq` together under the
   registry's lock, so its counts are never older than its `seq`, even when the index on disk lags.
   With no job running and no held `unavailable`, it holds the per-book mutex across
-  `rebuild_index` and, while holding it, reads `seq` under the registry lock. A completion
-  writes the page and the index under that mutex before it bumps `seq`, so a `seq` that
-  includes a completion is never returned with older counts. `seq` is the last value this
+  `rebuild_index` and, while holding it, reads the state and `seq` under the registry lock,
+  and returns that snapshot instead if a job now exists or `unavailable` is held, then
+  releases both. A completion writes the page, and any index write it triggers, under that
+  mutex before it bumps `seq`, so a `seq` that includes a completion is never returned with
+  older counts. `seq` is the last value this
   process issued for that book in this app session. `seq` is not stored on disk. It starts at 0 each launch, and a
 reader only ever compares it with events from the same session. The reader subscribes to both events first, then calls `ocr_status`. It applies the
   query result, then applies only events with a higher `seq`. An event that arrives during the
@@ -449,11 +452,14 @@ reader only ever compares it with events from the same session. The reader subsc
   `PdfiumUnavailable`.
 - There is no per-book write lock today. M2a adds one: a mutex per book in the job
   registry, keyed by the canonical package root like `commands/session.rs`, never by the
-  book's self-declared id. It is held only while a page file is read, changed, and written back.
-  The job registry uses the same key. M2c's editor takes
+  book's self-declared id. It is held for a page file's read-change-write, for an index or
+  `forced.json` write, and for the no-job `ocr_status` rebuild. It is never held across
+  recognition or a decode. The job registry uses the same key. M2c's editor takes
   the same mutex. Reading the book while OCR runs is unaffected. `load_book` still does not read `ocr/`. The UI gets a
   separate `ocr_status` command. While a job runs, or while `unavailable` is held, that command
-  returns the registry snapshot. Otherwise it calls `rebuild_index`. It does not write the index.
+  returns the registry snapshot. Otherwise it calls `rebuild_index` under that mutex and, while
+  still holding it, returns the registry snapshot instead if a job or `unavailable` is now held.
+  It does not write the index.
 
 ### UI
 

@@ -80,9 +80,11 @@ Phases 2 and 3 left these pieces, which this phase consumes:
    never from environment variables, so tests inject both without touching the shared process
    environment.
 5. **Lock order.** There are two kinds of lock: the registry lock, which guards the in-memory
-   job states and `seq` counters, and one mutex per book, which guards a page file's
-   read-change-write and `forced.json`. Code may take a per-book mutex and then the registry lock,
-   never the reverse. Events are built under the registry lock and emitted after it is released.
+   job states and `seq` counters, and one mutex per book. That mutex is held for a page file's
+   read-change-write, for an index or `forced.json` write, and for the no-job status rebuild.
+   It is never held across recognition or a decode. Code may take a per-book mutex and then the
+   registry lock, never the reverse. Events are built under the registry lock and emitted after
+   it is released.
 6. **One lock helper and safe temp names.** `sweep.rs`'s `lock_ingest_dir` becomes
    `lock_dir(dir, name)`, which opens the lock file or creates it, as today. The constants are
    `INGEST_LOCK` (`.ingest.lock`), `JOB_LOCK` (`ocr/.job.lock`), and `RUN_LOCK` (`.ocr.lock`, in
@@ -311,18 +313,20 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   `cancelling`, `finished`, and `unavailable`. It does not emit `idle` or `busy`: no job reads
   the index, and `busy` is the other instance's lock in chunk 4. Events are built under the
   registry lock and sent after it is released, in `seq` order, by one sender per book (decision
-  9). A progress event cannot pass `running`, so the reader cannot drop `running` and stay idle
-  with no Stop while OCR runs. Code may hold the per-book mutex and then the
-  registry lock, never the reverse.
+  9). The sender keeps `seq` order, and a `book_status` read reports the state its `seq` belongs
+  to, so the reader cannot drop `running` and stay idle with no Stop while OCR runs. Code may
+  hold the per-book mutex and then the registry lock, never the reverse.
 - Cancel sets the stop flag and the state to `cancelling`. The "within a second" test uses the
   scripted fake, which waits until the stop flag is set. It does not use a real decode. A decode
   already inside `prepare` cannot be interrupted. That wait is the bound chunk 2 measured.
 - `book_status(root, jobs)` is what `ocr_status` will call in chunk 5. While a job runs, or while
   `unavailable` is still held, it returns the registry snapshot, including `reason`, and does not
   parse page files. Otherwise it holds the per-book mutex across `rebuild_index` and, while
-  holding it, reads `seq` under the registry lock, then releases both. A completion writes the
-  page and the index under that mutex before it bumps `seq`, so any completion included in the
-  returned `seq` is in the returned counts. `rebuild_index` reads `index.json` for `skipped`
+  holding it, reads the state and `seq` under the registry lock, and returns that snapshot
+  instead if a job now exists or `unavailable` is held, then releases both. A completion writes
+  the page, and any index write it triggers, under that mutex before it bumps `seq`, so any
+  completion included in the returned `seq` is in the returned counts. `rebuild_index` reads
+  `index.json` for `skipped`
   and failures and then re-reads the page files. The engine id comes from the factory. If that
   locate fails, the state is `unavailable` with the locate error, and pages are not promoted for
   an engine mismatch. When locate succeeds, a different engine or checksum makes a `done` page
@@ -330,10 +334,10 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
   page unfinished unless its `runId` is the forced id. A missing or v0 index is rebuilt from the
   page files: a valid page whose `ocr` layer is current is `done`, an invalid page file is
   `failed`, and every other valid page is `pending`. The query does not write the index. This
-  corrects the parent's `ocr_status` and "Books with no v1 index" paragraphs. The state is
-  `finished` when `pending` is 0, including a book whose only unfinished pages are `failed`, and
-  `idle` when any page is `pending`. `seq` is the last value this process issued for the book, or
-  0.
+  corrects the parent's `ocr_status` and "Books with no v1 index" paragraphs. When that re-check
+  still sees no job and no held `unavailable`, the state is `finished` when `pending` is 0,
+  including a book whose only unfinished pages are `failed`, and `idle` when any page is
+  `pending`. `seq` is the last value this process issued for the book, or 0.
 - `FakeEngine` is a public struct with no constructor. `ocr/tests.rs` and `fake.rs`'s own test
   build it with struct literals. Add `FakeEngine::new(id, result)` and convert both literals to
   it, then add the script fields with defaults: a result per page index, an optional wait until
@@ -404,8 +408,9 @@ with `#[allow(dead_code)]` and a comment that chunk 5 is the caller (decision 12
 - Frontend: `api.ts` gains the three calls and the two listeners. `src/lib/ocrStatus.ts` holds the
   event-ordering logic as a pure function, so Vitest's coverage gate on `src/lib/**` covers it. A
   thin `useOcrStatus` hook in `src/features/reader/` subscribes first, then queries, and applies
-  only events with a higher `seq`. The job's per-book sender keeps `seq` order, so a progress
-  event cannot drop `running` and leave the header idle with no Stop. `ReaderHeader` shows "Reading text… 34 of 202", "Text ready",
+  only events with a higher `seq`. The job's per-book sender keeps `seq` order, and a
+  `book_status` read reports the state its `seq` belongs to, so a progress event cannot drop
+  `running` and leave the header idle with no Stop. `ReaderHeader` shows "Reading text… 34 of 202", "Text ready",
   "Text ready, 1 page failed", or "Reading text in another window" (decision 10), and the reason
   when OCR is unavailable. `ReaderHeader` gains the Text button with "Recognise text again", Stop,
   and Resume, shown as the parent's UI section says.
