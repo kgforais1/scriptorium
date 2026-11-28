@@ -426,7 +426,7 @@ file leaves the file unchanged and marks the page `failed`.
   one snapshot. While a job runs, the registry holds the live statuses and counts in memory, and
   every event is built from that state. `ocr_status` reads the state and `seq` together under the
   registry's lock, so its counts are never older than its `seq`, even when the index on disk lags.
-  With no job running, it reads `index.json`, and `seq` is the last one the registry issued for
+  With no job running and no held `unavailable`, it calls `rebuild_index`, and `seq` is the last one the registry issued for
 that book in this app session. `seq` is not stored on disk. It starts at 0 each launch, and a
 reader only ever compares it with events from the same session. The reader subscribes to both events first, then calls `ocr_status`. It applies the
   query result, then applies only events with a higher `seq`. An event that arrives during the
@@ -447,7 +447,8 @@ reader only ever compares it with events from the same session. The reader subsc
   book's self-declared id. It is held only while a page file is read, changed, and written back.
   The job registry uses the same key. M2c's editor takes
   the same mutex. Reading the book while OCR runs is unaffected. `load_book` still does not read `ocr/`. The UI gets a
-  separate `ocr_status` command, which reads only `index.json`.
+  separate `ocr_status` command. While a job runs, or while `unavailable` is held, that command
+  returns the registry snapshot. Otherwise it calls `rebuild_index`. It does not write the index.
 
 ### UI
 

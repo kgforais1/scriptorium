@@ -1,6 +1,6 @@
 # Scriptorium — CI & hooks
 
-Last reviewed: 2026-11-22
+Last reviewed: 2026-11-27
 
 ## Recommendation (what runs where)
 
@@ -114,7 +114,7 @@ the log:
    manifest change, not a suppression.
 3. **No version you can select contains the fix, because a third-party requirement blocks it.**
    Existing case: `RUSTSEC-2024-0429` (glib 0.20.0 contains the fix; gtk 0.18, pulled in by
-   tauri 2.11.5, does not allow it; `expires = "2026-11-27"`). Add the ID
+   tauri 2.12.5, does not allow it; re-checked 2026-11-27, `expires = "2027-02-27"`). Add the ID
    under `advisories.ignore` in `src-tauri/.cargo/audit.toml` and a matching `id` / `expires` /
    `reason` row in `src-tauri/.cargo/audit-exceptions.toml`. `cargo audit` stays green while
    the ignore is present; required `Policy (file size, docs, backlog)` fails once `today` is

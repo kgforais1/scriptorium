@@ -1,7 +1,7 @@
 # cargo-audit config for the Tauri crate (discovered as src-tauri/.cargo/audit.toml
 # when CI runs cargo-audit with working-directory: src-tauri).
 #
-# glib 0.18.5 is transitive via gtk 0.18.2 → tauri 2.11.5 (Linux-only).
+# glib 0.18.5 is transitive via gtk 0.18.2 → tauri 2.12.5 (Linux-only).
 # Vulnerability: RUSTSEC-2024-0429 / GHSA-wrw7-89jp-8q8g — VariantStrIter unsoundness
 # Vulnerable range: >=0.15.0, <0.20.0 ; fixed in 0.20.0 (breaking, blocked by GTK 0.18)
 # Tracking: Dependabot alert #21 dismissed (tolerable_risk) until Tauri GTK 0.20 bump.

@@ -4,5 +4,5 @@
 
 [[exceptions]]
 id = "RUSTSEC-2024-0429"
-expires = "2026-11-27"
-reason = "glib transitive via gtk 0.18 → tauri; fixed in glib 0.20 (breaking GTK bump)"
+expires = "2027-02-27"
+reason = "glib 0.18.5 via gtk 0.18.2, required by tauri 2.12.5 on Linux; glib 0.20 has the fix and gtk 0.18 cannot use it. Re-checked 2026-11-27."
